@@ -10,7 +10,7 @@ import config
 import data_store
 from ai_evaluator import evaluate_listing
 from gmail_client import create_draft, send_email
-from kv_alert_reader import fetch_new_listing_urls
+from kv_alert_reader import fetch_listing_urls
 from kv_listing_parser import fetch_listing, extract_object_id
 from telegram_client import (
     extract_send_commands,
@@ -70,8 +70,7 @@ def process_send_commands(state: dict) -> None:
 
 
 def process_new_listings(state: dict) -> None:
-    new_urls, max_uid = fetch_new_listing_urls(state["last_processed_uid"])
-    state["last_processed_uid"] = max_uid
+    new_urls = fetch_listing_urls()
 
     seen = set(state["seen_listing_ids"])
     fresh_urls = [u for u in new_urls if (extract_object_id(u) or u) not in seen]

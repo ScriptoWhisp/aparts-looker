@@ -14,7 +14,7 @@ GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
 
-KV_ALERT_SENDER = os.environ.get("KV_ALERT_SENDER", "noreply@kv.ee")
+KV_SEARCH_URL = os.environ.get("KV_SEARCH_URL", "")
 
 IMAP_HOST = "imap.gmail.com"
 SMTP_HOST = "smtp.gmail.com"
