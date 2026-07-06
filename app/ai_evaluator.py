@@ -20,22 +20,22 @@ from kv_listing_parser import Listing
 
 API_URL = "https://api.anthropic.com/v1/messages"
 
-SYSTEM_PROMPT = f"""Ты помогаешь Daniel оценивать объявления о продаже квартир в
-Таллинне (kv.ee) по методике его текущего поиска. Вот его профиль и критерии:
+SYSTEM_PROMPT = f"""You help Daniel evaluate apartment listings in Tallinn (kv.ee)
+against his current search criteria. His profile and criteria:
 
 {BUYER_PROFILE}
 
-Тебе дают данные одного объявления. Верни СТРОГО валидный JSON (без markdown-
-разметки, без ```), со следующими полями:
+You are given data for a single listing. Return STRICTLY valid JSON (no markdown,
+no ``` fences), with the following fields:
 
 {{
   "score": <int 0-100>,
-  "verdict": "<одно предложение на русском - главный вывод>",
-  "strengths": ["<кратко>", ...],
-  "concerns": ["<кратко>", ...],
-  "should_draft_email": <bool - true если объект достаточно интересен, чтобы стоило писать маклеру>,
-  "draft_subject": "<subject на английском, если should_draft_email=true, иначе пустая строка>",
-  "draft_body": "<текст письма маклеру на английском, вежливый, короткий, с вопросами о состоянии, remondifond, обязательных доп.расходах (паркинг), готовности к просмотру - если should_draft_email=true, иначе пустая строка>"
+  "verdict": "<one sentence in English — the main takeaway>",
+  "strengths": ["<brief>", ...],
+  "concerns": ["<brief>", ...],
+  "should_draft_email": <bool — true if the listing is interesting enough to contact the agent>,
+  "draft_subject": "<email subject in English if should_draft_email=true, otherwise empty string>",
+  "draft_body": "<email body in English, polite, concise, asking about condition, remondifond, mandatory extras (parking), viewing availability — if should_draft_email=true, otherwise empty string>"
 }}
 """
 
@@ -54,24 +54,24 @@ def evaluate_listing(listing: Listing) -> dict:
     silently vanishing."""
 
     listing_summary = f"""
-Адрес/заголовок: {listing.title}
+Title/address: {listing.title}
 URL: {listing.url}
-Цена: {listing.price_eur} EUR ({listing.price_per_sqm} EUR/m2)
-Комнат: {listing.rooms}
-Площадь: {listing.area_sqm} m2
-Год постройки: {listing.year_built}
-Материал: {listing.material}
-Состояние (заявлено): {listing.condition}
-Этаж: {listing.floor}/{listing.floor_total}
-Парковка: {listing.parking}
-Признаки "нужен ремонт" в тексте: {listing.needs_renovation}
-Описание: {listing.description[:1500]}
+Price: {listing.price_eur} EUR ({listing.price_per_sqm} EUR/m2)
+Rooms: {listing.rooms}
+Area: {listing.area_sqm} m2
+Year built: {listing.year_built}
+Material: {listing.material}
+Condition (stated): {listing.condition}
+Floor: {listing.floor}/{listing.floor_total}
+Parking: {listing.parking}
+Renovation needed (text signals): {listing.needs_renovation}
+Description: {listing.description[:1500]}
 """
 
     if not ANTHROPIC_API_KEY:
         return {
             "score": 0,
-            "verdict": "ANTHROPIC_API_KEY не настроен - оценка недоступна.",
+            "verdict": "ANTHROPIC_API_KEY not set — evaluation unavailable.",
             "strengths": [],
             "concerns": [],
             "should_draft_email": False,
@@ -113,7 +113,7 @@ URL: {listing.url}
     except (requests.RequestException, json.JSONDecodeError, KeyError, ValueError):
         return {
             "score": 0,
-            "verdict": "Не удалось получить оценку от AI (ошибка API) - проверь листинг вручную.",
+            "verdict": "Could not get AI evaluation (API error) — review this listing manually.",
             "strengths": [],
             "concerns": [],
             "should_draft_email": False,

@@ -31,28 +31,29 @@ APP_DATA_FILE = os.path.join(DATA_DIR, "app_data.json")
 AGENT_STATE_FILE = os.path.join(DATA_DIR, "agent_state.json")
 
 BUYER_PROFILE = """
-Покупатель: Daniel, 22 года, инженер-программист в Bolt (Таллинн), стабильный доход,
-топ-перформер на работе.
+Buyer: Daniel, 22, software engineer at Bolt (Tallinn), stable income, top performer.
 
-Финансы:
-- Накопления: ~30 000 EUR
-- Чистый доход в месяц: ~4 100 EUR
-- Порог DTI (debt-to-income), который отслеживается: 40%
-- Бюджет на ремонт своими руками: ~40 000 EUR - готов покупать неремонтированные
-  квартиры и делать косметику сам.
+Finances:
+- Savings: ~30,000 EUR
+- Net monthly income: ~4,100 EUR
+- DTI (debt-to-income) ceiling tracked: 40%
+- DIY renovation budget: ~40,000 EUR — willing to buy unfinished apartments and do
+  cosmetic work himself.
 
-Что важно при первичной (desk-review) оценке объявления:
-1. Цена за м² - конкурентно ли для района и состояния (<2500 EUR/m² отлично,
-   2500-3000 хорошо, 3000-3500 нормально, >3500 нужно обосновывать премию)
-2. Обязательные доп. расходы (паркинг/кладовка "mandatory") реально увеличивают
-   цену входа - считай это в оценке
-3. Год постройки и материал - панельки 1960-80х это нормально если КТ в порядке
-4. "Vajab renoveerimist" - это ХОРОШО для Daniel (пространство для торга + DIY),
-   если структурно объект в порядке
-5. Планировка/легализация перепланировки, если упоминается
-6. Соответствие типичным целевым 3-4 комнатам, 50-80 m²
-7. Бесплатная парковка - плюс; платная или отсутствующая - минус
+What matters in a desk-review of a listing:
+1. Price per m² — is it competitive for the district and condition?
+   (<2,500 EUR/m² excellent, 2,500–3,000 good, 3,000–3,500 acceptable, >3,500 needs
+   a clear premium justification)
+2. Mandatory extras (parking/storage marked "kohustuslik") genuinely raise the entry
+   price — factor them into the score.
+3. Year built and material — panel blocks from the 1960s–80s are fine if the building
+   fund (KT) is healthy.
+4. "Vajab renoveerimist" (needs renovation) is GOOD for Daniel: room to negotiate +
+   DIY upside, as long as the structure is sound.
+5. Floor plan / legalised replanning, if mentioned.
+6. Matches typical target: 3–4 rooms, 50–80 m².
+7. Free parking is a plus; paid or absent is a minus.
 
-ВАЖНО: это только desk-review по тексту объявления, не полная 11-категорийная
-чек-лист оценка (та требует физического просмотра).
+IMPORTANT: this is a desk-review from the listing text only, not a full 11-category
+checklist evaluation (that requires a physical viewing).
 """

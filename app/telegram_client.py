@@ -63,13 +63,13 @@ def format_listing_card(listing: Listing, evaluation: dict) -> str:
 
     lines = [
         f"<b>{listing.title or listing.url}</b>",
-        f"Оценка: <b>{score}/100</b>",
+        f"Score: <b>{score}/100</b>",
         f"{verdict}",
         "",
-        f"Цена: {listing.price_eur} EUR ({listing.price_per_sqm} EUR/m2)",
-        f"Комнат: {listing.rooms} | Площадь: {listing.area_sqm} m2",
-        f"Год: {listing.year_built} | Этаж: {listing.floor}/{listing.floor_total}",
-        f"Парковка: {listing.parking}",
+        f"Price: {listing.price_eur} EUR ({listing.price_per_sqm} EUR/m2)",
+        f"Rooms: {listing.rooms} | Area: {listing.area_sqm} m2",
+        f"Year: {listing.year_built} | Floor: {listing.floor}/{listing.floor_total}",
+        f"Parking: {listing.parking}",
     ]
 
     if strengths:
@@ -85,14 +85,14 @@ def format_listing_card(listing: Listing, evaluation: dict) -> str:
         if listing.contact_email:
             lines.append("")
             lines.append(
-                f"✉️ Письмо маклеру подготовлено и лежит в черновиках Gmail.\n"
-                f"Ответь <code>/send {listing.id}</code> чтобы я отправил его прямо сейчас."
+                f"✉️ Email to agent drafted and saved in Gmail drafts.\n"
+                f"Reply <code>/send {listing.id}</code> to send it now."
             )
         else:
             lines.append("")
             lines.append(
-                "✉️ Прямого email маклера нет - только форма на kv.ee. "
-                "Текст письма ниже, вставь его в форму по ссылке выше:"
+                "✉️ No direct agent email — only the kv.ee contact form. "
+                "Draft text below, paste it into the form at the link above:"
             )
             lines.append("")
             lines.append(f"<i>{evaluation.get('draft_body', '')}</i>")

@@ -28,11 +28,11 @@ def _listing_to_property(listing, evaluation):
     strengths = evaluation.get("strengths", [])
     concerns = evaluation.get("concerns", [])
     score = evaluation.get("score", 0)
-    notes = f"[Агент, оценка {score}/100] {verdict}"
+    notes = f"[Agent, score {score}/100] {verdict}"
     if strengths:
-        notes += " Плюсы: " + "; ".join(strengths) + "."
+        notes += " Strengths: " + "; ".join(strengths) + "."
     if concerns:
-        notes += " Минусы: " + "; ".join(concerns) + "."
+        notes += " Concerns: " + "; ".join(concerns) + "."
     return {
         "id": listing.id,
         "name": listing.title or ("kv.ee #" + listing.id),
@@ -57,16 +57,16 @@ def process_send_commands(state: dict) -> None:
         draft = state["pending_drafts"].get(listing_id)
         if not draft:
             send_message(
-                f"Не нашёл подготовленного письма для {listing_id} - "
-                f"возможно, для него не было прямого email, или оно уже отправлено."
+                f"No prepared email found for {listing_id} — "
+                f"it may have had no direct email address, or it was already sent."
             )
             continue
         ok = send_email(draft["to_email"], draft["subject"], draft["body"])
         if ok:
-            send_message(f"✅ Письмо по объявлению {listing_id} отправлено маклеру.")
+            send_message(f"✅ Email for listing {listing_id} sent to the agent.")
             del state["pending_drafts"][listing_id]
         else:
-            send_message(f"⚠️ Не получилось отправить письмо по {listing_id}.")
+            send_message(f"⚠️ Failed to send email for listing {listing_id}.")
 
 
 def process_new_listings(state: dict) -> None:

@@ -1,130 +1,130 @@
-# Apartment Server — всё в одном месте
+# Apartment Server — everything in one place
 
-Один сервер, один процесс, один файл с данными. Веб-страница с чек-листами и
-фоновый агент, который проверяет kv.ee, смотрят в одну и ту же папку
-`data/` — никакой ручной синхронизации, никаких артефактов с отдельным
-хранилищем.
+One server, one process, one data file. The web dossier and the background
+agent that monitors kv.ee both read and write the same `data/` folder —
+no manual sync, no separate storage artefacts.
 
-Что внутри:
-- **FastAPI-бэкенд** (`app/main.py`) — отдаёт страницу и маленький JSON API
+What's inside:
+- **FastAPI backend** (`app/main.py`) — serves the page and a small JSON API
   (`GET/PUT /api/data`).
-- **Фоновый планировщик** (APScheduler, внутри того же процесса) — раз в
-  `CHECK_INTERVAL_HOURS` часов гоняет проверку kv.ee, шлёт в Telegram, готовит
-  черновики в Gmail — и сразу дописывает найденные объекты в общий файл
-  данных, который видит страница.
-- **Caddy** — HTTPS + пароль перед всем этим, чтобы твои финансы и переписка
-  не висели в интернете открытым текстом.
+- **Background scheduler** (APScheduler, inside the same process) — every
+  `CHECK_INTERVAL_HOURS` hours it checks kv.ee, sends to Telegram, prepares
+  Gmail drafts, and appends any new listings directly to the shared data file
+  that the frontend reads.
+- **Caddy** — HTTPS + basic auth in front of everything, so your finances and
+  correspondence aren't sitting on the internet in plain text.
 
-## 1. Подготовка сервера
+## 1. Server setup
 
-Нужен любой VPS с Docker и Docker Compose (Hetzner, DigitalOcean, Contabo —
-без разницы, берите самый дешёвый, тут не нужно ничего мощного). На свежем
+Any VPS with Docker and Docker Compose (Hetzner, DigitalOcean, Contabo —
+doesn't matter, grab the cheapest, nothing heavy is needed here). On a fresh
 Ubuntu 22.04/24.04:
 
 ```bash
 curl -fsSL https://get.docker.com | sh
 ```
 
-(ставит и Docker, и Compose plugin)
+(installs both Docker and the Compose plugin)
 
-## 2. Домен (рекомендуется) или IP
+## 2. Domain (recommended) or bare IP
 
-**С доменом** (проще и правильнее): направь A-запись домена/поддомена на IP
-сервера. Домен можно взять почти за копейки на Namecheap/Porkbun и т.п., или
-использовать бесплатный поддомен (DuckDNS и подобные).
+**With a domain** (simpler and cleaner): point an A record for your domain or
+subdomain at the server's IP. You can get a domain for next to nothing on
+Namecheap/Porkbun etc., or use a free subdomain (DuckDNS and similar).
 
-**Без домена**: в `Caddyfile` замени блок с доменом на:
+**Without a domain**: in `Caddyfile` replace the domain block with:
 ```
 :443 {
 	tls internal
-	basicauth { daniel <хеш> }
+	basicauth { daniel <hash> }
 	reverse_proxy app:8000
 }
 ```
-Браузер будет ругаться на самоподписанный сертификат (жми "всё равно
-перейти") — шифрование при этом всё равно работает, просто не через
-публично доверенный центр сертификации.
+The browser will complain about a self-signed certificate (click "proceed
+anyway") — encryption still works, just not through a publicly trusted CA.
 
-## 3. Файлы на сервер
+## 3. Copy files to the server
 
-Скопируй всю папку `apartment-server/` на сервер (`scp -r` или через git,
-если положишь в свой приватный репозиторий — сделай его приватным, там будут
-секреты в `.env`, хоть сам `.env` и не должен коммититься).
+Clone the repo on the server (recommended):
+```bash
+git clone git@github.com:ScriptoWhisp/aparts-looker.git /opt/aparts-looker
+```
+Or copy with `scp -r`. Keep the repo private if you ever commit secrets.
 
-## 4. Настрой секреты
+## 4. Configure secrets
 
 ```bash
 cp .env.example .env
 nano .env
 ```
 
-Заполни:
-- `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` — через @BotFather (`/newbot`),
-  затем открой `https://api.telegram.org/bot<TOKEN>/getUpdates` после того,
-  как напишешь боту что-нибудь, найдёшь `chat.id`.
-- `GMAIL_ADDRESS` / `GMAIL_APP_PASSWORD` — включи 2FA на Gmail
-  (myaccount.google.com/security), создай App Password
+Fill in:
+- `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` — create a bot via @BotFather
+  (`/newbot`), then open `https://api.telegram.org/bot<TOKEN>/getUpdates`
+  after sending the bot a message to find your `chat.id`.
+- `GMAIL_ADDRESS` / `GMAIL_APP_PASSWORD` — enable 2FA on Gmail
+  (myaccount.google.com/security), then create an App Password
   (myaccount.google.com/apppasswords).
-- `ANTHROPIC_API_KEY` — с console.anthropic.com, пополни баланс на пару
-  долларов (Haiku стоит копейки).
+- `ANTHROPIC_API_KEY` — from console.anthropic.com, add a couple of dollars
+  of credit (Haiku is very cheap per call).
 
-## 5. Пароль на сайт
+## 5. Set the site password
 
 ```bash
-docker run --rm caddy:2-alpine caddy hash-password --plaintext 'сюда_свой_пароль'
+docker run --rm caddy:2-alpine caddy hash-password --plaintext 'your_password_here'
 ```
 
-Скопируй хэш в `Caddyfile` вместо `<PASTE_HASH_HERE>`, и поправь домен на
-свой (или используй вариант без домена из шага 2).
+Paste the hash into `Caddyfile` in place of `<PASTE_HASH_HERE>`, and update
+the domain (or use the no-domain variant from step 2).
 
-## 6. Запуск
+## 6. Start
 
 ```bash
 docker compose up -d --build
 ```
 
-Открой `https://твой-домен` — увидишь досье с уже подгруженными объектами,
-которые мы разбирали раньше. Логин — `daniel`, пароль — тот, что задал на
-шаге 5.
+Open `https://your-domain` — you'll see the dossier with the pre-loaded
+listings. Login: `daniel`, password: whatever you set in step 5.
 
 ## 7. kv.ee e-agent
 
-На kv.ee настрой фильтр поиска и нажми "Telli e-agent" — письма с новыми
-объявлениями пойдут на тот же Gmail-адрес, который агент читает через IMAP.
+On kv.ee set up your search filter and click "Telli e-agent" — alert emails
+with new listings will be sent to the same Gmail address the agent reads via
+IMAP.
 
-## 8. Проверка, что всё работает
+## 8. Verify everything works
 
-- В интерфейсе жми "Проверить kv.ee сейчас" — должно прийти сообщение в
-  Telegram (если что-то подходящее нашлось) в течение минуты.
-- `docker compose logs -f app` — смотреть, что происходит вживую.
+- Click "Check kv.ee now" in the UI — a Telegram message should arrive within
+  a minute (if anything matching was found).
+- `docker compose logs -f app` — watch live output.
 
-## Команда `/send <id>` в Telegram
+## The `/send <id>` Telegram command
 
-Как и раньше: когда агент присылает объект с подготовленным письмом маклеру,
-ответь `/send <id>` — при следующей проверке (или после "Проверить сейчас")
-письмо уйдёт через Gmail.
+When the agent sends a listing with a prepared email to the agent, reply
+`/send <id>` — on the next check (or after "Check now") the email will be
+sent via Gmail.
 
-## Бэкапы
+## Backups
 
-Все данные лежат в docker-volume `apartment_data` (файлы `app_data.json` и
-`agent_state.json`). Бэкапить просто:
+All data lives in the `apartment_data` Docker volume (`app_data.json` and
+`agent_state.json`). Back up with:
 
 ```bash
 docker compose exec app tar -czf - -C /app/data . > backup-$(date +%F).tar.gz
 ```
 
-## Обновление кода
+## Updating the code
 
 ```bash
-git pull   # если через git
+git pull
 docker compose up -d --build
 ```
 
-Данные (`data/` volume) при этом не трогаются — обновляется только код.
+The `data/` volume is untouched — only the code is updated.
 
-## Стоимость
+## Cost
 
-- Самый дешёвый VPS: 3-5 €/мес (Hetzner CX22, Contabo VPS S и т.п.)
-- Домен: ~10 €/год, или бесплатный поддомен
-- Anthropic API (Haiku): копейки
-- Telegram, Gmail: бесплатно
+- Cheapest VPS: €3–5/month (Hetzner CX22, Contabo VPS S, etc.)
+- Domain: ~€10/year, or a free subdomain
+- Anthropic API (Haiku): fractions of a cent per listing
+- Telegram, Gmail: free

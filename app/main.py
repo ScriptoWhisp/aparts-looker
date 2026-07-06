@@ -43,7 +43,7 @@ async def put_data(request: Request):
 def check_now():
     """Manually trigger the kv.ee check instead of waiting for the schedule."""
     threading.Thread(target=scheduler.run_once_now, daemon=True).start()
-    return {"ok": True, "message": "Проверка запущена в фоне, посмотри Telegram через минуту-другую."}
+    return {"ok": True, "message": "Check started in background — watch Telegram in a minute or two."}
 
 
 @app.get("/api/health")
