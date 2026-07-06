@@ -12,10 +12,10 @@ jobs:
       - name: Deploy to server
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H 46.62.152.9 >> ~/.ssh/known_hosts
-          ssh root@46.62.152.9 "
+          ssh -i ~/.ssh/deploy_key root@46.62.152.9 "
             cd /opt/aparts-looker &&
             git pull origin main &&
             docker compose up -d --build
