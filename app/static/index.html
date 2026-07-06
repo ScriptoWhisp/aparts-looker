@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Досье объектов — квартира в Таллинне</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#E9ECE5;
+    --paper-panel:#DEE2D8;
+    --paper-card:#F4F5F0;
+    --ink:#1E2A22;
+    --ink-soft:#57624F;
+    --ink-faint:#8A9282;
+    --blueprint:#2B4A63;
+    --blueprint-soft:#5D7C93;
+    --line:#C4CBB9;
+    --line-soft:#D5DACB;
+    --red:#A6392E;
+    --red-bg:#F3E1DD;
+    --green:#3C6B4A;
+    --green-bg:#E1EBE1;
+    --amber:#A8763A;
+    --amber-bg:#F1E6D3;
+    --blue:#2B4A63;
+    --blue-bg:#DEE6EB;
+    --grey:#8A9282;
+    --grey-bg:#E4E6DD;
+    --radius:3px;
+    --font-display:'Space Grotesk', sans-serif;
+    --font-body:'Inter', sans-serif;
+    --font-mono:'IBM Plex Mono', monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:var(--font-body);
+    font-size:14px;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  #app{display:flex; min-height:100vh;}
+  ::selection{background:var(--blueprint); color:#fff;}
+
+  a{color:var(--blueprint);}
+
+  /* ---------- Layout ---------- */
+  .sidebar{
+    width:290px; flex:0 0 290px;
+    background:var(--paper-panel);
+    border-right:1px solid var(--line);
+    padding:18px 14px;
+    display:flex; flex-direction:column; gap:12px;
+    height:100vh; position:sticky; top:0; overflow-y:auto;
+  }
+  .main{flex:1; min-width:0; padding:28px 34px 80px; max-width:920px;}
+
+  .brand{
+    font-family:var(--font-display); font-weight:700; font-size:15px;
+    letter-spacing:0.02em; color:var(--ink);
+    display:flex; align-items:baseline; gap:6px;
+  }
+  .brand small{
+    font-family:var(--font-mono); font-weight:400; font-size:10px; color:var(--ink-faint);
+    letter-spacing:0.08em; text-transform:uppercase;
+  }
+
+  .add-btn{
+    font-family:var(--font-body); font-weight:600; font-size:12.5px;
+    background:var(--paper-card); border:1px dashed var(--blueprint-soft); color:var(--blueprint);
+    padding:8px 10px; border-radius:var(--radius); cursor:pointer; width:100%;
+    text-align:left;
+  }
+  .add-btn:hover{background:#fff;}
+
+  .new-prop-form{
+    background:var(--paper-card); border:1px solid var(--line); border-radius:var(--radius);
+    padding:10px; display:flex; flex-direction:column; gap:6px;
+  }
+  .new-prop-form input{
+    font-family:var(--font-body); font-size:12.5px; padding:6px 7px;
+    border:1px solid var(--line); border-radius:var(--radius); background:#fff; color:var(--ink);
+  }
+  .new-prop-form .actions{display:flex; gap:6px; margin-top:2px;}
+  .btn-mini{
+    font-family:var(--font-body); font-weight:600; font-size:11.5px; padding:6px 10px;
+    border-radius:var(--radius); cursor:pointer; border:1px solid var(--line);
+    background:#fff; color:var(--ink-soft);
+  }
+  .btn-mini.primary{background:var(--blueprint); color:#fff; border-color:var(--blueprint);}
+
+  .global-notice{font-size:10.5px; color:var(--ink-faint); min-height:14px; line-height:1.4;}
+  .global-notice.ok{color:var(--green);}
+  .global-notice.err{color:var(--red);}
+
+  .prop-list{display:flex; flex-direction:column; gap:6px; overflow-y:auto;}
+  .prop-row{
+    background:var(--paper-card); border:1px solid var(--line); border-radius:var(--radius);
+    padding:9px 10px; cursor:pointer; position:relative;
+    display:flex; flex-direction:column; gap:5px;
+  }
+  .prop-row:hover{border-color:var(--blueprint-soft);}
+  .prop-row.active{border-color:var(--blueprint); box-shadow:inset 3px 0 0 var(--blueprint);}
+  .prop-row-top{display:flex; align-items:center; justify-content:space-between; gap:6px;}
+  .prop-row-name{font-weight:600; font-size:12.8px; color:var(--ink); line-height:1.25;}
+  .prop-dot{width:9px; height:9px; border-radius:50%; flex:0 0 auto;}
+  .prop-row-sub{font-family:var(--font-mono); font-size:10.5px; color:var(--ink-faint); display:flex; justify-content:space-between;}
+  .prop-progress{height:3px; background:var(--line-soft); border-radius:2px; overflow:hidden;}
+  .prop-progress-fill{height:100%; background:var(--blueprint-soft);}
+  .prop-top-badge{font-family:var(--font-mono); font-size:9px; letter-spacing:0.06em;}
+
+  .tone-red{color:var(--red);} .dot-red{background:var(--red);}
+  .tone-green{color:var(--green);} .dot-green{background:var(--green);}
+  .tone-amber{color:var(--amber);} .dot-amber{background:var(--amber);}
+  .tone-blue{color:var(--blue);} .dot-blue{background:var(--blue);}
+  .tone-grey{color:var(--grey);} .dot-grey{background:var(--grey);}
+
+  /* ---------- Main header ---------- */
+  .dossier-head{
+    display:flex; justify-content:space-between; align-items:flex-start; gap:18px;
+    border-bottom:2px solid var(--ink); padding-bottom:16px; margin-bottom:20px;
+  }
+  .dossier-eyebrow{font-family:var(--font-mono); font-size:10.5px; letter-spacing:0.12em; text-transform:uppercase; color:var(--ink-faint); margin-bottom:6px;}
+  .dossier-title-input{
+    font-family:var(--font-display); font-weight:700; font-size:26px; color:var(--ink);
+    border:none; background:transparent; padding:0; width:100%; outline:none;
+  }
+  .dossier-title-input:focus{outline:1px dashed var(--blueprint-soft);}
+  .field-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:14px;}
+  .field-grid .field{display:flex; flex-direction:column; gap:3px;}
+  .field label{font-family:var(--font-mono); font-size:9.5px; text-transform:uppercase; letter-spacing:0.06em; color:var(--ink-faint);}
+  .field input, .field select{
+    font-family:var(--font-mono); font-size:13px; padding:5px 6px; border:1px solid var(--line);
+    border-radius:var(--radius); background:var(--paper-card); color:var(--ink);
+  }
+  .field input:focus, .field select:focus{outline:none; border-color:var(--blueprint);}
+
+  .stamp{
+    width:96px; height:96px; border-radius:50%; border:3px double currentColor;
+    display:flex; align-items:center; justify-content:center; text-align:center;
+    transform:rotate(-8deg); font-family:var(--font-display); font-weight:700; font-size:11px;
+    letter-spacing:0.04em; text-transform:uppercase; line-height:1.2; padding:8px; flex:0 0 auto;
+  }
+
+  .head-actions{display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;}
+  .link-btn{font-family:var(--font-body); font-size:12px; color:var(--blueprint); text-decoration:none; border:1px solid var(--line); padding:5px 9px; border-radius:var(--radius); background:var(--paper-card); cursor:pointer;}
+  .link-btn.danger{color:var(--red);}
+
+  .overview-strip{display:flex; gap:22px; align-items:center; margin-bottom:22px; flex-wrap:wrap;}
+  .overview-metric{display:flex; flex-direction:column; gap:2px;}
+  .overview-metric .num{font-family:var(--font-mono); font-size:19px; font-weight:600;}
+  .overview-metric .lbl{font-family:var(--font-mono); font-size:9.5px; text-transform:uppercase; letter-spacing:0.05em; color:var(--ink-faint);}
+  .bar-track{width:160px; height:6px; background:var(--line-soft); border-radius:3px; overflow:hidden;}
+  .bar-fill{height:100%; background:var(--blueprint);}
+
+  textarea.notes-box{
+    width:100%; font-family:var(--font-body); font-size:13px; color:var(--ink);
+    border:1px solid var(--line); border-radius:var(--radius); background:var(--paper-card);
+    padding:8px; min-height:50px; resize:vertical; margin-bottom:22px;
+  }
+
+  /* ---------- Accordion sections ---------- */
+  .section{border:1px solid var(--line); border-radius:var(--radius); margin-bottom:12px; background:var(--paper-card); overflow:hidden;}
+  .section-head{
+    display:flex; align-items:center; justify-content:space-between; padding:12px 14px;
+    cursor:pointer; user-select:none;
+  }
+  .section-head:hover{background:var(--paper);}
+  .section-title{font-family:var(--font-display); font-weight:600; font-size:14.5px; color:var(--ink); display:flex; align-items:center; gap:9px;}
+  .section-chevron{font-family:var(--font-mono); font-size:12px; color:var(--ink-faint); transition:transform .15s; display:inline-block;}
+  .section.open .section-chevron{transform:rotate(90deg);}
+  .section-badge{font-family:var(--font-mono); font-size:10.5px; padding:2px 7px; border-radius:10px; background:var(--grey-bg); color:var(--ink-soft);}
+  .section-badge.complete{background:var(--green-bg); color:var(--green);}
+  .section-body{display:none; border-top:1px solid var(--line); padding:6px 14px 14px;}
+  .section.open .section-body{display:block;}
+
+  .group-name{font-family:var(--font-mono); font-size:10.5px; text-transform:uppercase; letter-spacing:0.06em; color:var(--blueprint); margin:14px 0 6px;}
+  .group-name:first-child{margin-top:12px;}
+
+  .item-row{display:flex; align-items:flex-start; gap:10px; padding:7px 0; border-bottom:1px solid var(--line-soft); flex-wrap:wrap;}
+  .item-row:last-child{border-bottom:none;}
+  .check-label{display:flex; align-items:flex-start; gap:8px; flex:1 1 220px; min-width:0; cursor:pointer; font-size:13px; color:var(--ink);}
+  .check-label input{margin-top:3px; accent-color:var(--blueprint); width:15px; height:15px; flex:0 0 auto;}
+  .item-row.flagged{background:var(--red-bg); margin:0 -8px; padding:7px 8px; border-radius:var(--radius);}
+  .item-controls{display:flex; align-items:center; gap:6px; flex:0 0 auto;}
+  .note-input{
+    font-family:var(--font-body); font-size:12px; padding:5px 7px; width:150px;
+    border:1px solid var(--line); border-radius:var(--radius); background:#fff; color:var(--ink);
+  }
+  .note-input:focus{outline:none; border-color:var(--blueprint-soft);}
+  .flag-btn{
+    border:1px solid var(--line); background:#fff; border-radius:var(--radius); cursor:pointer;
+    padding:4px 6px; font-size:12px; line-height:1; opacity:.45;
+  }
+  .flag-btn.active{opacity:1; border-color:var(--red); background:var(--red-bg);}
+
+  .item-text{flex:1 1 auto; font-size:13px; color:var(--ink); padding-top:2px;}
+  .score-row{gap:10px;}
+  .score-input{width:46px; font-family:var(--font-mono); text-align:center; padding:5px 4px; border:1px solid var(--line); border-radius:var(--radius); background:#fff;}
+  .score-input:focus{outline:none; border-color:var(--blueprint);}
+
+  /* ---------- Finance ---------- */
+  .fin-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:10px 14px; margin-bottom:16px;}
+  .fin-field{display:flex; flex-direction:column; gap:3px;}
+  .fin-field label{font-size:11.5px; color:var(--ink-soft);}
+  .fin-field input{
+    font-family:var(--font-mono); font-size:13px; padding:6px 7px; border:1px solid var(--line);
+    border-radius:var(--radius); background:#fff; color:var(--ink);
+  }
+  .fin-field input:focus{outline:none; border-color:var(--blueprint);}
+  .fin-note{font-size:10.5px; color:var(--ink-faint); margin-top:8px; line-height:1.4;}
+  .fin-subhead{font-family:var(--font-mono); font-size:10.5px; text-transform:uppercase; letter-spacing:0.06em; color:var(--blueprint); margin:16px 0 8px;}
+  .fin-subhead:first-child{margin-top:4px;}
+
+  .fin-results{border:1px dashed var(--line); border-radius:var(--radius); padding:12px 14px; background:var(--paper); margin-top:8px;}
+  .fin-result-row{display:flex; justify-content:space-between; align-items:baseline; padding:5px 0; border-bottom:1px solid var(--line-soft); font-size:13px; gap:10px;}
+  .fin-result-row:last-child{border-bottom:none;}
+  .fin-result-row .v{font-family:var(--font-mono); font-weight:600; white-space:nowrap;}
+  .fin-verdict{margin-top:10px; padding:9px 11px; border-radius:var(--radius); font-size:12.5px; font-weight:600;}
+
+  /* ---------- Empty state ---------- */
+  .empty-state{padding:60px 20px; text-align:center; color:var(--ink-faint);}
+  .empty-state .big{font-family:var(--font-display); font-size:20px; color:var(--ink); margin-bottom:8px;}
+
+  @media (prefers-reduced-motion:reduce){*{transition:none !important;}}
+
+  @media (max-width:860px){
+    #app{flex-direction:column;}
+    .sidebar{width:100%; flex:none; height:auto; position:relative; flex-direction:row; overflow-x:auto; padding:12px; align-items:flex-start;}
+    .sidebar > .brand, .sidebar > #add-form-slot{display:none;}
+    .prop-list{flex-direction:row;}
+    .prop-row{min-width:170px;}
+    .main{padding:18px;}
+    .field-grid{grid-template-columns:repeat(2,1fr);}
+    .fin-grid{grid-template-columns:repeat(2,1fr);}
+    .dossier-head{flex-direction:column;}
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ============================== DATA ============================== */
+
+  function grp(name, items){ return {name:name, items:items}; }
+
+  var SECTIONS = {
+    quality: {
+      title:"Оценка качества (2а–2и)", type:"score",
+      groups:[ grp("", [
+        "Расположение: дорога до универа/работы/друзей/центра",
+        "Цена и цена за м²",
+        "Дом: фасад, год постройки, внешний вид, энергокласс",
+        "Тип отопления (центральное/газ/электричество/индивидуальное)",
+        "Дополнения: балкон, кладовка, парковочное место",
+        "Перепланировки: законность, есть ли проект",
+        "Сколько объект на продаже, снижали ли цену и почему",
+        "Спрос на квартиру, есть ли уже очередь",
+        "Насколько шумно с улицы"
+      ])]
+    },
+    ku: {
+      title:"KÜ, юридический статус и техника", type:"check",
+      groups:[
+        grp("Юридический статус объекта", [
+          "Выписка из Kinnistusraamat актуальна, обременений/ипотек/арестов нет",
+          "Есть ли сервитуты (проезд, коммуникации соседей и т.п.)",
+          "Действующий detailplaneering, нет планов застройки рядом",
+          "Для новостройки: разрешение на использование (kasutusluba) получено / срок получения"
+        ]),
+        grp("Товарищество (KÜ)", [
+          "Насколько активно правление, как часто собрания",
+          "Есть ли протоколы собраний за последние 1-2 года",
+          "Размер и динамика KÜ-взноса за 2-3 года",
+          "Долги дома перед поставщиками (отопление/вода) — справка об отсутствии",
+          "Для новостройки: кто управляет домом первые годы, заложенные тарифы"
+        ]),
+        grp("Коммунальные платежи", [
+          "Разбивка платежей: отопление / вода / KÜ-взнос / ремонтный фонд отдельно",
+          "Счета за последние 6-12 месяцев (зима/лето)",
+          "Кто платит за электричество в местах общего пользования"
+        ]),
+        grp("Ремонтный фонд", [
+          "На сколько лет вперёд запланирован, что включает (крыша/фасад/коммуникации/лифт)",
+          "Сколько накоплено — на квартиру и по дому в целом",
+          "Крупные работы в ближайшие 1-3 года и разовые взносы"
+        ]),
+        grp("Доп. объекты (обязательные)", [
+          "Panipaik/кладовка — площадь, расположение, включена в цену или отдельно",
+          "Парковка/гараж — сколько мест обязательно купить, подземная/наземная, зарядка для эл. авто",
+          "ИТОГОВАЯ сумма сделки со всеми обязательными допами"
+        ]),
+        grp("Маклер / сделка", [
+          "Hindamisakt (оценочный акт) — есть ли, кем и когда сделан",
+          "Маклер представляет продавца или независим",
+          "Условия задатка/брони, штрафы при отказе от сделки"
+        ]),
+        grp("Техническое состояние", [
+          "Год замены сантехники (стояков)",
+          "Год замены электропроводки",
+          "Утепление фасада, год замены окон",
+          "Крыша — год, история протечек",
+          "Лифт — год установки/капремонта, сервисный контракт"
+        ]),
+        grp("Перепланировки", [
+          "Есть ли перепланировки, согласованы официально (ehitusprojekt/kasutusteatis)",
+          "Планировка совпадает с планом в Ehitisregister",
+          "Несущие стены не затронуты"
+        ]),
+        grp("Вредители", [
+          "История дома: клопы/тараканы/грызуны",
+          "Опросить соседей напрямую"
+        ]),
+        grp("Мусорная система", [
+          "Домик (jäätmemaja) с сортировкой или открытые контейнеры",
+          "Кто убирает территорию, входит ли в KÜ-взнос",
+          "Далеко ли выносить мусор зимой"
+        ]),
+        grp("Прочее", [
+          "Шумоизоляция межэтажная и между квартирами",
+          "Интернет-провайдеры, заведённые в дом",
+          "Гостевая парковка помимо мест жильцов",
+          "Инсоляция — в какое время суток солнце в комнатах",
+          "Репутация застройщика (для новостройки) — сколько объектов сдано, жалобы/суды",
+          "Гарантия застройщика: конструктив (обычно 5 лет) и инженерия (обычно 2 года)",
+          "Если паркинг общий с соседним домом — как делится ремонтный фонд паркинга",
+          "Школы/садики поблизости, если актуально",
+          "Риск подтопления/грунтовые воды в районе"
+        ])
+      ]
+    },
+    sellerQuestions: {
+      title:"Вопросы продавцу", type:"check",
+      groups:[ grp("", [
+        "Почему продают квартиру?",
+        "Жил ли продавец сам, или квартира сдавалась?",
+        "Есть ли сейчас арендаторы?",
+        "Когда квартира будет свободна?",
+        "Как давно меняли крышу, не течёт ли (если верхний этаж)?",
+        "Были ли проблемы с соседями?",
+        "Есть ли шум сверху / снизу / сбоку / с улицы?",
+        "Были ли протечки, затопления, плесень?",
+        "Есть ли проблемы с вентиляцией?",
+        "Есть ли проблемы с электричеством / сантехникой / отоплением?",
+        "Что ремонтировалось и когда?",
+        "Делались ли перепланировки?",
+        "Были ли перепланировки согласованы?",
+        "Какие вещи остаются в квартире?",
+        "Что продавец забирает?",
+        "Есть ли долги по коммуналке?",
+        "Есть ли судебные споры, наследственные вопросы, развод, совладельцы?",
+        "Известны ли продавцу недостатки, о которых он обязан сообщить?"
+      ])]
+    },
+    deepCheck: {
+      title:"Углублённая проверка / документы", type:"check",
+      groups:[
+        grp("Запросить документы", [
+          "Свежий kinnistusraamatu väljavõte",
+          "План квартиры",
+          "Информация о долгах перед KÜ",
+          "Протоколы последних собраний KÜ",
+          "Информация о remondifond",
+          "Информация о кредитах KÜ",
+          "Документы/чеки/гарантии на ремонт (если был)",
+          "Кто менял электрику/сантехнику, есть ли документы",
+          "Разрешения на перепланировку (если была)",
+          "Договор аренды и дата освобождения (если сдавалась)",
+          "Список мебели и техники, входящих в цену"
+        ]),
+        grp("Проверить в e-Kinnistusraamat", [
+          "Кто является собственником",
+          "Совпадает ли продавец с собственником",
+          "Есть ли совладельцы",
+          "Нужны ли согласия супруга/совладельцев",
+          "Нет ли ипотеки, арестов, запретов, ограничений",
+          "Есть ли сервитуты или права пользования",
+          "Соответствует ли площадь и объект тому, что продаётся",
+          "Не продаётся ли доля вместо полноценной квартиры",
+          "Есть ли права третьих лиц"
+        ])
+      ]
+    },
+    onsite: {
+      title:"Осмотр на месте", type:"check",
+      groups:[
+        grp("Запах и скрытые проблемы", [
+          "Нет запаха сырости, канализации, плесени, старого дыма",
+          "Нет свежей краски только в одном углу (может скрывать плесень)",
+          "Углы у внешних стен в порядке",
+          "Потолок под крышей / ванной соседей в порядке"
+        ]),
+        grp("Стены, окна, полы", [
+          "Стены вокруг окон",
+          "Подоконники",
+          "Пол под окнами и возле балкона",
+          "Окна открываются нормально",
+          "Нет конденсата между стёклами",
+          "Не дует из окон",
+          "Пол не скрипит сильно, нет наклона",
+          "Нет трещин возле окон, дверей, потолка"
+        ]),
+        grp("Санузел и кухня", [
+          "Санузел: швы, силикон, вентиляция, запах, напор воды",
+          "Кухня: трубы, сифон, следы протечек под раковиной"
+        ]),
+        grp("Электрика и инженерия", [
+          "Электрощиток: старые пробки или нормальные автоматы",
+          "Достаточно розеток",
+          "Батареи греются равномерно, отопление регулируется",
+          "Вентиляция работает (проверить салфеткой у решётки)"
+        ]),
+        grp("Техника и безопасность", [
+          "Вся техника, входящая в цену, работает",
+          "Домофон работает",
+          "Есть датчик дыма",
+          "Есть место для стиральной/посудомоечной машины, хватает мест хранения"
+        ]),
+        grp("Подъезд и дом", [
+          "Подъезд в порядке",
+          "Подвал — есть доступ, состояние труб, нет запаха сырости",
+          "Чердак (если будет доступен)",
+          "Фасад на вид",
+          "Крыша визуально",
+          "Лифт",
+          "Почтовые ящики",
+          "Состояние лестниц",
+          "Нет граффити/сломанных дверей/мусора, дом не выглядит запущенным"
+        ]),
+        grp("Двор и территория", [
+          "Двор",
+          "Мусорная зона: закрытая или открытая",
+          "Парковка вечером (реально ли найти место)"
+        ]),
+        grp("Район", [
+          "Сколько идти до остановки транспорта",
+          "Где ближайший магазин",
+          "Где аптека, семейный врач, спортзал",
+          "Шум от дороги / трамвая / поездов / баров",
+          "Есть ли стройки рядом",
+          "Нет ли планов застройки, которые закроют вид/солнце",
+          "Как светит солнце утром/вечером и как расположена спальня"
+        ])
+      ]
+    }
+  };
+
+  Object.keys(SECTIONS).forEach(function(sk){
+    SECTIONS[sk].groups.forEach(function(g, gi){
+      g.items = g.items.map(function(text, ii){ return {id: sk+"_"+gi+"_"+ii, text:text}; });
+    });
+  });
+
+  var FINANCE_DEFAULTS = {
+    savings:30000, downPayment:0, hindamisakt:350, notary:275, keysMisc:300, reserveBudget:0,
+    income:4100, utilWinter:0, utilSummer:0, remondifond:0, internet:20, electricity:35,
+    loanAmount:0, marginMin:1.6, marginMax:1.8, euribor:2.55, euriborStress:0.3, termYears:30,
+    foodBudget:250, baseNeeds:300
+  };
+
+  /* ============================== STATE ============================== */
+
+  var state = { properties:[], checklists:{}, selectedId:null };
+  var ui = { expanded:{quality:false, ku:false, sellerQuestions:false, deepCheck:false, onsite:false, finance:true},
+             addingProperty:false, pendingDeleteId:null };
+  var saveTimer = null, sidebarTimer = null;
+
+  function emptyAnswers(){ return {finance:{}, quality:{}, ku:{}, sellerQuestions:{}, deepCheck:{}, onsite:{}}; }
+  function getAnswers(id){
+    if(!state.checklists[id]) state.checklists[id] = emptyAnswers();
+    var a = state.checklists[id];
+    if(!a.finance) a.finance = {};
+    ["quality","ku","sellerQuestions","deepCheck","onsite"].forEach(function(k){ if(!a[k]) a[k] = {}; });
+    return a;
+  }
+  function getFinance(id){
+    var a = getAnswers(id);
+    var f = {};
+    Object.keys(FINANCE_DEFAULTS).forEach(function(k){
+      f[k] = (a.finance[k] !== undefined && a.finance[k] !== null) ? a.finance[k] : FINANCE_DEFAULTS[k];
+    });
+    return f;
+  }
+
+  /* ============================== STORAGE ============================== */
+
+  async function loadData(){
+    try{
+      var resp = await fetch("/api/data");
+      if(!resp.ok) throw new Error("HTTP " + resp.status);
+      var parsed = await resp.json();
+      state.properties = (parsed.properties && parsed.properties.length) ? parsed.properties : [];
+      state.checklists = parsed.checklists || {};
+    } catch(e){
+      console.error("load failed", e);
+      setGlobalNotice("Не получилось загрузить данные с сервера — проверь, что бэкенд запущен.", "err");
+    }
+    if(!state.selectedId && state.properties.length) state.selectedId = state.properties[0].id;
+    renderApp();
+  }
+
+  async function saveData(){
+    try{
+      var resp = await fetch("/api/data", {
+        method:"PUT",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({properties:state.properties, checklists:state.checklists})
+      });
+      if(!resp.ok) throw new Error("HTTP " + resp.status);
+    }catch(e){ console.error("save failed", e); setGlobalNotice("Не получилось сохранить на сервер.", "err"); }
+  }
+
+  function setGlobalNotice(text, tone){
+    var el = document.getElementById("global-notice");
+    if(!el) return;
+    el.textContent = text || "";
+    el.className = "global-notice" + (tone ? " " + tone : "");
+  }
+  function debouncedSave(){
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveData, 500);
+  }
+  function debouncedSidebarRender(){
+    clearTimeout(sidebarTimer);
+    sidebarTimer = setTimeout(renderSidebar, 400);
+  }
+
+  /* ============================== LOGIC ============================== */
+
+  function escapeHtml(s){
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+    });
+  }
+  function fmtEur(n){
+    n = Number(n)||0;
+    return n.toLocaleString("et-EE", {maximumFractionDigits:0}) + " \u20ac";
+  }
+  function annuityMonthly(principal, annualRatePct, years){
+    principal = Number(principal)||0; annualRatePct = Number(annualRatePct)||0; years = Number(years)||0;
+    if(!principal || !annualRatePct || !years) return 0;
+    var r = (annualRatePct/100)/12, n = years*12;
+    if(r === 0) return principal/n;
+    return principal * (r*Math.pow(1+r,n)) / (Math.pow(1+r,n)-1);
+  }
+
+  function flatItems(sectionKey){
+    var out = [];
+    SECTIONS[sectionKey].groups.forEach(function(g){ g.items.forEach(function(it){ out.push(it); }); });
+    return out;
+  }
+
+  function sectionProgress(sectionKey, propId){
+    var answers = getAnswers(propId)[sectionKey];
+    var items = flatItems(sectionKey);
+    var isScore = SECTIONS[sectionKey].type === "score";
+    var done = items.filter(function(it){
+      var a = answers[it.id];
+      return a && (isScore ? !!a.score : !!a.checked);
+    }).length;
+    return {done:done, total:items.length};
+  }
+
+  function flagCount(propId){
+    var a = getAnswers(propId);
+    var n = 0;
+    ["ku","sellerQuestions","deepCheck","onsite"].forEach(function(sk){
+      Object.keys(a[sk]).forEach(function(id){ if(a[sk][id] && a[sk][id].flag) n++; });
+    });
+    Object.keys(a.quality).forEach(function(id){
+      var sc = a.quality[id] && a.quality[id].score;
+      if(sc && sc <= 3) n++;
+    });
+    return n;
+  }
+
+  function financeStatus(propId){
+    var f = getFinance(propId);
+    var oneTime = (Number(f.hindamisakt)||0) + (Number(f.notary)||0) + (Number(f.keysMisc)||0) + (Number(f.reserveBudget)||0);
+    var buffer = (Number(f.savings)||0) - (Number(f.downPayment)||0) - oneTime;
+    var loanMonthlyMin = annuityMonthly(f.loanAmount, Number(f.marginMin)+Number(f.euribor), f.termYears);
+    var loanMonthlyMax = annuityMonthly(f.loanAmount, Number(f.marginMax)+Number(f.euribor)+Number(f.euriborStress), f.termYears);
+    var monthlyFixed = (Number(f.utilWinter)||0) + (Number(f.remondifond)||0) + (Number(f.internet)||0) + (Number(f.electricity)||0) + (Number(f.foodBudget)||0) + (Number(f.baseNeeds)||0);
+    var totalMonthlyMax = loanMonthlyMax + monthlyFixed;
+    var dti = f.income ? (loanMonthlyMax / Number(f.income) * 100) : 0;
+    var bad = (buffer < 500) || (dti > 40) || (f.income && totalMonthlyMax > Number(f.income));
+    return {oneTime:oneTime, buffer:buffer, loanMonthlyMin:loanMonthlyMin, loanMonthlyMax:loanMonthlyMax,
+             monthlyFixed:monthlyFixed, totalMonthlyMax:totalMonthlyMax, dti:dti, bad:bad};
+  }
+
+  function overallStatus(propId){
+    var sections = ["quality","ku","sellerQuestions","deepCheck","onsite"];
+    var doneSum=0, totalSum=0;
+    sections.forEach(function(sk){ var p = sectionProgress(sk, propId); doneSum+=p.done; totalSum+=p.total; });
+    var pct = totalSum ? Math.round(doneSum/totalSum*100) : 0;
+    var flags = flagCount(propId);
+    var fin = financeStatus(propId);
+    var label, tone;
+    if(fin.bad){ label="СТОП"; tone="red"; }
+    else if(flags >= 3){ label="СТОП"; tone="red"; }
+    else if(flags >= 1){ label="ЕСТЬ ВОПРОСЫ"; tone="amber"; }
+    else if(pct < 15){ label="НЕ НАЧАТО"; tone="grey"; }
+    else if(pct < 100){ label="В ПРОЦЕССЕ"; tone="blue"; }
+    else { label="ОДОБРЕНО"; tone="green"; }
+    return {label:label, tone:tone, pct:pct, flags:flags, fin:fin};
+  }
+
+  /* ============================== RENDER: SIDEBAR ============================== */
+
+  function renderSidebar(){
+    var el = document.getElementById("sidebar-list");
+    if(!el) return;
+    el.innerHTML = state.properties.map(function(p){
+      var st = overallStatus(p.id);
+      var active = p.id === state.selectedId ? " active" : "";
+      var priceSqm = p.pricePerSqm ? (p.pricePerSqm + " \u20ac/\u043c\u00b2") : "\u2014";
+      return '<div class="prop-row'+active+'" data-action="select-property" data-id="'+p.id+'">'
+        + '<div class="prop-row-top">'
+        +   '<div class="prop-row-name">'+escapeHtml(p.name||"Без названия")+'</div>'
+        +   '<div class="prop-dot dot-'+st.tone+'"></div>'
+        + '</div>'
+        + '<div class="prop-row-sub"><span>'+escapeHtml(p.district||"")+'</span><span>'+priceSqm+'</span></div>'
+        + '<div class="prop-progress"><div class="prop-progress-fill" style="width:'+st.pct+'%"></div></div>'
+        + '<div class="prop-top-badge tone-'+st.tone+'">'+st.label+' \u00b7 '+st.pct+'%</div>'
+        + '</div>';
+    }).join("") || '<div style="font-size:12px;color:var(--ink-faint);padding:10px 2px;">Пока нет объектов — добавь первый.</div>';
+  }
+
+  /* ============================== RENDER: ITEM ROWS ============================== */
+
+  function renderItemRow(sectionKey, item, isScore){
+    var a = getAnswers(state.selectedId)[sectionKey][item.id] || {};
+    if(isScore){
+      return '<div class="item-row score-row">'
+        + '<div class="item-text">'+escapeHtml(item.text)+'</div>'
+        + '<div class="item-controls">'
+        +   '<input type="number" min="1" max="10" class="score-input" placeholder="1-10" '
+        +     'data-action="update-score" data-section="'+sectionKey+'" data-item="'+item.id+'" value="'+(a.score||"")+'">'
+        +   '<input type="text" class="note-input" placeholder="заметка" '
+        +     'data-action="update-note" data-section="'+sectionKey+'" data-item="'+item.id+'" value="'+escapeHtml(a.note||"")+'">'
+        + '</div></div>';
+    }
+    var flagged = a.flag ? " flagged" : "";
+    return '<div class="item-row'+flagged+'">'
+      + '<label class="check-label">'
+      +   '<input type="checkbox" data-action="toggle-check" data-section="'+sectionKey+'" data-item="'+item.id+'" '+(a.checked?"checked":"")+'>'
+      +   '<span>'+escapeHtml(item.text)+'</span>'
+      + '</label>'
+      + '<div class="item-controls">'
+      +   '<input type="text" class="note-input" placeholder="заметка" '
+      +     'data-action="update-note" data-section="'+sectionKey+'" data-item="'+item.id+'" value="'+escapeHtml(a.note||"")+'">'
+      +   '<button type="button" class="flag-btn'+(a.flag?" active":"")+'" title="Отметить как проблему" '
+      +     'data-action="toggle-flag" data-section="'+sectionKey+'" data-item="'+item.id+'">\ud83d\udea9</button>'
+      + '</div></div>';
+  }
+
+  function renderSection(sectionKey){
+    var sec = SECTIONS[sectionKey];
+    var isScore = sec.type === "score";
+    var prog = sectionProgress(sectionKey, state.selectedId);
+    var open = ui.expanded[sectionKey];
+    var body = sec.groups.map(function(g){
+      var head = g.name ? '<div class="group-name">'+escapeHtml(g.name)+'</div>' : "";
+      return head + g.items.map(function(it){ return renderItemRow(sectionKey, it, isScore); }).join("");
+    }).join("");
+    var badgeClass = prog.done === prog.total ? " complete" : "";
+    return '<div class="section'+(open?" open":"")+'">'
+      + '<div class="section-head" data-action="toggle-section" data-section="'+sectionKey+'">'
+      +   '<div class="section-title"><span class="section-chevron">\u203a</span>'+escapeHtml(sec.title)+'</div>'
+      +   '<div class="section-badge'+badgeClass+'">'+prog.done+'/'+prog.total+'</div>'
+      + '</div>'
+      + '<div class="section-body">'+body+'</div>'
+      + '</div>';
+  }
+
+  /* ============================== RENDER: FINANCE ============================== */
+
+  function financeResultsHtml(propId){
+    var s = financeStatus(propId);
+    var bufferTone = s.buffer < 500 ? "red" : (s.buffer < 1500 ? "amber" : "green");
+    var dtiTone = s.dti > 40 ? "red" : (s.dti > 33 ? "amber" : "green");
+    var fcur = getFinance(propId);
+    return ''
+      + '<div class="fin-result-row"><span>Разовые расходы при сделке (оценка+нотариус+ключи+резерв)</span><span class="v">'+fmtEur(s.oneTime)+'</span></div>'
+      + '<div class="fin-result-row"><span>Останется на руках после первого взноса</span><span class="v tone-'+bufferTone+'">'+fmtEur(s.buffer)+'</span></div>'
+      + '<div class="fin-result-row"><span>Платёж по кредиту, мин. сценарий (маржа '+fcur.marginMin+'% + euribor)</span><span class="v">'+fmtEur(s.loanMonthlyMin)+'/мес</span></div>'
+      + '<div class="fin-result-row"><span>Платёж по кредиту, стресс-сценарий (маржа макс + euribor +'+fcur.euriborStress+')</span><span class="v">'+fmtEur(s.loanMonthlyMax)+'/мес</span></div>'
+      + '<div class="fin-result-row"><span>DTI по максимальному платежу</span><span class="v tone-'+dtiTone+'">'+s.dti.toFixed(1)+'% (порог 40%)</span></div>'
+      + '<div class="fin-result-row"><span>Все ежемесячные расходы (кредит+коммуналка+еда+база), макс.</span><span class="v">'+fmtEur(s.totalMonthlyMax)+'/мес</span></div>'
+      + '<div class="fin-verdict tone-'+(s.bad?"red":"green")+'" style="background:'+(s.bad?"var(--red-bg)":"var(--green-bg)")+'">'
+      +   (s.bad ? "\u26a0 Буфер меньше 500€ и/или DTI выше 40%, и/или расходы превышают доход — стоит пересмотреть условия или отложить сделку."
+                 : "\u2713 Буфер и DTI в пределах разумного по введённым цифрам.")
+      + '</div>';
+  }
+
+  function renderFinance(){
+    var f = getFinance(state.selectedId);
+    var open = ui.expanded.finance !== false;
+    function fld(key, label, step){
+      step = step || "1";
+      return '<div class="fin-field"><label>'+label+'</label>'
+        + '<input type="number" step="'+step+'" data-action="update-finance" data-field="'+key+'" value="'+f[key]+'"></div>';
+    }
+    var body = ''
+      + '<div class="fin-subhead">Разово, при сделке</div>'
+      + '<div class="fin-grid">'
+      +   fld("savings","Все накопления, €")
+      +   fld("downPayment","Первый взнос для этой квартиры, €")
+      +   fld("hindamisakt","Hindamisakt, €")
+      +   fld("notary","Нотариус + договор, €")
+      +   fld("keysMisc","Ключи и мелочи, €")
+      +   fld("reserveBudget","Резерв на электрику/сантехнику/мебель, €")
+      + '</div>'
+      + '<div class="fin-subhead">Ежемесячно</div>'
+      + '<div class="fin-grid">'
+      +   fld("income","Чистый доход, €/мес")
+      +   fld("utilWinter","Коммуналка, зима, €/мес")
+      +   fld("utilSummer","Коммуналка, лето, €/мес")
+      +   fld("remondifond","Ремонтный фонд, €/мес")
+      +   fld("internet","Интернет, €/мес")
+      +   fld("electricity","Пакет электричества, €/мес")
+      +   fld("foodBudget","Еда, €/мес")
+      +   fld("baseNeeds","Базовые потребности, €/мес")
+      + '</div>'
+      + '<div class="fin-subhead">Кредит</div>'
+      + '<div class="fin-grid">'
+      +   fld("loanAmount","Сумма кредита, €")
+      +   fld("marginMin","Маржа банка, мин %","0.1")
+      +   fld("marginMax","Маржа банка, макс %","0.1")
+      +   fld("euribor","Euribor 6M сейчас, %","0.01")
+      +   fld("euriborStress","Запас на рост euribor, %","0.1")
+      +   fld("termYears","Срок кредита, лет")
+      + '</div>'
+      + '<div class="fin-note">Euribor 6M на 03.07.2026 \u2248 2.55% — обнови на актуальный перед решением (euribor-rates.eu).</div>'
+      + '<div class="fin-results" id="fin-results-box">'+financeResultsHtml(state.selectedId)+'</div>';
+
+    return '<div class="section'+(open?" open":"")+'">'
+      + '<div class="section-head" data-action="toggle-section" data-section="finance">'
+      +   '<div class="section-title"><span class="section-chevron">\u203a</span>Финансовый расчёт</div>'
+      +   '<div class="section-badge'+(financeStatus(state.selectedId).bad?"":" complete")+'">'+(financeStatus(state.selectedId).bad?"\u26a0":"\u2713")+'</div>'
+      + '</div>'
+      + '<div class="section-body">'+body+'</div>'
+      + '</div>';
+  }
+
+  /* ============================== RENDER: MAIN ============================== */
+
+  function coreField(field, label, value, type){
+    type = type || "text";
+    return '<div class="field"><label>'+label+'</label>'
+      + '<input type="'+type+'" data-action="update-core" data-field="'+field+'" value="'+escapeHtml(value==null?"":value)+'"></div>';
+  }
+
+  function renderMain(){
+    var el = document.getElementById("main-content");
+    if(!el) return;
+    var p = state.properties.find(function(x){ return x.id === state.selectedId; });
+    if(!p){
+      el.innerHTML = '<div class="empty-state"><div class="big">Выбери или добавь объект</div>Список слева — кликни на объект, чтобы открыть досье.</div>';
+      return;
+    }
+    var st = overallStatus(p.id);
+
+    var head = ''
+      + '<div class="dossier-head">'
+      +   '<div style="flex:1;min-width:0;">'
+      +     '<div class="dossier-eyebrow">Досье объекта</div>'
+      +     '<input class="dossier-title-input" data-action="update-core" data-field="name" value="'+escapeHtml(p.name)+'">'
+      +     '<div class="field-grid">'
+      +       coreField("district","Район", p.district)
+      +       coreField("url","Ссылка kv.ee", p.url)
+      +       coreField("price","Цена, €", p.price, "number")
+      +       coreField("area","Площадь, м²", p.area, "number")
+      +       coreField("rooms","Комнат", p.rooms, "number")
+      +       coreField("pricePerSqm","€/м²", p.pricePerSqm, "number")
+      +       coreField("year","Год постройки", p.year)
+      +       coreField("material","Тип дома", p.material)
+      +     '</div>'
+      +     '<div class="head-actions">'
+      +       (p.url ? '<a class="link-btn" href="'+escapeHtml(p.url)+'" target="_blank" rel="noopener">Открыть на kv.ee \u2197</a>' : '')
+      +       '<button type="button" class="link-btn" data-action="export-property">Скачать сводку (.txt)</button>'
+      +       '<button type="button" class="link-btn danger" data-action="delete-property" data-id="'+p.id+'">'+(ui.pendingDeleteId===p.id?"Точно удалить?":"Удалить объект")+'</button>'
+      +     '</div>'
+      +   '</div>'
+      +   '<div class="stamp tone-'+st.tone+'">'+st.label+'</div>'
+      + '</div>';
+
+    var overview = ''
+      + '<div class="overview-strip">'
+      +   '<div class="overview-metric"><div class="num">'+st.pct+'%</div><div class="lbl">Заполнено</div></div>'
+      +   '<div class="overview-metric"><div class="num tone-'+(st.flags?"red":"green")+'">'+st.flags+'</div><div class="lbl">Флагов \ud83d\udea9</div></div>'
+      +   '<div class="overview-metric"><div class="bar-track"><div class="bar-fill" style="width:'+st.pct+'%"></div></div><div class="lbl">Прогресс по чек-листам</div></div>'
+      + '</div>';
+
+    var notes = '<textarea class="notes-box" placeholder="Общие заметки по объекту..." data-action="update-core" data-field="notes">'+escapeHtml(p.notes||"")+'</textarea>';
+
+    var sectionsHtml = renderFinance()
+      + renderSection("quality")
+      + renderSection("ku")
+      + renderSection("sellerQuestions")
+      + renderSection("deepCheck")
+      + renderSection("onsite");
+
+    el.innerHTML = head + overview + notes + sectionsHtml;
+  }
+
+  function renderApp(){ renderSidebar(); renderMain(); }
+
+  /* ============================== EXPORT ============================== */
+
+  function exportProperty(propId){
+    var p = state.properties.find(function(x){ return x.id === propId; });
+    if(!p) return;
+    var a = getAnswers(propId);
+    var lines = [];
+    lines.push(p.name + (p.district?(" — "+p.district):""));
+    lines.push(p.url||"");
+    lines.push("Цена: "+p.price+" € \u00b7 "+p.area+" м² \u00b7 "+p.rooms+" комнат \u00b7 "+p.pricePerSqm+" €/м² \u00b7 "+p.year+" \u00b7 "+p.material);
+    lines.push("Заметки: "+(p.notes||""));
+    lines.push("");
+    var st = overallStatus(propId);
+    lines.push("СТАТУС: "+st.label+" ("+st.pct+"% заполнено, флагов: "+st.flags+")");
+    lines.push("");
+    lines.push("=== ФИНАНСЫ ===");
+    var fs = financeStatus(propId);
+    lines.push("Останется после первого взноса: "+fmtEur(fs.buffer));
+    lines.push("Платёж мин/макс: "+fmtEur(fs.loanMonthlyMin)+" / "+fmtEur(fs.loanMonthlyMax)+" в мес");
+    lines.push("DTI (макс): "+fs.dti.toFixed(1)+"%");
+    lines.push("");
+    ["quality","ku","sellerQuestions","deepCheck","onsite"].forEach(function(sk){
+      lines.push("=== "+SECTIONS[sk].title.toUpperCase()+" ===");
+      SECTIONS[sk].groups.forEach(function(g){
+        if(g.name) lines.push("-- "+g.name);
+        g.items.forEach(function(it){
+          var ans = a[sk][it.id] || {};
+          var mark = SECTIONS[sk].type==="score" ? ("["+(ans.score||"-")+"/10]") : (ans.checked?"[x]":"[ ]");
+          var flag = ans.flag ? " \ud83d\udea9" : "";
+          lines.push(mark+flag+" "+it.text + (ans.note?(" — "+ans.note):""));
+        });
+      });
+      lines.push("");
+    });
+    var blob = new Blob([lines.join("\n")], {type:"text/plain;charset=utf-8"});
+    var url = URL.createObjectURL(blob);
+    var aTag = document.createElement("a");
+    aTag.href = url; aTag.download = (p.name||"object").replace(/[^a-zA-Z0-9а-яА-Я_-]/g,"_")+".txt";
+    document.body.appendChild(aTag); aTag.click(); document.body.removeChild(aTag);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
+  }
+
+  /* ============================== EVENTS ============================== */
+
+  var app = document.getElementById("app");
+
+  app.addEventListener("click", function(e){
+    var t = e.target.closest("[data-action]");
+    if(!t) return;
+    var action = t.dataset.action;
+
+    if(action === "select-property"){
+      state.selectedId = t.dataset.id;
+      ui.pendingDeleteId = null;
+      renderApp();
+    }
+    else if(action === "toggle-section"){
+      var sk = t.dataset.section;
+      ui.expanded[sk] = !ui.expanded[sk];
+      renderMain();
+    }
+    else if(action === "toggle-flag"){
+      var sec = t.dataset.section, item = t.dataset.item;
+      var a = getAnswers(state.selectedId)[sec];
+      if(!a[item]) a[item] = {};
+      a[item].flag = !a[item].flag;
+      saveData(); renderApp();
+    }
+    else if(action === "delete-property"){
+      var id = t.dataset.id;
+      if(ui.pendingDeleteId === id){
+        state.properties = state.properties.filter(function(p){ return p.id !== id; });
+        delete state.checklists[id];
+        if(state.selectedId === id) state.selectedId = state.properties.length ? state.properties[0].id : null;
+        ui.pendingDeleteId = null;
+        saveData(); renderApp();
+      } else {
+        ui.pendingDeleteId = id;
+        renderMain();
+      }
+    }
+    else if(action === "export-property"){
+      exportProperty(state.selectedId);
+    }
+    else if(action === "show-add-form"){
+      ui.addingProperty = true;
+      renderSidebarAddForm();
+    }
+    else if(action === "cancel-add-form"){
+      ui.addingProperty = false;
+      renderSidebarAddForm();
+    }
+    else if(action === "refresh-data"){
+      loadData();
+    }
+    else if(action === "check-now"){
+      var btn = t;
+      btn.textContent = "Запускаю...";
+      fetch("/api/check-now", {method:"POST"})
+        .then(function(r){ return r.json(); })
+        .then(function(d){ setGlobalNotice(d.message || "Проверка запущена.", "ok"); })
+        .catch(function(){ setGlobalNotice("Не получилось запустить проверку.", "err"); })
+        .finally(function(){ btn.textContent = "Проверить kv.ee сейчас"; });
+    }
+    else if(action === "save-new-property"){
+      var nameInput = document.getElementById("new-prop-name");
+      var districtInput = document.getElementById("new-prop-district");
+      var name = (nameInput && nameInput.value.trim()) || "Новый объект";
+      var id = "prop-" + Date.now();
+      var newProp = {id:id, name:name, district:(districtInput?districtInput.value.trim():""), url:"", price:0, area:0, rooms:0, pricePerSqm:0, year:"", material:"", notes:""};
+      state.properties.push(newProp);
+      state.selectedId = id;
+      ui.addingProperty = false;
+      saveData(); renderApp();
+    }
+  });
+
+  app.addEventListener("change", function(e){
+    var t = e.target.closest("[data-action]");
+    if(!t) return;
+    var action = t.dataset.action;
+
+    if(action === "toggle-check"){
+      var sec = t.dataset.section, item = t.dataset.item;
+      var a = getAnswers(state.selectedId)[sec];
+      if(!a[item]) a[item] = {};
+      a[item].checked = t.checked;
+      saveData(); renderApp();
+    }
+    else if(action === "update-score"){
+      var sec2 = t.dataset.section, item2 = t.dataset.item;
+      var val = Math.max(0, Math.min(10, Number(t.value)||0));
+      var a2 = getAnswers(state.selectedId)[sec2];
+      if(!a2[item2]) a2[item2] = {};
+      a2[item2].score = val || null;
+      saveData(); renderApp();
+    }
+  });
+
+  app.addEventListener("input", function(e){
+    var t = e.target.closest("[data-action]");
+    if(!t) return;
+    var action = t.dataset.action;
+
+    if(action === "update-note"){
+      var sec = t.dataset.section, item = t.dataset.item;
+      var a = getAnswers(state.selectedId)[sec];
+      if(!a[item]) a[item] = {};
+      a[item].note = t.value;
+      debouncedSave();
+    }
+    else if(action === "update-core"){
+      var field = t.dataset.field;
+      var p = state.properties.find(function(x){ return x.id === state.selectedId; });
+      if(p){
+        p[field] = (t.type === "number") ? Number(t.value) : t.value;
+        debouncedSave();
+        if(field === "name" || field === "district" || field === "pricePerSqm") debouncedSidebarRender();
+      }
+    }
+    else if(action === "update-finance"){
+      var field2 = t.dataset.field;
+      var ans = getAnswers(state.selectedId);
+      ans.finance[field2] = Number(t.value);
+      var box = document.getElementById("fin-results-box");
+      if(box) box.innerHTML = financeResultsHtml(state.selectedId);
+      debouncedSave();
+      debouncedSidebarRender();
+    }
+  });
+
+  function renderSidebarAddForm(){
+    var el = document.getElementById("add-form-slot");
+    if(!el) return;
+    if(!ui.addingProperty){
+      el.innerHTML = '<button type="button" class="add-btn" data-action="show-add-form">+ Добавить объект</button>';
+      return;
+    }
+    el.innerHTML = ''
+      + '<div class="new-prop-form">'
+      +   '<input id="new-prop-name" type="text" placeholder="Адрес / название">'
+      +   '<input id="new-prop-district" type="text" placeholder="Район">'
+      +   '<div class="actions">'
+      +     '<button type="button" class="btn-mini primary" data-action="save-new-property">Добавить</button>'
+      +     '<button type="button" class="btn-mini" data-action="cancel-add-form">Отмена</button>'
+      +   '</div>'
+      + '</div>';
+  }
+
+  /* ============================== INIT ============================== */
+
+  app.innerHTML = ''
+    + '<div class="sidebar">'
+    +   '<div class="brand">Досье объектов<small>Tallinn \u00b7 2026</small></div>'
+    +   '<div id="add-form-slot"></div>'
+    +   '<div style="display:flex; gap:6px;">'
+    +     '<button type="button" class="link-btn" style="flex:1;text-align:center;" data-action="refresh-data">\u21bb Обновить</button>'
+    +     '<button type="button" class="link-btn" style="flex:1;text-align:center;" data-action="check-now">Проверить kv.ee сейчас</button>'
+    +   '</div>'
+    +   '<div id="global-notice" class="global-notice"></div>'
+    +   '<div class="prop-list" id="sidebar-list"></div>'
+    + '</div>'
+    + '<div class="main" id="main-content"></div>';
+
+  renderSidebarAddForm();
+  loadData();
+
+})();
+</script>
+</body>
+</html>
