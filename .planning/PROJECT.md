@@ -62,11 +62,11 @@ Personal tool — no revenue model. Success = Daniel finds and buys the right ap
 - [ ] Post-viewing Telegram prompt to fill 11-category checklist inline
 - [ ] Negotiation brief: auto-generate 1-page memo (listing age, price trajectory, district comps, suggested opening offer)
 
-**Scraper Architecture Split**
-- [ ] Mini PC (home, Windows/macOS) runs scraper-only process
-- [ ] Mini PC POSTs raw listing data to VPS via HTTP endpoint (secret token auth)
-- [ ] VPS handles AI evaluation, queue, dossier, web frontend
-- [ ] Scraper health alert: Telegram notification if 0 listings returned for 2+ consecutive runs
+**Scraper Architecture Split** ✓ Phase 01 complete (2026-07-08)
+- ✓ Mini PC (home, Windows/macOS) runs scraper-only process (`scraper-client/`)
+- ✓ Mini PC POSTs structured Listing JSON to VPS via `POST /api/ingest` (Bearer token auth)
+- ✓ VPS handles AI evaluation, queue, dossier, web frontend — no browser on VPS
+- ✓ Scraper health alerts: offline alert after 2×interval+30min; zero-listing alert after 2 consecutive zero runs
 
 **Building Fund & Enrichment**
 - [ ] Attempt korteriühistu (KT/remondifond) data lookup per listing address
@@ -103,14 +103,14 @@ The tool currently runs on a VPS but scraping is blocked by Cloudflare when comi
 | Decision | Rationale | Outcome |
 |---|---|---|
 | Playwright for kv.ee scraping | Cloudflare blocks plain HTTP from datacenter IPs | ✓ Works, but fragile |
-| Split scraper (home) from brain (VPS) | Residential IP bypasses Cloudflare reliably | — Pending |
+| Split scraper (home) from brain (VPS) | Residential IP bypasses Cloudflare reliably | ✓ Phase 01 — `scraper-client/` Docker image on mini PC, VPS receives Listing JSON via /api/ingest |
 | JSON file persistence | Single user, no concurrent writers, no infra overhead | ✓ Good |
 | Approval-gated email drafting | Prevents unsolicited emails to agents; Daniel stays in control | — Pending |
 | Calibrated scoring with anchors | Fixes "everything gets 70" problem — model needs comparison context | — Pending |
 | Bolt HQ commute reference: Veerenni 28 | Daniel's workplace for commute isochrone calculation | — Pending |
 
 ---
-*Last updated: 2026-07-07 after initialization*
+*Last updated: 2026-07-08 after Phase 01 (scraper-architecture-split) completion*
 
 ## Evolution
 
