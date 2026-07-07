@@ -1,0 +1,6 @@
+services:
+  scraper:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    shm_size: '256m'
