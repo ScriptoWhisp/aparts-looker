@@ -66,7 +66,6 @@ def test_zero_count_resets(client, tmp_agent_state):
 # Alert check tests (require Task 2's check functions — skip until wired)
 # ---------------------------------------------------------------------------
 
-@pytest.mark.skip(reason="wired in Task 2 of plan 01-03")
 def test_zero_listing_alert(tmp_agent_state, mock_telegram, monkeypatch):
     """check_consecutive_zeros fires a Telegram alert when consecutive_zero_count >= 2 (ARCH-04)."""
     import data_store  # noqa: PLC0415
@@ -91,7 +90,6 @@ def test_zero_listing_alert(tmp_agent_state, mock_telegram, monkeypatch):
     assert "0 listings" in call_text, f"expected '0 listings' in message: {call_text!r}"
 
 
-@pytest.mark.skip(reason="wired in Task 2 of plan 01-03")
 def test_offline_alert(tmp_agent_state, mock_telegram, monkeypatch):
     """check_heartbeat_timeout fires a Telegram alert when last_heartbeat_ts is stale (ARCH-04, D-10)."""
     import data_store  # noqa: PLC0415
@@ -112,7 +110,6 @@ def test_offline_alert(tmp_agent_state, mock_telegram, monkeypatch):
     assert "offline" in call_text.lower(), f"expected 'offline' in message: {call_text!r}"
 
 
-@pytest.mark.skip(reason="wired in Task 2 of plan 01-03")
 def test_no_alert_when_no_baseline(tmp_agent_state, mock_telegram):
     """check_heartbeat_timeout must NOT fire when last_heartbeat_ts is None (RESEARCH Pitfall 4)."""
     import data_store  # noqa: PLC0415
@@ -129,7 +126,6 @@ def test_no_alert_when_no_baseline(tmp_agent_state, mock_telegram):
     )
 
 
-@pytest.mark.skip(reason="wired in Task 2 of plan 01-03")
 def test_alert_cooldown(tmp_agent_state, mock_telegram, monkeypatch):
     """Both alert checks must respect the 24-hour cooldown (RESEARCH Open Question 2).
 
