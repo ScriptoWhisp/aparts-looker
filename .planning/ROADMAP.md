@@ -35,12 +35,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. If the scraper client returns zero listings for two consecutive runs, Daniel receives a Telegram alert naming the scraper and the timestamp of the last successful run.
   4. The existing VPS-side evaluation, notification, and dossier flows continue to work unchanged after the split.
 
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 01-01-PLAN.md — Extract standalone scraper client (scraper-client/) — Docker image with while-True loop that scrapes kv.ee and POSTs Listing JSON to VPS
+- [x] 01-01-PLAN.md — Extract standalone scraper client (scraper-client/) — Docker image with while-True loop that scrapes kv.ee and POSTs Listing JSON to VPS
 - [ ] 01-02-PLAN.md — Add VPS ingest endpoint (POST /api/ingest + /api/heartbeat) with Bearer token auth; move filter+evaluate+notify from agent_job into ingest_handler; update Caddyfile
 
 **Wave 2** *(blocked on Wave 1 completion)*
@@ -173,7 +173,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Scraper Architecture Split | 0/3 | Not started | - |
+| 1. Scraper Architecture Split | 1/3 | In Progress|  |
 | 2. Queue & Approval Workflow | 0/4 | Not started | - |
 | 3. AI Quality & Price Intelligence | 0/4 | Not started | - |
 | 4. Additional Scraper Sources | 0/3 | Not started | - |

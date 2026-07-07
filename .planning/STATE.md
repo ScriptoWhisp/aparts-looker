@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 1
-current_phase_name: Scraper Architecture Split
+current_phase: 01
+current_phase_name: scraper-architecture-split
 status: executing
 stopped_at: Phase 1 discuss complete — CONTEXT.md + DISCUSSION-LOG.md committed (e2b7e40); ready to run /gsd-plan-phase 1
-last_updated: "2026-07-07T21:27:40.072Z"
+last_updated: "2026-07-07T21:36:40.420Z"
 last_activity: 2026-07-07
-last_activity_desc: ROADMAP.md and STATE.md created; roadmap approved
+last_activity_desc: Phase 01 execution started
 progress:
   total_phases: 6
   completed_phases: 0
-  total_plans: 24
-  completed_plans: 0
+  total_plans: 3
+  completed_plans: 1
   percent: 0
 ---
 
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-07)
 
 **Core value:** Every listing that meets Daniel's criteria gets evaluated, queued, and surfaced before he has to manually look — best ones get an email to the agent drafted and ready.
-**Current focus:** Phase 1 — Scraper Architecture Split
+**Current focus:** Phase 01 — scraper-architecture-split
 
 ## Current Position
 
-Phase: 1 of 6 (Scraper Architecture Split)
-Plan: 0 of 3 in current phase
+Phase: 01 (scraper-architecture-split) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
-Last activity: 2026-07-07 — ROADMAP.md and STATE.md created; roadmap approved
+Last activity: 2026-07-07 — Phase 01 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -55,6 +55,7 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: -
 
 *Updated after each plan completion*
+| Phase 01-scraper-architecture-split P01 | 2m | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -67,6 +68,9 @@ Recent decisions affecting current work:
 - Init: Approval-gated email drafting — prevents unsolicited agent emails; Daniel stays in control
 - Init: Calibrated scoring with anchors — fixes "everything gets 70" problem
 - Init: JSON file persistence retained — single user, no concurrent writers, no DB migration needed
+- [Phase ?]: scraper-client/ standalone Docker image for home mini PC — no FastAPI/uvicorn/APScheduler dependency
+- [Phase ?]: kv_listing_parser.py kept byte-identical in scraper-client vs VPS to prevent JSON contract drift (Listing dataclass)
+- [Phase ?]: Heartbeat POSTed unconditionally after every run including zero-listing runs (D-09/D-11) to distinguish dead scraper from empty search
 
 ### Pending Todos
 
@@ -87,6 +91,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-07
+Last session: 2026-07-07T21:36:09.619Z
 Stopped at: Phase 1 discuss complete — CONTEXT.md + DISCUSSION-LOG.md committed (e2b7e40); ready to run /gsd-plan-phase 1
 Resume file: None

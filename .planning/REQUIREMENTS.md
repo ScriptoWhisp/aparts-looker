@@ -36,7 +36,7 @@
 
 ### Scraper Architecture Split
 
-- [ ] **ARCH-01**: A standalone scraper client runs on the home mini PC (Windows/macOS compatible)
+- [x] **ARCH-01**: A standalone scraper client runs on the home mini PC (Windows/macOS compatible)
 - [ ] **ARCH-02**: The scraper client POSTs raw listing data to a VPS ingest endpoint (secret token auth)
 - [ ] **ARCH-03**: The VPS ingest endpoint triggers AI evaluation and queuing (no scraping on VPS)
 - [ ] **ARCH-04**: Scraper health alert: Telegram notification if 0 listings are returned for 2 consecutive runs
@@ -97,7 +97,7 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ARCH-01 | Phase 1 | Pending |
+| ARCH-01 | Phase 1 | Complete |
 | ARCH-02 | Phase 1 | Pending |
 | ARCH-03 | Phase 1 | Pending |
 | ARCH-04 | Phase 1 | Pending |
@@ -133,6 +133,7 @@
 | EXPORT-01 | Phase 6 | Pending |
 
 **Coverage:**
+
 - v1 requirements: 34 total
 - Mapped to phases: 34
 - Unmapped: 0 ✓
