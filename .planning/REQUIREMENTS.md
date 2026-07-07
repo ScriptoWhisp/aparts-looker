@@ -97,14 +97,38 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| QUEUE-01–07 | Phase 2 | Pending |
-| EVAL-01–04 | Phase 3 | Pending |
-| INTEL-01–03 | Phase 3 | Pending |
-| SRC-01–03 | Phase 4 | Pending |
-| ARCH-01–04 | Phase 1 | Pending |
-| MAP-01–06 | Phase 5 | Pending |
-| UI-01–02 | Phase 5 | Pending |
-| VIEW-01–03 | Phase 6 | Pending |
+| ARCH-01 | Phase 1 | Pending |
+| ARCH-02 | Phase 1 | Pending |
+| ARCH-03 | Phase 1 | Pending |
+| ARCH-04 | Phase 1 | Pending |
+| QUEUE-01 | Phase 2 | Pending |
+| QUEUE-02 | Phase 2 | Pending |
+| QUEUE-03 | Phase 2 | Pending |
+| QUEUE-04 | Phase 2 | Pending |
+| QUEUE-05 | Phase 2 | Pending |
+| QUEUE-06 | Phase 2 | Pending |
+| QUEUE-07 | Phase 2 | Pending |
+| EVAL-01 | Phase 3 | Pending |
+| EVAL-02 | Phase 3 | Pending |
+| EVAL-03 | Phase 3 | Pending |
+| EVAL-04 | Phase 3 | Pending |
+| INTEL-01 | Phase 3 | Pending |
+| INTEL-02 | Phase 3 | Pending |
+| INTEL-03 | Phase 3 | Pending |
+| SRC-01 | Phase 4 | Pending |
+| SRC-02 | Phase 4 | Pending |
+| SRC-03 | Phase 4 | Pending |
+| MAP-01 | Phase 5 | Pending |
+| MAP-02 | Phase 5 | Pending |
+| MAP-03 | Phase 5 | Pending |
+| MAP-04 | Phase 5 | Pending |
+| MAP-05 | Phase 5 | Pending |
+| MAP-06 | Phase 5 | Pending |
+| UI-01 | Phase 5 | Pending |
+| UI-02 | Phase 5 | Pending |
+| VIEW-01 | Phase 6 | Pending |
+| VIEW-02 | Phase 6 | Pending |
+| VIEW-03 | Phase 6 | Pending |
 | ENRICH-01 | Phase 6 | Pending |
 | EXPORT-01 | Phase 6 | Pending |
 
@@ -115,4 +139,4 @@
 
 ---
 *Requirements defined: 2026-07-07*
-*Last updated: 2026-07-07 after initial definition*
+*Last updated: 2026-07-07 — traceability expanded to per-requirement rows after roadmap creation*

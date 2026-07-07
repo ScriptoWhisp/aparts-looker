@@ -1,0 +1,151 @@
+# Roadmap: Aparts Looker
+
+## Overview
+
+The existing kv.ee scraper + Claude evaluation + Telegram + JSON dossier system is working but has two structural problems: datacenter IPs are blocked by Cloudflare, and every evaluated listing goes straight to the main list with no human gate. This roadmap adds the infrastructure split (Phase 1), approval queue (Phase 2), smarter AI evaluation + price intelligence (Phase 3), additional scraped sources (Phase 4), a map-based overview UI (Phase 5), and the viewing/closing workflow (Phase 6). Each phase delivers a complete, independently usable capability built on top of the previous one.
+
+## Phases
+
+**Phase Numbering:**
+- Integer phases (1, 2, 3): Planned milestone work
+- Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
+
+Decimal phases appear between their surrounding integers in numeric order.
+
+- [ ] **Phase 1: Scraper Architecture Split** - Mini PC scraper POSTs to VPS; Cloudflare bypass moves off datacenter IP
+- [ ] **Phase 2: Queue & Approval Workflow** - Every listing enters a pending queue; Daniel approves before it reaches the dossier
+- [ ] **Phase 3: AI Quality & Price Intelligence** - Calibrated scoring, structured checklist output, price history, longevity, and re-evaluation on drops
+- [ ] **Phase 4: Additional Scraper Sources** - city24.ee and kinnisvara24.ee added; deduplication across all sources
+- [ ] **Phase 5: Map & Overview UI** - Interactive Tallinn map with score pins, district heat zones, commute isochrone, and redesigned dossier
+- [ ] **Phase 6: Viewing Workflow & Extras** - Scheduled viewings, negotiation briefs, building fund lookup, PDF export
+
+## Phase Details
+
+### Phase 1: Scraper Architecture Split
+**Goal:** The scraper runs reliably from Daniel's home mini PC and delivers raw listing data to the VPS over HTTP, with a health alert if it goes silent.
+**Mode:** mvp
+**Depends on:** Nothing (first phase)
+**Requirements:** ARCH-01, ARCH-02, ARCH-03, ARCH-04
+**Success Criteria** (what must be TRUE):
+  1. Running the scraper client on the home mini PC (Windows or macOS) triggers a complete scrape of kv.ee and POSTs the raw results to the VPS ingest endpoint authenticated by a shared secret token.
+  2. The VPS ingest endpoint receives a POST, runs AI evaluation and queuing on the payload, and never launches its own browser or Playwright process.
+  3. If the scraper client returns zero listings for two consecutive runs, Daniel receives a Telegram alert naming the scraper and the timestamp of the last successful run.
+  4. The existing VPS-side evaluation, notification, and dossier flows continue to work unchanged after the split.
+**Plans:** TBD
+
+Plans:
+- [ ] 01-01: Extract standalone scraper client (kv_scraper_client.py) — cross-platform, no VPS dependencies
+- [ ] 01-02: Add VPS ingest endpoint (POST /api/ingest) with token auth; wire evaluation + queue from payload
+- [ ] 01-03: Implement scraper health alert (zero-listing Telegram notification after 2 consecutive empty runs)
+
+### Phase 2: Queue & Approval Workflow
+**Goal:** Every newly evaluated listing enters a PENDING state first; Daniel reviews each via Telegram or the web app, and only approved listings reach the main dossier.
+**Mode:** mvp
+**Depends on:** Phase 1
+**Requirements:** QUEUE-01, QUEUE-02, QUEUE-03, QUEUE-04, QUEUE-05, QUEUE-06, QUEUE-07
+**Success Criteria** (what must be TRUE):
+  1. A freshly scraped and evaluated listing does not appear in the main dossier list until Daniel approves it.
+  2. The Telegram notification for a pending listing shows score, a one-line verdict, price/m², and inline /approve /reject /more buttons.
+  3. The web app has a "Pending" tab that shows full listing detail with Approve and Reject buttons; rejecting prompts for a reason (price / location / other).
+  4. Approving a listing via either Telegram or the web app moves it to the main dossier list immediately.
+  5. On approval, the AI generates a draft outreach email to the mäkler; the draft is saved but not sent until Daniel runs /send <id>.
+**Plans:** TBD
+
+Plans:
+- [ ] 02-01: Add PENDING state to data model; update ingest path to route new listings into pending queue
+- [ ] 02-02: Telegram queue commands — compact pending card with inline /approve /reject /more; /send <id> flow
+- [ ] 02-03: Web app Pending tab — listing detail view with approve/reject actions and rejection reason capture
+- [ ] 02-04: Approval-gated email drafting — trigger AI email draft on approval, extend /send flow
+
+### Phase 3: AI Quality & Price Intelligence
+**Goal:** The AI evaluator produces calibrated, anchor-grounded scores with a structured checklist, and the system tracks price history and listing age — automatically re-queuing listings when prices drop significantly.
+**Mode:** mvp
+**Depends on:** Phase 2
+**Requirements:** EVAL-01, EVAL-02, EVAL-03, EVAL-04, INTEL-01, INTEL-02, INTEL-03
+**Success Criteria** (what must be TRUE):
+  1. The evaluation prompt sent to Claude includes 2–3 previously-approved listings with their scores as calibration anchors before asking for a new score.
+  2. Each evaluation response includes a structured pass/fail checklist covering the BUYER_PROFILE criteria assessable from listing text.
+  3. The evaluation prompt includes the running price/m² average for the listing's district, computed from seen listings in the dossier.
+  4. Every scrape records the current price for each known listing; price history (date + price) is visible on the listing card in the dossier.
+  5. When a seen listing's price drops 5% or more since last scrape, it is automatically re-evaluated and placed back in the PENDING queue.
+  6. Listings show days-on-market in the dossier card; listings whose URL returns 404 are marked as removed with the date.
+**Plans:** TBD
+
+Plans:
+- [ ] 03-01: Calibrated scoring — inject anchor listings + district price/m² average into evaluation prompt
+- [ ] 03-02: Structured checklist output — update evaluator response schema; render checklist in dossier card
+- [ ] 03-03: Price history tracking — record price per scrape; surface history and days-on-market in card
+- [ ] 03-04: Re-evaluation on price drop + sold/removed detection (404 marking)
+
+### Phase 4: Additional Scraper Sources
+**Goal:** Listings from city24.ee and kinnisvara24.ee flow through the same evaluation and queue pipeline, with cross-source deduplication preventing the same apartment from appearing twice.
+**Mode:** mvp
+**Depends on:** Phase 3
+**Requirements:** SRC-01, SRC-02, SRC-03
+**Success Criteria** (what must be TRUE):
+  1. Running the scraper client fetches listings from city24.ee and submits them to the VPS ingest endpoint; those listings appear in the PENDING queue after evaluation.
+  2. Running the scraper client fetches listings from kinnisvara24.ee and submits them to the VPS ingest endpoint; those listings appear in the PENDING queue after evaluation.
+  3. If the same physical apartment appears on multiple portals (matched by address or object ID), only one pending item is created; duplicates are silently discarded.
+**Plans:** TBD
+
+Plans:
+- [ ] 04-01: city24.ee scraper module (city24_scraper.py) — harvest listing URLs and parse fields into shared Listing dataclass
+- [ ] 04-02: kinnisvara24.ee scraper module (k24_scraper.py) — harvest listing URLs and parse fields into shared Listing dataclass
+- [ ] 04-03: Cross-source deduplication — address/object ID normalisation before ingest; deduplicate in VPS ingest endpoint
+
+### Phase 5: Map & Overview UI
+**Goal:** The dossier homepage is replaced with a modern, information-dense view anchored by an interactive Tallinn map showing every apartment as a score-coloured pin, with district price heat zones and a 20-minute commute isochrone from Bolt HQ.
+**Mode:** mvp
+**Depends on:** Phase 4
+**Requirements:** MAP-01, MAP-02, MAP-03, MAP-04, MAP-05, MAP-06, UI-01, UI-02
+**Success Criteria** (what must be TRUE):
+  1. The overview page shows an interactive map with one pin per dossier apartment; clicking a pin opens a listing card preview.
+  2. Pin colours reflect the AI score tier: green for ≥75, amber for 50–74, red for <50.
+  3. The map displays a price/m² heat zone overlay by district, computed from seen listings.
+  4. A 20-minute commute isochrone from Veerenni 28 is overlaid on the map.
+  5. Each listing card shows estimated commute time from Veerenni 28.
+  6. The redesigned dossier layout is modern and information-dense (replacing the existing single-file SPA design).
+  7. Daniel can select 2–4 listings and view them side-by-side with all fields aligned.
+**Plans:** TBD
+
+Plans:
+- [ ] 05-01: Redesigned dossier layout — modern information-dense UI replacing index.html
+- [ ] 05-02: Interactive map layer — Leaflet/Mapbox pins, score colour coding, click-to-preview card
+- [ ] 05-03: District heat zone overlay — compute price/m² per district from dossier data; render as map layer
+- [ ] 05-04: Commute isochrone + per-listing commute time (OTP or routing API from Veerenni 28)
+- [ ] 05-05: Side-by-side comparison view for 2–4 pinned listings
+**UI hint**: yes
+
+### Phase 6: Viewing Workflow & Extras
+**Goal:** Approved listings can be moved into a "viewing scheduled" state that triggers a negotiation brief and post-viewing checklist; building fund data is surfaced per listing; and the dossier can be exported as a PDF.
+**Mode:** mvp
+**Depends on:** Phase 5
+**Requirements:** VIEW-01, VIEW-02, VIEW-03, ENRICH-01, EXPORT-01
+**Success Criteria** (what must be TRUE):
+  1. An approved listing can be set to "viewing scheduled" state from the web app or Telegram.
+  2. When a listing enters "viewing scheduled" state, a one-page negotiation brief is auto-generated (listing age, price trajectory, district comps, suggested opening offer) and attached to the dossier card.
+  3. After a viewing, Telegram prompts Daniel to fill the 11-category checklist inline; responses are saved to the listing.
+  4. If korteriühistu (KT/remondifond) data is found for a listing's address, the result is surfaced in the listing card.
+  5. Daniel can export the full dossier as a PDF suitable for sharing with a bank or advisor.
+**Plans:** TBD
+
+Plans:
+- [ ] 06-01: Viewing state machine — "viewing scheduled" state, Telegram command, state transitions
+- [ ] 06-02: Negotiation brief generator — auto-generate memo on state entry; attach to listing card
+- [ ] 06-03: Post-viewing checklist — Telegram inline prompts; save responses to listing record
+- [ ] 06-04: Building fund (KT) enrichment — attempt korteriühistu lookup per address; surface result in card
+- [ ] 06-05: PDF export — dossier to PDF endpoint (for bank/advisor review)
+
+## Progress
+
+**Execution Order:**
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 1. Scraper Architecture Split | 0/3 | Not started | - |
+| 2. Queue & Approval Workflow | 0/4 | Not started | - |
+| 3. AI Quality & Price Intelligence | 0/4 | Not started | - |
+| 4. Additional Scraper Sources | 0/3 | Not started | - |
+| 5. Map & Overview UI | 0/5 | Not started | - |
+| 6. Viewing Workflow & Extras | 0/5 | Not started | - |
