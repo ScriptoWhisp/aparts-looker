@@ -1,10 +1,8 @@
 # Replace with your actual domain (must point to this server's IP via an A record).
 # If you don't have a domain, see the README for an IP-only alternative.
-your-domain.example.com {
+:80 {
 	basicauth {
-		# Generate with: docker run --rm caddy:2-alpine caddy hash-password --plaintext 'yourpassword'
-		daniel <PASTE_HASH_HERE>
+		daniel $2a$14$ltXqsLzSQO7XpcFerMU8K.WBtphoHWGYqtUotJhiq.6H5sp2rWB4C
 	}
-
 	reverse_proxy app:8000
 }

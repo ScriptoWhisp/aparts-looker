@@ -1,28 +1,40 @@
 """
 Scrapes kv.ee search results using a headless Chromium browser (Playwright).
-Plain HTTP requests are blocked by Cloudflare on VPS IPs; a real browser
-passes the JS challenge and gets the actual page.
+Plain HTTP requests are blocked by Cloudflare; Playwright passes the JS challenge.
+After the search page loads, Cloudflare cookies are harvested and reused for
+individual listing page requests so we don't need Playwright for every fetch.
 
 Set KV_SEARCH_URL in your .env to the kv.ee search URL with your filters.
-How to get it: go to kv.ee, set filters, click Search, copy the address bar URL.
 """
 
 import logging
 import re
 
+import requests
 from playwright.sync_api import sync_playwright
 
 from config import KV_SEARCH_URL
 
 log = logging.getLogger("kv_scraper")
 
-LISTING_URL_RE = re.compile(r"https://www\.kv\.ee/[a-z0-9\-]+-\d{6,8}\.html")
+LISTING_PATH_RE = re.compile(r'data-[a-z\-]+=["\'](/[a-z0-9\-]+-\d{6,8}\.html)["\']')
+BASE_URL = "https://www.kv.ee"
 MAX_PAGES = 3
+
+# shared session reused across the agent job run
+_session: requests.Session | None = None
+
+
+def get_session() -> requests.Session | None:
+    """Return the requests session with Cloudflare cookies, or None if not ready."""
+    return _session
 
 
 def fetch_listing_urls() -> list[str]:
-    """Return all listing URLs found on the kv.ee search results page(s).
-    Never raises — returns an empty list on any failure or missing config."""
+    """Scrape search results, harvest CF cookies, return listing URLs.
+    Never raises — returns empty list on any failure or missing config."""
+    global _session
+
     if not KV_SEARCH_URL:
         log.warning("KV_SEARCH_URL is not set — skipping scrape")
         return []
@@ -45,18 +57,44 @@ def fetch_listing_urls() -> list[str]:
                 sep = "&" if "?" in KV_SEARCH_URL else "?"
                 page_url = KV_SEARCH_URL if i == 0 else f"{KV_SEARCH_URL}{sep}pg={i + 1}"
 
-                log.info("Fetching page %d: %s", i + 1, page_url[:80])
+                log.info("Fetching page %d: %s", i + 1, page_url)
                 try:
-                    response = page.goto(page_url, wait_until="domcontentloaded", timeout=30000)
+                    response = page.goto(page_url, wait_until="load", timeout=30000)
                     log.info("Page %d HTTP status: %s", i + 1, response.status if response else "unknown")
+                    page.wait_for_function(
+                        "() => !document.title.includes('Just a moment')",
+                        timeout=20000,
+                    )
+                    page.wait_for_timeout(3000)
+                    log.info("Page %d title: %s", i + 1, page.title())
                 except Exception as e:
                     log.error("Failed to load page %d: %s", i + 1, e)
                     break
 
+                # harvest Cloudflare cookies after first page passes the challenge
+                if i == 0:
+                    cookies = page.context.cookies()
+                    session = requests.Session()
+                    session.headers.update({
+                        "User-Agent": (
+                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                            "AppleWebKit/537.36 (KHTML, like Gecko) "
+                            "Chrome/125.0.0.0 Safari/537.36"
+                        ),
+                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                        "Accept-Language": "et-EE,et;q=0.9,en;q=0.8",
+                        "Referer": "https://www.kv.ee/",
+                    })
+                    for c in cookies:
+                        session.cookies.set(c["name"], c["value"], domain=c.get("domain", ""))
+                    _session = session
+                    cf_cookies = [c["name"] for c in cookies if "cf" in c["name"].lower()]
+                    log.info("Harvested %d cookies (%s CF cookies)", len(cookies), len(cf_cookies))
+
                 html = page.content()
                 log.info("Page %d HTML size: %d bytes", i + 1, len(html))
 
-                found = set(LISTING_URL_RE.findall(html))
+                found = set(BASE_URL + p for p in LISTING_PATH_RE.findall(html))
                 log.info("Page %d listing URLs found: %d", i + 1, len(found))
 
                 if not found:
@@ -70,7 +108,7 @@ def fetch_listing_urls() -> list[str]:
                     break
 
             browser.close()
-            log.info("Browser closed. Total unique URLs collected: %d", len(all_urls))
+            log.info("Browser closed. Total unique URLs: %d", len(all_urls))
 
     except Exception as e:
         log.exception("Playwright scrape failed: %s", e)

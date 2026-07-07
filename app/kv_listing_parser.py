@@ -87,7 +87,7 @@ def extract_object_id(url: str) -> Optional[str]:
     return m.group(1) if m else None
 
 
-def fetch_listing(url: str, timeout: int = 15) -> Listing:
+def fetch_listing(url: str, timeout: int = 15, session: requests.Session | None = None) -> Listing:
     """Fetch and parse a single kv.ee listing page. Never raises - on
     failure returns a Listing with raw_ok=False so the caller can skip it
     without crashing the whole run."""
@@ -95,7 +95,8 @@ def fetch_listing(url: str, timeout: int = 15) -> Listing:
     listing = Listing(id=obj_id, url=url)
 
     try:
-        resp = requests.get(url, headers=HEADERS, timeout=timeout)
+        getter = session if session else requests
+        resp = getter.get(url, headers=HEADERS, timeout=timeout)
         resp.raise_for_status()
     except requests.RequestException:
         listing.raw_ok = False

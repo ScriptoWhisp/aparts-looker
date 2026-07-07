@@ -10,7 +10,7 @@ import config
 import data_store
 from ai_evaluator import evaluate_listing
 from gmail_client import create_draft, send_email
-from kv_alert_reader import fetch_listing_urls
+from kv_alert_reader import fetch_listing_urls, get_session
 from kv_listing_parser import fetch_listing, extract_object_id
 from telegram_client import (
     extract_send_commands,
@@ -79,7 +79,7 @@ def process_new_listings(state: dict) -> None:
 
     for url in fresh_urls:
         log.info("Fetching listing: %s", url)
-        listing = fetch_listing(url)
+        listing = fetch_listing(url, session=get_session())
         if not listing.raw_ok:
             log.warning("Failed to fetch listing: %s", url)
             continue
