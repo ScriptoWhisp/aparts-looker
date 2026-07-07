@@ -42,7 +42,16 @@ DEFAULT_PROPERTIES = [
 ]
 
 DEFAULT_APP_DATA = {"properties": DEFAULT_PROPERTIES, "checklists": {}, "settings": {}}
-DEFAULT_AGENT_STATE = {"seen_listing_ids": [], "pending_drafts": {}, "last_telegram_update_id": 0, "last_processed_uid": 0}
+DEFAULT_AGENT_STATE = {
+    "seen_listing_ids": [],
+    "pending_drafts": {},
+    "last_telegram_update_id": 0,
+    "last_processed_uid": 0,
+    "last_heartbeat_ts": None,
+    "last_heartbeat_listing_count": None,
+    "consecutive_zero_count": 0,
+    "last_scraper_alert_sent_at": None,
+}
 
 
 def _read_json(path, default):

@@ -21,10 +21,14 @@ SMTP_HOST = "smtp.gmail.com"
 SMTP_PORT = 465
 
 DRAFT_SCORE_THRESHOLD = int(os.environ.get("DRAFT_SCORE_THRESHOLD", "60"))
+MIN_IMAGES = int(os.environ.get("MIN_IMAGES", "5"))
 MIN_ROOMS = int(os.environ.get("MIN_ROOMS", "2"))
 MAX_PRICE_EUR = int(os.environ.get("MAX_PRICE_EUR", "260000"))
 
 CHECK_INTERVAL_HOURS = float(os.environ.get("CHECK_INTERVAL_HOURS", "2"))
+
+INGEST_TOKEN = os.environ.get("INGEST_TOKEN", "")
+HEARTBEAT_TIMEOUT_HOURS = float(os.environ.get("HEARTBEAT_TIMEOUT_HOURS", "0"))
 
 DATA_DIR = os.environ.get("DATA_DIR", os.path.join(os.path.dirname(__file__), "data"))
 APP_DATA_FILE = os.path.join(DATA_DIR, "app_data.json")
