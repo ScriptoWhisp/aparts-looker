@@ -31,12 +31,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. The VPS ingest endpoint receives a POST, runs AI evaluation and queuing on the payload, and never launches its own browser or Playwright process.
   3. If the scraper client returns zero listings for two consecutive runs, Daniel receives a Telegram alert naming the scraper and the timestamp of the last successful run.
   4. The existing VPS-side evaluation, notification, and dossier flows continue to work unchanged after the split.
-**Plans:** TBD
+**Plans:** 3 plans
 
 Plans:
-- [ ] 01-01: Extract standalone scraper client (kv_scraper_client.py) — cross-platform, no VPS dependencies
-- [ ] 01-02: Add VPS ingest endpoint (POST /api/ingest) with token auth; wire evaluation + queue from payload
-- [ ] 01-03: Implement scraper health alert (zero-listing Telegram notification after 2 consecutive empty runs)
+- [ ] 01-01-PLAN.md — Extract standalone scraper client (scraper-client/) — Docker image with while-True loop that scrapes kv.ee and POSTs Listing JSON to VPS
+- [ ] 01-02-PLAN.md — Add VPS ingest endpoint (POST /api/ingest + /api/heartbeat) with Bearer token auth; move filter+evaluate+notify from agent_job into ingest_handler; update Caddyfile
+- [ ] 01-03-PLAN.md — Scraper health alerts (offline + consecutive-zero) wired into scheduler tick; pytest scaffold covering ARCH-01/02/03/04
 
 ### Phase 2: Queue & Approval Workflow
 **Goal:** Every newly evaluated listing enters a PENDING state first; Daniel reviews each via Telegram or the web app, and only approved listings reach the main dossier.
