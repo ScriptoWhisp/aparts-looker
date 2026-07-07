@@ -39,7 +39,7 @@
 - [x] **ARCH-01**: A standalone scraper client runs on the home mini PC (Windows/macOS compatible)
 - [x] **ARCH-02**: The scraper client POSTs raw listing data to a VPS ingest endpoint (secret token auth)
 - [x] **ARCH-03**: The VPS ingest endpoint triggers AI evaluation and queuing (no scraping on VPS)
-- [ ] **ARCH-04**: Scraper health alert: Telegram notification if 0 listings are returned for 2 consecutive runs
+- [x] **ARCH-04**: Scraper health alert: Telegram notification if 0 listings are returned for 2 consecutive runs
 
 ### Map & Overview UI
 
@@ -100,7 +100,7 @@
 | ARCH-01 | Phase 1 | Complete |
 | ARCH-02 | Phase 1 | Complete |
 | ARCH-03 | Phase 1 | Complete |
-| ARCH-04 | Phase 1 | Pending |
+| ARCH-04 | Phase 1 | Complete |
 | QUEUE-01 | Phase 2 | Pending |
 | QUEUE-02 | Phase 2 | Pending |
 | QUEUE-03 | Phase 2 | Pending |

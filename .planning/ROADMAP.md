@@ -13,7 +13,7 @@ The existing kv.ee scraper + Claude evaluation + Telegram + JSON dossier system 
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Scraper Architecture Split** - Mini PC scraper POSTs to VPS; Cloudflare bypass moves off datacenter IP
+- [x] **Phase 1: Scraper Architecture Split** - Mini PC scraper POSTs to VPS; Cloudflare bypass moves off datacenter IP (completed 2026-07-07)
 - [ ] **Phase 2: Queue & Approval Workflow** - Every listing enters a pending queue; Daniel approves before it reaches the dossier
 - [ ] **Phase 3: AI Quality & Price Intelligence** - Calibrated scoring, structured checklist output, price history, longevity, and re-evaluation on drops
 - [ ] **Phase 4: Additional Scraper Sources** - city24.ee and kinnisvara24.ee added; deduplication across all sources
@@ -35,7 +35,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. If the scraper client returns zero listings for two consecutive runs, Daniel receives a Telegram alert naming the scraper and the timestamp of the last successful run.
   4. The existing VPS-side evaluation, notification, and dossier flows continue to work unchanged after the split.
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 **Wave 1**
@@ -45,7 +45,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-03-PLAN.md — Scraper health alerts (offline + consecutive-zero) wired into scheduler tick; pytest scaffold covering ARCH-01/02/03/04
+- [x] 01-03-PLAN.md — Scraper health alerts (offline + consecutive-zero) wired into scheduler tick; pytest scaffold covering ARCH-01/02/03/04
 
 ### Phase 2: Queue & Approval Workflow
 
@@ -173,7 +173,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Scraper Architecture Split | 2/3 | In Progress|  |
+| 1. Scraper Architecture Split | 3/3 | Complete   | 2026-07-07 |
 | 2. Queue & Approval Workflow | 0/4 | Not started | - |
 | 3. AI Quality & Price Intelligence | 0/4 | Not started | - |
 | 4. Additional Scraper Sources | 0/3 | Not started | - |
