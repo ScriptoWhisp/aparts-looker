@@ -1,21 +1,17 @@
 """
-Scrapes kv.ee search results directly to find new listings.
+Scrapes kv.ee search results using a headless Chromium browser (Playwright).
+Plain HTTP requests are blocked by Cloudflare on VPS IPs; a real browser
+passes the JS challenge and gets the actual page.
 
-How to get your search URL: go to kv.ee, set your filters (rooms, price,
-district, etc.), click Search, then copy the full URL from the address bar
-and set it as KV_SEARCH_URL in your .env.
-
-Scrapes up to MAX_PAGES pages per run. Deduplication against already-seen
-listings is handled upstream in agent_job.py via seen_listing_ids.
+Set KV_SEARCH_URL in your .env to the kv.ee search URL with your filters.
+How to get it: go to kv.ee, set filters, click Search, copy the address bar URL.
 """
 
 import re
-import time
 
-import requests
+from playwright.sync_api import sync_playwright
 
 from config import KV_SEARCH_URL
-from kv_listing_parser import HEADERS
 
 LISTING_URL_RE = re.compile(r"https://www\.kv\.ee/[a-z0-9\-]+-\d{6,8}\.html")
 MAX_PAGES = 3
@@ -29,26 +25,35 @@ def fetch_listing_urls() -> list[str]:
 
     all_urls: set[str] = set()
 
-    for page in range(MAX_PAGES):
-        sep = "&" if "?" in KV_SEARCH_URL else "?"
-        page_url = KV_SEARCH_URL if page == 0 else f"{KV_SEARCH_URL}{sep}pg={page + 1}"
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
+            page = browser.new_page(
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/125.0.0.0 Safari/537.36"
+                )
+            )
 
-        try:
-            resp = requests.get(page_url, headers=HEADERS, timeout=15)
-            resp.raise_for_status()
-        except requests.RequestException:
-            break
+            for i in range(MAX_PAGES):
+                sep = "&" if "?" in KV_SEARCH_URL else "?"
+                page_url = KV_SEARCH_URL if i == 0 else f"{KV_SEARCH_URL}{sep}pg={i + 1}"
 
-        found = set(LISTING_URL_RE.findall(resp.text))
-        if not found:
-            break
+                page.goto(page_url, wait_until="domcontentloaded", timeout=30000)
+                html = page.content()
 
-        before = len(all_urls)
-        all_urls.update(found)
-        if len(all_urls) == before:
-            break  # page added nothing new — we've hit the end
+                found = set(LISTING_URL_RE.findall(html))
+                if not found:
+                    break
 
-        if page < MAX_PAGES - 1:
-            time.sleep(2)
+                before = len(all_urls)
+                all_urls.update(found)
+                if len(all_urls) == before:
+                    break  # page added nothing new — end of results
+
+            browser.close()
+    except Exception:
+        pass
 
     return sorted(all_urls)
