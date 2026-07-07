@@ -71,23 +71,31 @@ def process_send_commands(state: dict) -> None:
 
 def process_new_listings(state: dict) -> None:
     new_urls = fetch_listing_urls()
+    log.info("Scraped %d total URLs from kv.ee", len(new_urls))
 
     seen = set(state["seen_listing_ids"])
     fresh_urls = [u for u in new_urls if (extract_object_id(u) or u) not in seen]
+    log.info("%d URLs already seen, %d new to process", len(new_urls) - len(fresh_urls), len(fresh_urls))
 
     for url in fresh_urls:
+        log.info("Fetching listing: %s", url)
         listing = fetch_listing(url)
         if not listing.raw_ok:
+            log.warning("Failed to fetch listing: %s", url)
             continue
 
         state["seen_listing_ids"].append(listing.id)
 
         if listing.price_eur and listing.price_eur > config.MAX_PRICE_EUR:
+            log.info("Skipping %s — price %s > max %s", listing.id, listing.price_eur, config.MAX_PRICE_EUR)
             continue
         if listing.rooms and listing.rooms < config.MIN_ROOMS:
+            log.info("Skipping %s — rooms %s < min %s", listing.id, listing.rooms, config.MIN_ROOMS)
             continue
 
+        log.info("Evaluating listing %s: %s", listing.id, listing.title)
         evaluation = evaluate_listing(listing)
+        log.info("Score: %s/100 — %s", evaluation.get('score'), evaluation.get('verdict'))
         data_store.add_property_if_new(_listing_to_property(listing, evaluation))
 
         card_text = format_listing_card(listing, evaluation)
