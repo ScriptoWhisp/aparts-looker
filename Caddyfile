@@ -1,8 +1,19 @@
 # Replace with your actual domain (must point to this server's IP via an A record).
 # If you don't have a domain, see the README for an IP-only alternative.
 :80 {
-	basicauth {
-		daniel $2a$14$ltXqsLzSQO7XpcFerMU8K.WBtphoHWGYqtUotJhiq.6H5sp2rWB4C
+	# Machine-to-machine endpoints: authenticated by Bearer token at the FastAPI layer.
+	# Caddy must not apply basicauth here — the mini PC sends Authorization: Bearer <INGEST_TOKEN>,
+	# not HTTP Basic credentials. (RESEARCH Pitfall 1)
+	@machine path /api/ingest /api/heartbeat
+	handle @machine {
+		reverse_proxy app:8000
 	}
-	reverse_proxy app:8000
+
+	# All other routes (dossier frontend + remaining /api/* endpoints) require basic auth.
+	handle {
+		basicauth {
+			daniel $2a$14$ltXqsLzSQO7XpcFerMU8K.WBtphoHWGYqtUotJhiq.6H5sp2rWB4C
+		}
+		reverse_proxy app:8000
+	}
 }
