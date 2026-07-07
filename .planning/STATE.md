@@ -6,14 +6,14 @@ current_phase: 01
 current_phase_name: scraper-architecture-split
 status: executing
 stopped_at: Phase 1 discuss complete — CONTEXT.md + DISCUSSION-LOG.md committed (e2b7e40); ready to run /gsd-plan-phase 1
-last_updated: "2026-07-07T21:36:40.420Z"
+last_updated: "2026-07-07T21:43:09.733Z"
 last_activity: 2026-07-07
 last_activity_desc: Phase 01 execution started
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-07)
 ## Current Position
 
 Phase: 01 (scraper-architecture-split) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-07-07 — Phase 01 execution started
 
@@ -56,6 +56,7 @@ Progress: [░░░░░░░░░░] 0%
 
 *Updated after each plan completion*
 | Phase 01-scraper-architecture-split P01 | 2m | 3 tasks | 8 files |
+| Phase 01 P02 | 3m | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -71,6 +72,9 @@ Recent decisions affecting current work:
 - [Phase ?]: scraper-client/ standalone Docker image for home mini PC — no FastAPI/uvicorn/APScheduler dependency
 - [Phase ?]: kv_listing_parser.py kept byte-identical in scraper-client vs VPS to prevent JSON contract drift (Listing dataclass)
 - [Phase ?]: Heartbeat POSTed unconditionally after every run including zero-listing runs (D-09/D-11) to distinguish dead scraper from empty search
+- [Phase ?]: VPS receives Listing JSON via POST /api/ingest with Bearer token auth; kv_alert_reader.py renamed to kv_scraper.py (ARCH-02, ARCH-03)
+- [Phase ?]: Caddyfile named-matcher @machine bypasses basicauth for /api/ingest and /api/heartbeat — Bearer token reaches FastAPI unblocked (Pitfall 1)
+- [Phase ?]: HTTPBearer auto_error=False used for uniform 403 on missing vs wrong token (T-01-04)
 
 ### Pending Todos
 
@@ -91,6 +95,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-07T21:36:09.619Z
+Last session: 2026-07-07T21:43:09.728Z
 Stopped at: Phase 1 discuss complete — CONTEXT.md + DISCUSSION-LOG.md committed (e2b7e40); ready to run /gsd-plan-phase 1
 Resume file: None
