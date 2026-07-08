@@ -22,16 +22,13 @@ Personal tool — no revenue model. Success = Daniel finds and buys the right ap
 - ✓ JSON-file property dossier with frontend — existing
 - ✓ Gmail draft creation + `/send <id>` Telegram command — existing
 - ✓ Price/rooms/image pre-filter before AI evaluation — existing
+- ✓ New listings go to PENDING queue, not directly to main list — Phase 02
+- ✓ Compact Telegram card with inline [Approve] [Reject] [More] buttons — Phase 02
+- ✓ Web UI Pending tab: full listing detail + approve/reject actions — Phase 02
+- ✓ Approve moves listing to main dossier; reject archives with reason — Phase 02
+- ✓ Opt-in email draft via "Draft email" button (not automatic); /send <id> dispatches — Phase 02
 
 ### Active
-
-**Queue & Approval Workflow**
-- [ ] New listings go to a PENDING queue, not directly to main list
-- [ ] Compact Telegram card: score + 1-line verdict + key numbers + /approve /reject /more inline commands
-- [ ] Web app "Pending" tab: full listing detail + approve/reject actions
-- [ ] On approval: listing moves to main dossier list
-- [ ] On approval: AI drafts email to mäkler (not auto-triggered by score)
-- [ ] Email draft requires Daniel's explicit send approval (existing /send flow extended)
 
 **AI Evaluation Quality**
 - [ ] Calibrated scoring with anchors: feed 2-3 previously-approved listings + their scores before evaluating new ones
@@ -105,12 +102,12 @@ The tool currently runs on a VPS but scraping is blocked by Cloudflare when comi
 | Playwright for kv.ee scraping | Cloudflare blocks plain HTTP from datacenter IPs | ✓ Works, but fragile |
 | Split scraper (home) from brain (VPS) | Residential IP bypasses Cloudflare reliably | ✓ Phase 01 — `scraper-client/` Docker image on mini PC, VPS receives Listing JSON via /api/ingest |
 | JSON file persistence | Single user, no concurrent writers, no infra overhead | ✓ Good |
-| Approval-gated email drafting | Prevents unsolicited emails to agents; Daniel stays in control | — Pending |
+| Approval-gated email drafting | Prevents unsolicited emails to agents; Daniel stays in control | ✓ Phase 02 — opt-in via "Draft email" button in web UI |
 | Calibrated scoring with anchors | Fixes "everything gets 70" problem — model needs comparison context | — Pending |
 | Bolt HQ commute reference: Veerenni 28 | Daniel's workplace for commute isochrone calculation | — Pending |
 
 ---
-*Last updated: 2026-07-08 after Phase 01 (scraper-architecture-split) completion*
+*Last updated: 2026-07-08 after Phase 02 (queue-approval-workflow) completion*
 
 ## Evolution
 
