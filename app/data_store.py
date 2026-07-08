@@ -205,6 +205,28 @@ def _pending_to_property(entry: dict) -> dict:
     return prop
 
 
+def write_checklist_ai(listing_id: str, checklist: dict) -> None:
+    """Write AI-generated checklist to checklists[listing_id]["ai_checklist"].
+
+    Each entry is stored as {result: str, source: "ai"}.
+    Existing entries with source=="user" are preserved (D-09).
+    Called inside process_ingest_batch which already holds _lock (RLock — re-entrant safe, Pitfall 1).
+    """
+    with _lock:
+        data = load_app_data()
+        ai_cl = (
+            data
+            .setdefault("checklists", {})
+            .setdefault(listing_id, {})
+            .setdefault("ai_checklist", {})
+        )
+        for key, result in checklist.items():
+            if isinstance(ai_cl.get(key), dict) and ai_cl[key].get("source") == "user":
+                continue  # preserve user overrides (D-09)
+            ai_cl[key] = {"result": result, "source": "ai"}
+        save_app_data(data)
+
+
 def get_approved_listing(listing_id: str) -> Optional[dict]:
     """Return the properties[] entry with the given id, or None if not found.
 

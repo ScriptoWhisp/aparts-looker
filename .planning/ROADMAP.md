@@ -95,16 +95,16 @@ Plans:
   5. When a seen listing's price drops 5% or more since last scrape, it is automatically re-evaluated and placed back in the PENDING queue.
   6. Listings show days-on-market in the dossier card; listings whose URL returns 404 are marked as removed with the date.
 
-**Plans:** 4 plans
+**Plans:** 2/4 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 03-01-PLAN.md — Calibration anchors + district avg injection into evaluate_listing + Wave 0 test scaffolds + PRICE_DROP_THRESHOLD config (EVAL-01, EVAL-03)
+- [x] 03-01-PLAN.md — Calibration anchors + district avg injection into evaluate_listing + Wave 0 test scaffolds + PRICE_DROP_THRESHOLD config (EVAL-01, EVAL-03)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 03-02-PLAN.md — Structured checklist output: SYSTEM_PROMPT extension, write_checklist_ai persistence, AI badge strip in pending card (EVAL-02)
+- [x] 03-02-PLAN.md — Structured checklist output: SYSTEM_PROMPT extension, write_checklist_ai persistence, AI badge strip in pending card (EVAL-02)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -195,7 +195,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 |-------|----------------|--------|-----------|
 | 1. Scraper Architecture Split | 3/3 | Complete    | 2026-07-07 |
 | 2. Queue & Approval Workflow | 4/4 | Complete    | 2026-07-08 |
-| 3. AI Quality & Price Intelligence | 0/4 | Planned | - |
+| 3. AI Quality & Price Intelligence | 2/4 | In Progress|  |
 | 4. Additional Scraper Sources | 0/3 | Not started | - |
 | 5. Map & Overview UI | 0/5 | Not started | - |
 | 6. Viewing Workflow & Extras | 0/5 | Not started | - |

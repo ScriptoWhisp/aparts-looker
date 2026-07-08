@@ -1139,6 +1139,56 @@
     });
   }
 
+  /* Build AI checklist badge strip for a listing (EVAL-02, D-08).
+     Returns a DOM element or null if no ai_checklist exists.
+     Uses textContent exclusively — never innerHTML (Security V5, T-03-07). */
+  function buildAiChecklistEl(listingId) {
+    var cl = state.checklists[listingId];
+    if (!cl || !cl.ai_checklist) return null;
+    var ai_checklist = cl.ai_checklist;
+    if (!Object.keys(ai_checklist).length) return null;
+
+    var wrap = document.createElement("div");
+    wrap.style.marginTop = "8px";
+    wrap.style.display = "flex";
+    wrap.style.flexWrap = "wrap";
+    wrap.style.gap = "4px";
+
+    var LABELS = {
+      price_per_sqm: "price/m²",
+      rooms_area: "rooms/area",
+      parking: "parking",
+      renovation_potential: "reno",
+      floor: "floor",
+      year_material: "year/mat",
+      mandatory_extras: "extras"
+    };
+
+    Object.keys(ai_checklist).forEach(function(key) {
+      var item = ai_checklist[key];
+      /* Support both flat string and {result, source} shape */
+      var result = (item && typeof item === "object") ? item.result : item;
+      var source = (item && typeof item === "object") ? (item.source || "ai") : "ai";
+
+      var dot = result === "pass" ? "✓" : result === "fail" ? "✗" : "?";
+      var bg = result === "pass" ? "var(--green-bg)" : result === "fail" ? "var(--red-bg)" : "var(--grey-bg)";
+      var color = result === "pass" ? "var(--green)" : result === "fail" ? "var(--red)" : "var(--grey)";
+
+      var badge = document.createElement("span");
+      badge.style.fontSize = "10px";
+      badge.style.padding = "2px 5px";
+      badge.style.borderRadius = "var(--radius)";
+      badge.style.fontFamily = "var(--font-mono)";
+      badge.style.background = bg;
+      badge.style.color = color;
+      var prefix = source === "ai" ? "[AI] " : "";
+      badge.textContent = prefix + dot + " " + (LABELS[key] || key);
+      wrap.appendChild(badge);
+    });
+
+    return wrap;
+  }
+
   /* Build a card element for one pending listing (textContent only, no innerHTML for user data) */
   function buildPendingCard(entry) {
     var card = document.createElement("div");
@@ -1181,6 +1231,10 @@
     ].filter(Boolean);
     meta.textContent = metaParts.join(" · ");
     card.appendChild(meta);
+
+    /* AI checklist badge strip — renders below the meta row when available (EVAL-02) */
+    var aiEl = buildAiChecklistEl(entry.id);
+    if (aiEl) card.appendChild(aiEl);
 
     var actionRow = document.createElement("div");
     actionRow.style.display = "flex";
