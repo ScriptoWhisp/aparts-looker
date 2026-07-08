@@ -19,6 +19,7 @@ correct as a real database, and there's nothing to install or migrate.
 import json
 import os
 import threading
+from typing import Optional
 
 import config
 
@@ -202,6 +203,17 @@ def _pending_to_property(entry: dict) -> dict:
         "draft_subject": entry.get("draft_subject", ""),
     }
     return prop
+
+
+def get_approved_listing(listing_id: str) -> Optional[dict]:
+    """Return the properties[] entry with the given id, or None if not found.
+
+    Used by POST /api/draft/<id> to look up contact_email, draft_body, and draft_subject
+    that were carried over by _pending_to_property at approval time (D-15).
+    """
+    with _lock:
+        data = load_app_data()
+        return next((p for p in data["properties"] if p.get("id") == listing_id), None)
 
 
 def load_agent_state():

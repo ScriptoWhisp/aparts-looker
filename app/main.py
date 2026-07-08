@@ -4,8 +4,11 @@ static frontend itself, plus the background kv.ee-checking job - all one
 process, one container.
 """
 
+from __future__ import annotations
+
 import logging
 import threading
+from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.responses import JSONResponse
@@ -14,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 
 import config
 import data_store
+import gmail_client
 import ingest_handler
 import scheduler
 
@@ -29,7 +33,7 @@ _bearer = HTTPBearer(auto_error=False)
 
 
 def _verify_ingest_token(
-    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
 ) -> None:
     """FastAPI dependency — raises 403 if the token does not match INGEST_TOKEN.
 
@@ -125,6 +129,45 @@ async def heartbeat(request: Request) -> dict:
     if not isinstance(payload, dict):
         return JSONResponse({"error": "expected a JSON object"}, status_code=400)
     return ingest_handler.handle_heartbeat(payload)
+
+
+@app.post("/api/draft/{listing_id}")
+def create_draft_endpoint(listing_id: str) -> dict:
+    """Create a Gmail draft for an approved listing and queue it into pending_drafts.
+
+    Opt-in only — never called automatically on approval (D-13, T-02-DRAFT-AUTO).
+    draft_body / draft_subject / contact_email come from the pre-computed evaluation
+    stored on the properties[] entry at approval time (D-15, _pending_to_property).
+
+    Returns:
+      {"ok": true}                          — draft created and queued
+      {"ok": false, "reason": "no_email"}   — listing has no contact email (RESEARCH Risk 5)
+      404                                   — listing_id not found in properties[]
+    """
+    entry = data_store.get_approved_listing(listing_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Listing not found")
+
+    contact_email = entry.get("contact_email", "")
+    if not contact_email:
+        return {"ok": False, "reason": "no_email"}
+
+    subject = entry.get("draft_subject") or f"Inquiry about {entry.get('name', listing_id)}"
+    body = entry.get("draft_body", "")
+
+    ok = gmail_client.create_draft(contact_email, subject, body)
+    if ok:
+        with data_store._lock:
+            state = data_store.load_agent_state()
+            state["pending_drafts"][listing_id] = {
+                "to_email": contact_email,
+                "subject": subject,
+                "body": body,
+                "url": entry.get("url", ""),
+            }
+            data_store.save_agent_state(state)
+
+    return {"ok": ok}
 
 
 # Static frontend last, so it doesn't shadow the /api/* routes above.

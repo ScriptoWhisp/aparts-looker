@@ -3,6 +3,8 @@ Minimal Telegram Bot API client: send listing cards, poll for incoming
 "/send <id>" commands from Daniel.
 """
 
+from __future__ import annotations
+
 import re
 
 import requests

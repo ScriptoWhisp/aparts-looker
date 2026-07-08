@@ -10,6 +10,8 @@ the site's normal-user-facing vocabulary and changes far less often than
 markup.
 """
 
+from __future__ import annotations
+
 import re
 import time
 from dataclasses import dataclass, field

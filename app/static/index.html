@@ -785,10 +785,11 @@
       +       coreField("year","Год постройки", p.year)
       +       coreField("material","Тип дома", p.material)
       +     '</div>'
-      +     '<div class="head-actions">'
+      +     '<div class="head-actions" data-listing-id="'+escapeHtml(p.id)+'" data-has-email="'+(p.contact_email?"1":"0")+'" data-has-draft="'+(p.draft_body?"1":"0")+'">'
       +       (p.url ? '<a class="link-btn" href="'+escapeHtml(p.url)+'" target="_blank" rel="noopener">Открыть на kv.ee \u2197</a>' : '')
       +       '<button type="button" class="link-btn" data-action="export-property">Скачать сводку (.txt)</button>'
       +       '<button type="button" class="link-btn danger" data-action="delete-property" data-id="'+p.id+'">'+(ui.pendingDeleteId===p.id?"Точно удалить?":"Удалить объект")+'</button>'
+      +       '<div id="draft-email-slot"></div>'
       +     '</div>'
       +   '</div>'
       +   '<div class="stamp tone-'+st.tone+'">'+st.label+'</div>'
@@ -1265,6 +1266,102 @@
       }
     });
   }
+
+})();
+</script>
+
+<script>
+/*
+ * Phase 02 Plan 04 -- draft-email opt-in button
+ *
+ * Injects a "Draft email" button into the dossier approved-listing detail view
+ * for listings that carry both a contact_email AND a draft_body (set at approval
+ * time by _pending_to_property). Listings without both fields (e.g. legacy
+ * DEFAULT_PROPERTIES entries) silently skip the button.
+ *
+ * All user-visible text is set via textContent only (XSS-safe, T-02-DRAFT-XSS mitigation).
+ */
+(function() {
+  "use strict";
+
+  /* POST /api/draft/<id> and update the status span via textContent */
+  function draftEmail(listingId, statusEl, btn) {
+    statusEl.textContent = "Creating draft…";
+    btn.disabled = true;
+
+    fetch("/api/draft/" + encodeURIComponent(listingId), { method: "POST" })
+      .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, status: r.status, data: d }; }); })
+      .then(function(result) {
+        if (result.status === 200 && result.data.ok === true) {
+          statusEl.textContent = "Draft saved to Gmail Drafts. Send it from Telegram: /send " + listingId;
+        } else if (result.status === 200 && result.data.reason === "no_email") {
+          statusEl.textContent = "No agent email available — use kv.ee contact form";
+          btn.disabled = false;
+        } else {
+          statusEl.textContent = "Failed to create draft — retry";
+          btn.disabled = false;
+        }
+      })
+      .catch(function() {
+        statusEl.textContent = "Failed to create draft — retry";
+        btn.disabled = false;
+      });
+  }
+
+  /* Inject the Draft email button into #draft-email-slot when present */
+  function injectDraftButton() {
+    var slot = document.getElementById("draft-email-slot");
+    if (!slot) return;
+
+    /* Already injected this render cycle */
+    if (slot.dataset.injected === "1") return;
+
+    var headActions = slot.closest(".head-actions");
+    if (!headActions) return;
+
+    var hasEmail = headActions.dataset.hasEmail === "1";
+    var hasDraft = headActions.dataset.hasDraft === "1";
+    if (!hasEmail || !hasDraft) return;
+
+    var listingId = headActions.dataset.listingId;
+    if (!listingId) return;
+
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "link-btn";
+    btn.textContent = "Draft email";
+
+    var statusEl = document.createElement("span");
+    statusEl.style.fontSize = "12px";
+    statusEl.style.color = "var(--ink-soft)";
+    statusEl.style.marginLeft = "4px";
+
+    btn.addEventListener("click", function() {
+      draftEmail(listingId, statusEl, btn);
+    });
+
+    slot.appendChild(btn);
+    slot.appendChild(statusEl);
+    slot.dataset.injected = "1";
+  }
+
+  /* Observe #main-content for child-list mutations (dossier renders) */
+  var observer = new MutationObserver(function() {
+    injectDraftButton();
+  });
+
+  function startObserver() {
+    var main = document.getElementById("main-content");
+    if (main) {
+      observer.observe(main, { childList: true, subtree: true });
+      injectDraftButton();
+    } else {
+      /* main-content not yet in DOM -- wait */
+      setTimeout(startObserver, 50);
+    }
+  }
+
+  startObserver();
 
 })();
 </script>
