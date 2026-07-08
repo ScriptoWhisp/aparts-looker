@@ -26,6 +26,19 @@ log = logging.getLogger("ingest_handler")
 # Cached once at import — avoids repeated reflection calls during batch processing.
 LISTING_FIELD_NAMES = frozenset(f.name for f in dc_fields(Listing))
 
+# Checklist whitelist constants (EVAL-02, D-06, D-07, RESEARCH Pitfall 3).
+# Canonical 7 text-assessable criterion keys and their allowed values.
+EXPECTED_CHECKLIST_KEYS: frozenset = frozenset({
+    "price_per_sqm",
+    "rooms_area",
+    "parking",
+    "renovation_potential",
+    "floor",
+    "year_material",
+    "mandatory_extras",
+})
+ALLOWED_CHECKLIST_VALUES: frozenset = frozenset({"pass", "fail", "unknown"})
+
 
 def _deserialize_listing(data: dict) -> Listing:
     """Reconstruct a Listing from an incoming JSON dict, silently ignoring unknown keys.
@@ -36,6 +49,25 @@ def _deserialize_listing(data: dict) -> Listing:
     """
     known = {k: v for k, v in data.items() if k in LISTING_FIELD_NAMES}
     return Listing(**known)
+
+
+def _whitelist_checklist(raw: dict) -> dict:
+    """Return a fully-populated 7-key checklist dict from an AI-returned raw checklist.
+
+    - Drops unknown keys (RESEARCH Pitfall 3, T-03-04, T-03-05).
+    - Coerces invalid values to "unknown" so callers always get all 7 keys with valid values.
+    - Never raises — wraps body in try/except; returns 7-key all-"unknown" dict on any error.
+    (EVAL-02, D-07, D-08, RESEARCH Pitfall 3)
+    """
+    try:
+        result = {}
+        for key in EXPECTED_CHECKLIST_KEYS:
+            value = raw.get(key)
+            result[key] = value if isinstance(value, str) and value in ALLOWED_CHECKLIST_VALUES else "unknown"
+        return result
+    except Exception:
+        log.exception("_whitelist_checklist failed — returning all-unknown checklist")
+        return {key: "unknown" for key in EXPECTED_CHECKLIST_KEYS}
 
 
 def _build_context_prefix(listing: Listing, data: dict) -> str:
@@ -182,6 +214,14 @@ def process_ingest_batch(listing_dicts: list[dict]) -> dict:
                     "tg_chat_id": None,
                 }
                 data_store.add_to_pending(pending_entry)
+                # Phase 3: persist AI checklist (EVAL-02, D-08). Whitelist before write to
+                # guard against non-canonical keys/values from the model (RESEARCH Pitfall 3).
+                # write_checklist_ai acquires _lock internally; safe because _lock is RLock
+                # (reentrant — same thread can re-enter, RESEARCH Pitfall 1).
+                data_store.write_checklist_ai(
+                    listing.id,
+                    _whitelist_checklist(evaluation.get("checklist", {})),
+                )
 
                 # send_pending_card is provided by Plan 02-02. Until then, the lazy
                 # getattr fallback returns (None, None) so this module ships before

@@ -51,8 +51,29 @@ no ``` fences), with the following fields:
   "concerns": ["<brief>", ...],
   "should_draft_email": <bool — true if the listing is interesting enough to contact the agent>,
   "draft_subject": "<email subject in English if should_draft_email=true, otherwise empty string>",
-  "draft_body": "<email body in English, polite, concise, asking about condition, remondifond, mandatory extras (parking), viewing availability — if should_draft_email=true, otherwise empty string>"
+  "draft_body": "<email body in English, polite, concise, asking about condition, remondifond, mandatory extras (parking), viewing availability — if should_draft_email=true, otherwise empty string>",
+  "checklist": {{
+    "price_per_sqm":        "pass" | "fail" | "unknown",
+    "rooms_area":           "pass" | "fail" | "unknown",
+    "parking":              "pass" | "fail" | "unknown",
+    "renovation_potential": "pass" | "fail" | "unknown",
+    "floor":                "pass" | "fail" | "unknown",
+    "year_material":        "pass" | "fail" | "unknown",
+    "mandatory_extras":     "pass" | "fail" | "unknown"
+  }}
 }}
+
+For the "checklist" field, assess each criterion from the listing text only.
+Use exactly these key names. Use "unknown" when the listing text does not address the criterion.
+
+Criterion guidance:
+  price_per_sqm       — competitive pricing: "pass" if < ~3000 EUR/m² for the condition, "fail" if high, "unknown" if data missing
+  rooms_area          — "pass" if 3–4 rooms and 50–80 m², "fail" if outside target range, "unknown" if data missing
+  parking             — "pass" if free parking included, "fail" if paid/mandatory extra cost, "unknown" if not mentioned
+  renovation_potential — "pass" if renovation signals present and structurally sound, "unknown" if not mentioned
+  floor               — "pass" if not ground floor (floor >= 2), "fail" if ground floor, "unknown" if not mentioned
+  year_material       — "pass" if building age/material is acceptable, "fail" if 1960s panel with no renovation signals, "unknown" if missing
+  mandatory_extras    — "pass" if no mandatory extras or they are reasonably priced, "fail" if mandatory extras add >10% to price, "unknown" if not mentioned
 """
 
 
@@ -131,6 +152,7 @@ Description: {listing.description[:1500]}
         result.setdefault("should_draft_email", False)
         result.setdefault("draft_subject", "")
         result.setdefault("draft_body", "")
+        result.setdefault("checklist", {})
         return result
 
     except (requests.RequestException, json.JSONDecodeError, KeyError, ValueError):
@@ -142,4 +164,5 @@ Description: {listing.description[:1500]}
             "should_draft_email": False,
             "draft_subject": "",
             "draft_body": "",
+            "checklist": {},
         }
