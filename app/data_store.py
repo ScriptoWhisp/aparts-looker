@@ -48,6 +48,7 @@ DEFAULT_APP_DATA = {
     "settings": {},
     "pending": [],
     "rejected": [],
+    "price_history": {},  # D-11: {listing_id: [{date, price}, ...]} — appended on every scrape run
 }
 DEFAULT_AGENT_STATE = {
     "seen_listing_ids": [],
@@ -87,12 +88,46 @@ def load_app_data():
         data.setdefault("settings", {})
         data.setdefault("pending", [])
         data.setdefault("rejected", [])
+        data.setdefault("price_history", {})  # D-11: zero-downtime migration for existing installs
         return data
 
 
 def save_app_data(data):
     with _lock:
         _write_json(config.APP_DATA_FILE, data)
+
+
+def record_price_in_data(data: dict, listing_id: str, price_eur: int, date_str: str) -> None:
+    """Mutate data['price_history'][listing_id] in place — no lock acquired, no I/O performed.
+
+    Caller MUST hold _lock and is responsible for calling save_app_data after the batch.
+    Idempotent for same-day re-runs: if the last entry's date matches date_str, its price
+    is overwritten rather than a duplicate entry being appended (D-12, RESEARCH Pattern 4).
+    History is capped at 90 entries per listing, trimming the oldest first (RESEARCH Pitfall 5,
+    D-13 relies on history[0] being the oldest kept entry).
+    """
+    history = data.setdefault("price_history", {}).setdefault(listing_id, [])
+    if history and history[-1]["date"] == date_str:
+        # Same-day idempotency: overwrite the price, do not append (D-12)
+        history[-1]["price"] = price_eur
+    else:
+        history.append({"date": date_str, "price": price_eur})
+    # Cap at 90 entries — trim oldest (RESEARCH Pitfall 5)
+    if len(history) > 90:
+        del history[:len(history) - 90]
+
+
+def get_price_history(listing_id: str) -> list:
+    """Return the price history list for a listing, or [] if unknown.
+
+    Thread-safe reader — acquires _lock via load_app_data() (RLock, re-entrant safe).
+    Returns [] on any miss or error (never-raise, RESEARCH Pattern 4).
+    """
+    try:
+        data = load_app_data()
+        return data.get("price_history", {}).get(listing_id, [])
+    except Exception:
+        return []
 
 
 def add_property_if_new(prop: dict) -> bool:
