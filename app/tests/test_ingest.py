@@ -22,12 +22,13 @@ def test_wrong_token(client):
     assert resp.status_code == 403
 
 
-def test_ingest_batch(client, tmp_agent_state, mock_telegram, monkeypatch):
+def test_ingest_batch(client, tmp_agent_state, monkeypatch):
     """POST /api/ingest processes a single valid Listing dict (ARCH-03, VALIDATION 1-02-03).
 
     evaluate_listing is mocked so this test does not make real Anthropic API calls.
-    Confirms that processing a new listing triggers a Telegram notification.
+    Phase 2: confirms the listing lands in app_data pending[] (not properties[]).
     """
+    import json  # noqa: PLC0415
     import ingest_handler  # noqa: PLC0415
 
     monkeypatch.setattr(
@@ -38,6 +39,7 @@ def test_ingest_batch(client, tmp_agent_state, mock_telegram, monkeypatch):
             "verdict": "Good listing",
             "strengths": ["Good price"],
             "concerns": [],
+            "draft_body": "Dear agent,",
             "should_draft_email": False,
         },
     )
@@ -64,8 +66,12 @@ def test_ingest_batch(client, tmp_agent_state, mock_telegram, monkeypatch):
     body = resp.json()
     assert body.get("ok") is True
 
-    # Confirm Telegram was called (listing card sent as either message or photo).
-    assert mock_telegram.send_message.called or mock_telegram.send_photo.called
+    # Phase 2 (QUEUE-01): listing lands in pending[], NOT in properties[].
+    app_data_file = tmp_agent_state / "app_data.json"
+    app_data = json.loads(app_data_file.read_text()) if app_data_file.exists() else {}
+    pending_ids = [e.get("id") for e in app_data.get("pending", [])]
+    assert "test-1" in pending_ids, f"Listing not in pending[]: {pending_ids}"
+    assert "test-1" not in [e.get("id") for e in app_data.get("properties", [])]
 
 
 def test_no_playwright_import():

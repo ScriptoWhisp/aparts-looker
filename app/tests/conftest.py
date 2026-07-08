@@ -89,8 +89,6 @@ def mock_telegram(monkeypatch):
       telegram_client.send_message
       telegram_client.send_photo
       agent_job.send_message        (in-module reference)
-      ingest_handler.send_message   (in-module reference)
-      ingest_handler.send_photo     (in-module reference)
 
     Yields a namespace with .send_message and .send_photo attributes so tests
     can assert on call counts and arguments.
@@ -107,8 +105,6 @@ def mock_telegram(monkeypatch):
     monkeypatch.setattr(telegram_client, "send_message", mock_send)
     monkeypatch.setattr(telegram_client, "send_photo", mock_photo)
     monkeypatch.setattr(agent_job, "send_message", mock_send)
-    monkeypatch.setattr(ingest_handler, "send_message", mock_send)
-    monkeypatch.setattr(ingest_handler, "send_photo", mock_photo)
 
     ns = types.SimpleNamespace(send_message=mock_send, send_photo=mock_photo)
     yield ns
@@ -129,8 +125,8 @@ def mock_send_pending_card(monkeypatch):
     import telegram_client  # noqa: PLC0415
     import ingest_handler  # noqa: PLC0415
 
-    monkeypatch.setattr(telegram_client, "send_pending_card", mock)
-    # ingest_handler uses `import telegram_client` + getattr; patch module attribute if present
+    # Use raising=False so the fixture works before Plan 02-02 ships send_pending_card.
+    monkeypatch.setattr(telegram_client, "send_pending_card", mock, raising=False)
     if hasattr(ingest_handler, "send_pending_card"):
         monkeypatch.setattr(ingest_handler, "send_pending_card", mock)
 
