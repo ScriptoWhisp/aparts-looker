@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 4
-current_phase_name: Additional Scraper Sources
+current_phase: 5
+current_phase_name: Map & Overview UI
 status: planning
-stopped_at: Phase 3 complete
+stopped_at: Phase 4 deferred by Daniel — too complex for MVP; skipping to Phase 5
 last_updated: "2026-07-09T00:00:00.000Z"
 last_activity: 2026-07-09
-last_activity_desc: Phase 03 complete — all 4 plans executed, 39 tests green, EVAL-01/02/03/04 + INTEL-01/02/03 delivered
+last_activity_desc: Phase 04 deferred (cross-portal dedup complexity); advancing to Phase 5
 progress:
   total_phases: 6
   completed_phases: 3
@@ -24,16 +24,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-07)
 
 **Core value:** Every listing that meets Daniel's criteria gets evaluated, queued, and surfaced before he has to manually look — best ones get an email to the agent drafted and ready.
-**Current focus:** Phase 04 — additional scraper sources
+**Current focus:** Phase 05 — map & overview UI
 
 ## Current Position
 
-Phase: 4 — Additional Scraper Sources
+Phase: 5 — Map & Overview UI
 Plan: Not started
-Status: Ready to plan
-Last activity: 2026-07-09 — Phase 03 complete, ready for Phase 4
+Status: Ready to plan (Phase 4 deferred)
+Last activity: 2026-07-09 — Phase 04 deferred; advancing to Phase 5
 
-Progress: [████████░░] ~50% (phases 1-3 complete)
+Progress: [████████░░] ~50% (phases 1-3 complete; 4 deferred)
 
 ## Performance Metrics
 

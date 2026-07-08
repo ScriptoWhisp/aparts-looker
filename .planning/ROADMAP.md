@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Scraper Architecture Split** - Mini PC scraper POSTs to VPS; Cloudflare bypass moves off datacenter IP (completed 2026-07-07)
 - [x] **Phase 2: Queue & Approval Workflow** - Every listing enters a pending queue; Daniel approves before it reaches the dossier (completed 2026-07-08)
 - [x] **Phase 3: AI Quality & Price Intelligence** - Calibrated scoring, structured checklist output, price history, longevity, and re-evaluation on drops (completed 2026-07-09)
-- [ ] **Phase 4: Additional Scraper Sources** - city24.ee and kinnisvara24.ee added; deduplication across all sources
+- [ ] **Phase 4: Additional Scraper Sources** - city24.ee and kinnisvara24.ee added; deduplication across all sources *(deferred — cross-portal dedup complexity vs MVP value)*
 - [ ] **Phase 5: Map & Overview UI** - Interactive Tallinn map with score pins, district heat zones, commute isochrone, and redesigned dossier
 - [ ] **Phase 6: Viewing Workflow & Extras** - Scheduled viewings, negotiation briefs, building fund lookup, PDF export
 
