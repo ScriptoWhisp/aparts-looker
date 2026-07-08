@@ -18,7 +18,7 @@
 ### AI Evaluation Quality
 
 - [ ] **EVAL-01**: Evaluation prompt includes 2-3 previously-approved listings with their scores as calibration anchors
-- [ ] **EVAL-02**: Evaluation output includes structured checklist: pass/fail per each of the 7 BUYER_PROFILE criteria that can be assessed from listing text
+- [x] **EVAL-02**: Evaluation output includes structured checklist: pass/fail per each of the 7 BUYER_PROFILE criteria that can be assessed from listing text
 - [ ] **EVAL-03**: Evaluation prompt includes running price/m² average for the listing's district (computed from seen listings)
 - [ ] **EVAL-04**: When a seen listing's price drops ≥5%, it is re-evaluated and re-queued as a new pending item
 
@@ -109,7 +109,7 @@
 | QUEUE-06 | Phase 2 | Complete |
 | QUEUE-07 | Phase 2 | Complete |
 | EVAL-01 | Phase 3 | Pending |
-| EVAL-02 | Phase 3 | Pending |
+| EVAL-02 | Phase 3 | Complete |
 | EVAL-03 | Phase 3 | Pending |
 | EVAL-04 | Phase 3 | Pending |
 | INTEL-01 | Phase 3 | Pending |
