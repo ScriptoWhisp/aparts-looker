@@ -13,7 +13,7 @@ def test_ingest_writes_to_pending(client, tmp_agent_state, mock_send_pending_car
     monkeypatch.setattr(
         ingest_handler,
         "evaluate_listing",
-        lambda listing: {
+        lambda listing, context_prefix="": {
             "score": 80,
             "verdict": "Good",
             "strengths": [],

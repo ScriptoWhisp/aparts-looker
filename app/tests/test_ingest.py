@@ -34,7 +34,7 @@ def test_ingest_batch(client, tmp_agent_state, monkeypatch):
     monkeypatch.setattr(
         ingest_handler,
         "evaluate_listing",
-        lambda listing: {
+        lambda listing, context_prefix="": {
             "score": 80,
             "verdict": "Good listing",
             "strengths": ["Good price"],

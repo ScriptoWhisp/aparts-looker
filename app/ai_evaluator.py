@@ -63,11 +63,16 @@ def _extract_json(text: str) -> dict:
     return json.loads(text)
 
 
-def evaluate_listing(listing: Listing) -> dict:
+def evaluate_listing(listing: Listing, context_prefix: str = "") -> dict:
     """Returns a dict with score/verdict/strengths/concerns/draft fields.
     On any failure, returns a safe fallback dict with score=0 so the
     listing still gets a (minimal) Telegram notification rather than
-    silently vanishing."""
+    silently vanishing.
+
+    context_prefix: optional string prepended to the user message — used to inject
+    calibration anchors and district price/m² average per D-01/D-04. Defaults to
+    empty string for backward compatibility with existing callers.
+    """
 
     listing_summary = f"""
 Title/address: {listing.title}
@@ -83,6 +88,8 @@ Parking: {listing.parking}
 Renovation needed (text signals): {listing.needs_renovation}
 Description: {listing.description[:1500]}
 """
+    # Phase 3: prepend context_prefix to user turn (anchors + district avg per D-01/D-04)
+    user_content = context_prefix + listing_summary
 
     if not ANTHROPIC_API_KEY:
         return {
@@ -105,9 +112,9 @@ Description: {listing.description[:1500]}
             },
             json={
                 "model": ANTHROPIC_MODEL,
-                "max_tokens": 1000,
+                "max_tokens": 1500,  # increased from 1000 — plan 03-02 adds checklist output (~150 tokens)
                 "system": SYSTEM_PROMPT,
-                "messages": [{"role": "user", "content": listing_summary}],
+                "messages": [{"role": "user", "content": user_content}],
             },
             timeout=30,
         )
