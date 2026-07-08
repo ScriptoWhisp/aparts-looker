@@ -28,6 +28,7 @@ MAX_PRICE_EUR = int(os.environ.get("MAX_PRICE_EUR", "260000"))
 CHECK_INTERVAL_HOURS = float(os.environ.get("CHECK_INTERVAL_HOURS", "2"))
 
 INGEST_TOKEN = os.environ.get("INGEST_TOKEN", "")
+WEB_BASE_URL = os.environ.get("WEB_BASE_URL", "")
 HEARTBEAT_TIMEOUT_HOURS = float(os.environ.get("HEARTBEAT_TIMEOUT_HOURS", "0"))
 
 DATA_DIR = os.environ.get("DATA_DIR", os.path.join(os.path.dirname(__file__), "data"))

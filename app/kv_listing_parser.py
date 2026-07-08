@@ -65,6 +65,7 @@ class Listing:
     contact_email: Optional[str] = None
     description: str = ""
     image_url: str = ""
+    image_count: int = 0
     raw_ok: bool = True
 
 

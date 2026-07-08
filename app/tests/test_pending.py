@@ -67,9 +67,54 @@ def test_data_model_keys(tmp_agent_state):
     assert "settings" in data
 
 
-@pytest.mark.xfail(reason="pending Phase 2 plan 02 implementation", strict=False)
-def test_send_pending_card_buttons():
-    assert False
+def test_send_pending_card_buttons(monkeypatch):
+    """QUEUE-02: send_pending_card sends sendPhoto with a 3-button inline keyboard."""
+    from unittest.mock import MagicMock  # noqa: PLC0415
+
+    import telegram_client  # noqa: PLC0415
+    from kv_listing_parser import Listing  # noqa: PLC0415
+
+    # Mock requests.post to capture the Telegram API call
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {"result": {"message_id": 42, "chat": {"id": -100}}}
+    mock_post = MagicMock(return_value=mock_response)
+    monkeypatch.setattr(telegram_client.requests, "post", mock_post)
+
+    # Patch TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID so guard passes
+    monkeypatch.setattr(telegram_client, "TELEGRAM_BOT_TOKEN", "test-bot-token")
+    monkeypatch.setattr(telegram_client, "TELEGRAM_CHAT_ID", "-100")
+
+    listing = Listing(
+        id="1234567",
+        url="https://kv.ee/1234567.html",
+        title="Test Apartment",
+        image_url="https://img/x.jpg",
+    )
+    result = telegram_client.send_pending_card(listing, {"score": 82, "verdict": "Good"})
+
+    # Verify the call was to sendPhoto (listing has image_url)
+    assert mock_post.called
+    call_url = mock_post.call_args[0][0]
+    assert call_url.endswith("/sendPhoto")
+
+    # Verify the inline keyboard structure
+    call_json = mock_post.call_args[1]["json"]
+    keyboard = call_json["reply_markup"]["inline_keyboard"]
+    assert len(keyboard) == 1  # one row
+    row = keyboard[0]
+    assert len(row) == 3  # three buttons
+
+    assert row[0]["text"] == "Approve"
+    assert row[0]["callback_data"] == "approve:1234567"
+    assert row[1]["text"] == "Reject"
+    assert row[1]["callback_data"] == "reject:1234567"
+    assert row[2]["text"] == "More"
+    assert row[2]["url"].startswith("https://")
+    assert "1234567" in row[2]["url"]
+
+    # Verify return value (message_id, chat_id)
+    assert result == (42, -100)
 
 
 @pytest.mark.xfail(reason="pending Phase 2 plan 02 implementation", strict=False)
