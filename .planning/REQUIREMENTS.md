@@ -17,16 +17,16 @@
 
 ### AI Evaluation Quality
 
-- [ ] **EVAL-01**: Evaluation prompt includes 2-3 previously-approved listings with their scores as calibration anchors
+- [x] **EVAL-01**: Evaluation prompt includes 2-3 previously-approved listings with their scores as calibration anchors
 - [x] **EVAL-02**: Evaluation output includes structured checklist: pass/fail per each of the 7 BUYER_PROFILE criteria that can be assessed from listing text
-- [ ] **EVAL-03**: Evaluation prompt includes running price/m² average for the listing's district (computed from seen listings)
-- [ ] **EVAL-04**: When a seen listing's price drops ≥5%, it is re-evaluated and re-queued as a new pending item
+- [x] **EVAL-03**: Evaluation prompt includes running price/m² average for the listing's district (computed from seen listings)
+- [x] **EVAL-04**: When a seen listing's price drops ≥5%, it is re-evaluated and re-queued as a new pending item
 
 ### Price & Listing Intelligence
 
 - [x] **INTEL-01**: Price history is recorded per listing on every scrape (date + price)
 - [x] **INTEL-02**: Listing longevity (days on market) is tracked and surfaced in the listing card
-- [ ] **INTEL-03**: When a listing URL returns 404, it is marked as sold/removed in the dossier with the date
+- [x] **INTEL-03**: When a listing URL returns 404, it is marked as sold/removed in the dossier with the date
 
 ### Source Coverage
 
@@ -108,13 +108,13 @@
 | QUEUE-05 | Phase 2 | Complete |
 | QUEUE-06 | Phase 2 | Complete |
 | QUEUE-07 | Phase 2 | Complete |
-| EVAL-01 | Phase 3 | Pending |
+| EVAL-01 | Phase 3 | Complete |
 | EVAL-02 | Phase 3 | Complete |
-| EVAL-03 | Phase 3 | Pending |
-| EVAL-04 | Phase 3 | Pending |
+| EVAL-03 | Phase 3 | Complete |
+| EVAL-04 | Phase 3 | Complete |
 | INTEL-01 | Phase 3 | Complete |
 | INTEL-02 | Phase 3 | Complete |
-| INTEL-03 | Phase 3 | Pending |
+| INTEL-03 | Phase 3 | Complete |
 | SRC-01 | Phase 4 | Pending |
 | SRC-02 | Phase 4 | Pending |
 | SRC-03 | Phase 4 | Pending |
