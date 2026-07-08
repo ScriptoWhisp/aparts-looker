@@ -141,6 +141,171 @@ def _build_context_prefix(listing: Listing, data: dict) -> str:
         return ""
 
 
+def _record_and_check_price_drop(app_data: dict, listing: Listing, today_str: str) -> None:
+    """Record a new price entry and trigger re-evaluation when a >= 5% drop is detected.
+
+    Replaces the bare data_store.record_price_in_data call in both the dedup-hit and new-listing
+    branches of process_ingest_batch. The caller must hold data_store._lock.
+
+    Same-day idempotency: if the last history entry's date matches today_str the function
+    still records (overwrites) but does NOT trigger drop detection — avoids self-triggering
+    within a single batch run (D-14, T-03-14, RESEARCH Pattern 5).
+
+    Never raises — wraps body in try/except per never-raise convention.
+    """
+    try:
+        if not (isinstance(listing.price_eur, int) and listing.price_eur > 0):
+            return
+
+        # Capture history BEFORE recording so we can compare against the previous entry.
+        history = app_data.get("price_history", {}).get(listing.id, [])
+
+        # Detect a valid previous entry on a different date (same-day = no-op for drop detection).
+        prev_entry = None
+        if history and history[-1]["date"] != today_str:
+            prev_entry = history[-1]
+
+        # Record the new price (mutates app_data in place; caller saves).
+        data_store.record_price_in_data(app_data, listing.id, listing.price_eur, today_str)
+
+        # Trigger drop detection only when previous entry exists and is a valid price.
+        if (
+            prev_entry is not None
+            and isinstance(prev_entry.get("price"), int)
+            and prev_entry["price"] > 0
+            and (prev_entry["price"] - listing.price_eur) / prev_entry["price"] >= config.PRICE_DROP_THRESHOLD
+        ):
+            _handle_price_drop(app_data, listing, prev_entry["price"], listing.price_eur)
+
+    except Exception:
+        log.exception("_record_and_check_price_drop failed for %s — skipping", listing.id)
+
+
+def _handle_price_drop(app_data: dict, listing: Listing, prev_price: int, new_price: int) -> None:
+    """Re-evaluate a listing after a significant price drop and dispatch by its current state.
+
+    Dispatch rules (D-15, D-16, D-17, RESEARCH Pattern 6):
+    - Approved (in properties[]): re-evaluate, update score/verdict, PREPEND price-drop note to
+      existing notes, send Telegram notification.
+    - Pending (in pending[]): re-evaluate silently, update score/verdict/strengths/concerns and
+      refresh the AI checklist via write_checklist_ai. No Telegram.
+    - Rejected with rejection_reason=='price': re-evaluate, construct new pending entry, move
+      from rejected[] to pending[], send Telegram notification.
+    - Rejected with any other reason: silently untouched.
+
+    Never raises — wraps body in try/except. The evaluate_listing call has its own inner guard
+    so a network failure logs without corrupting state (RESEARCH Pitfall 7).
+    """
+    try:
+        context_prefix = _build_context_prefix(listing, app_data)
+
+        try:
+            evaluation = evaluate_listing(listing, context_prefix)
+        except Exception:
+            log.exception(
+                "_handle_price_drop: evaluate_listing failed for %s — aborting drop dispatch",
+                listing.id,
+            )
+            return
+
+        pct = round((prev_price - new_price) / prev_price * 100, 1)
+        new_score = evaluation.get("score", 0)
+
+        # --- Approved listing in properties[] ---
+        prop_entry = next((e for e in app_data.get("properties", []) if e.get("id") == listing.id), None)
+        if prop_entry is not None:
+            prop_entry["score"] = new_score
+            prop_entry["verdict"] = evaluation.get("verdict", "")
+            # PREPEND price-drop note — do not overwrite existing notes (RESEARCH Pitfall 6, T-03-16).
+            prop_entry["notes"] = (
+                f"[Price drop {pct}%, re-scored {new_score}/100] "
+                + (prop_entry.get("notes") or "")
+            )
+            telegram_client.send_message(
+                f"Price drop on {listing.title or listing.id}: "
+                f"{prev_price:,} -> {new_price:,} EUR (-{pct}%). "
+                f"Re-scored: {new_score}/100."
+            )
+            return
+
+        # --- Pending listing in pending[] ---
+        pending_entry = next(
+            (e for e in app_data.get("pending", []) if e.get("id") == listing.id), None
+        )
+        if pending_entry is not None:
+            pending_entry["score"] = new_score
+            pending_entry["verdict"] = evaluation.get("verdict", "")
+            pending_entry["strengths"] = evaluation.get("strengths", [])
+            pending_entry["concerns"] = evaluation.get("concerns", [])
+            # Refresh AI checklist (D-16) — write_checklist_ai acquires _lock (RLock, re-entrant safe).
+            data_store.write_checklist_ai(
+                listing.id,
+                _whitelist_checklist(evaluation.get("checklist", {})),
+            )
+            # No Telegram for pending re-evaluation (D-16 — silent update).
+            return
+
+        # --- Rejected listing: re-queue only if reason == "price" (D-17) ---
+        rejected_entry = next(
+            (e for e in app_data.get("rejected", []) if e.get("id") == listing.id),
+            None,
+        )
+        if rejected_entry is not None and rejected_entry.get("rejection_reason") == "price":
+            new_pending = dict(rejected_entry)
+            new_pending.pop("rejection_reason", None)
+            new_pending.pop("rejected_at", None)
+            new_pending["score"] = new_score
+            new_pending["verdict"] = evaluation.get("verdict", "")
+            new_pending["strengths"] = evaluation.get("strengths", [])
+            new_pending["concerns"] = evaluation.get("concerns", [])
+            new_pending["queued_at"] = datetime.now(timezone.utc).isoformat()
+            new_pending["price_drop_requeue_note"] = (
+                f"Previously rejected for price. Price dropped {pct}% to {new_price:,} EUR."
+            )
+            app_data["pending"].append(new_pending)
+            # Remove from rejected[] (T-03-18 — rebuilds list without the re-queued entry).
+            app_data["rejected"] = [e for e in app_data["rejected"] if e.get("id") != listing.id]
+            telegram_client.send_message(
+                f"Previously price-rejected {listing.title or listing.id} re-queued: "
+                f"{prev_price:,} -> {new_price:,} EUR (-{pct}%). Now: {new_score}/100."
+            )
+            return
+
+        # Rejected with any other reason — silently untouched (D-17).
+
+    except Exception:
+        log.exception("_handle_price_drop failed for %s — skipping", listing.id)
+
+
+def _mark_removed_listings(app_data: dict, batch_dicts: list[dict]) -> None:
+    """Mark listings with raw_ok=False as removed on their dossier or pending entry.
+
+    Called after the batch loop completes, before save (D-18, INTEL-03).
+    Only marks existing entries — does not create new removed entries (T-03-13).
+    Never raises — wraps body in try/except per never-raise convention.
+    """
+    try:
+        today_str = _date.today().isoformat()
+        for item in batch_dicts:
+            if item.get("raw_ok", True):
+                continue  # raw_ok=True or missing — listing is still active
+            listing_id = item.get("id") or extract_object_id(item.get("url", ""))
+            if not listing_id:
+                continue
+            for entry in app_data.get("properties", []):
+                if entry.get("id") == listing_id and not entry.get("removed"):
+                    entry["removed"] = True
+                    entry["removed_at"] = today_str
+                    log.info("Marked properties entry %s as removed", listing_id)
+            for entry in app_data.get("pending", []):
+                if entry.get("id") == listing_id and not entry.get("removed"):
+                    entry["removed"] = True
+                    entry["removed_at"] = today_str
+                    log.info("Marked pending entry %s as removed", listing_id)
+    except Exception:
+        log.exception("_mark_removed_listings failed — skipping")
+
+
 def process_ingest_batch(listing_dicts: list[dict]) -> dict:
     """Filter, dedup, evaluate, and notify for a batch of Listing dicts POSTed by the mini PC.
 
@@ -152,6 +317,8 @@ def process_ingest_batch(listing_dicts: list[dict]) -> dict:
     Phase 3 (D-11, D-12): records price for every listing on every scrape run — both
     known (dedup hit) and new listings. today_str is computed once per batch so a midnight
     rollover during a large batch doesn't split the same batch's entries across two dates.
+    Phase 3 (D-14, D-15, D-16, D-17, D-18): _record_and_check_price_drop replaces bare
+    record_price_in_data calls; _mark_removed_listings runs post-loop.
     """
     log.info("Ingest batch received: %d listings", len(listing_dicts))
 
@@ -173,12 +340,8 @@ def process_ingest_batch(listing_dicts: list[dict]) -> dict:
             # Dedup: compute the canonical object ID for the seen-set check.
             dedup_key = extract_object_id(listing.url) or listing.url
             if dedup_key in set(state["seen_listing_ids"]):
-                # Known listing — record price before skipping (D-12, RESEARCH Pattern 5)
-                if isinstance(listing.price_eur, int) and listing.price_eur > 0:
-                    try:
-                        data_store.record_price_in_data(app_data, listing.id, listing.price_eur, today_str)
-                    except Exception:
-                        log.exception("Price recording failed for known listing %s — skipping", listing.id)
+                # Known listing — record price and check for drop (D-12, D-14, RESEARCH Pattern 5)
+                _record_and_check_price_drop(app_data, listing, today_str)
                 continue
 
             # Mark as seen by appending the object ID (mirrors the original agent_job behaviour).
@@ -258,15 +421,15 @@ def process_ingest_batch(listing_dicts: list[dict]) -> dict:
 
                 # Record initial price for newly-seen listing AFTER the reload so the
                 # mutation lands on the same app_data dict that will be saved at loop end
-                # (D-11, D-12, RESEARCH Pattern 5).
-                if isinstance(listing.price_eur, int) and listing.price_eur > 0:
-                    try:
-                        data_store.record_price_in_data(app_data, listing.id, listing.price_eur, today_str)
-                    except Exception:
-                        log.exception("Price recording failed for new listing %s — skipping", listing.id)
+                # (D-11, D-12, D-14, RESEARCH Pattern 5).
+                _record_and_check_price_drop(app_data, listing, today_str)
 
             except Exception:
                 log.exception("Failed to process listing %s — skipping", listing.id)
+
+        # Post-loop: mark listings with raw_ok=False as removed (D-18, INTEL-03).
+        # Pass the original raw batch dicts so raw_ok signals are available.
+        _mark_removed_listings(app_data, listing_dicts)
 
         data_store.save_agent_state(state)
         # Persist accumulated price_history mutations from this batch (D-11, D-12)
