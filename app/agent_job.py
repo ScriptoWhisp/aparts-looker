@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 import config
 import data_store
+from config import TELEGRAM_CHAT_ID
 from gmail_client import send_email
 from telegram_client import (
     extract_send_commands,
@@ -16,6 +17,64 @@ from telegram_client import (
 )
 
 log = logging.getLogger("agent_job")
+
+
+def process_pending_action(cq: dict) -> None:
+    """Dispatch an inline keyboard button tap from Telegram. Never raises — never-raise pattern.
+
+    Flow per D-09:
+      - answer_callback_query FIRST (dismiss loading spinner, RESEARCH Pitfall 1)
+      - chat_id guard (T-02-CQ-SPOOF mitigation)
+      - compact callback_data parsing: "approve:<id>", "reject:<id>", "rr:<reason>:<id>"
+      - approve / reject state transitions via data_store (T-02-DOUBLE-TAP idempotency)
+      - edit_card_resolved updates the card caption and removes buttons (D-08)
+    """
+    from telegram_client import answer_callback_query, edit_card_resolved, send_rejection_prompt  # lazy import
+
+    # Chat-id guard: only process updates from Daniel's chat (RESEARCH Security Domain, T-02-CQ-SPOOF)
+    chat_id = cq.get("message", {}).get("chat", {}).get("id")
+    if str(chat_id) != str(TELEGRAM_CHAT_ID):
+        log.warning("callback_query from unknown chat_id %s — ignored", chat_id)
+        return
+
+    # Acknowledge immediately to prevent loading spinner (RESEARCH Pitfall 1)
+    answer_callback_query(cq.get("id", ""))
+
+    try:
+        data_str = cq.get("data", "")
+        # Compact format: "approve:<id>", "reject:<id>", "rr:<reason>:<id>"
+        parts = data_str.split(":", 2)
+        action = parts[0] if parts else ""
+
+        if action == "approve":
+            listing_id = parts[1]
+            ok = data_store.approve_listing(listing_id)
+            resolved_text = (
+                f"✅ Approved — {datetime.now(timezone.utc).strftime('%Y-%m-%d')}"
+                if ok else "✅ Already processed"
+            )
+            edit_card_resolved(cq, resolved_text)
+
+        elif action == "reject":
+            # Two-step flow (D-10): show reason picker first; reject_listing runs when rr: arrives
+            listing_id = parts[1]
+            send_rejection_prompt(cq, listing_id)
+
+        elif action == "rr":
+            # reject_reason: rr:<reason>:<id>
+            reason = parts[1]
+            listing_id = parts[2]
+            if reason not in {"price", "location", "condition", "other"}:
+                reason = "other"
+            ok = data_store.reject_listing(listing_id, reason)
+            resolved_text = (
+                f"❌ Rejected: {reason.capitalize()} — {datetime.now(timezone.utc).strftime('%Y-%m-%d')}"
+                if ok else "❌ Already processed"
+            )
+            edit_card_resolved(cq, resolved_text)
+
+    except Exception:
+        log.exception("process_pending_action failed for callback_query id=%s", cq.get("id"))
 
 
 def process_send_commands(state: dict) -> None:
@@ -37,6 +96,12 @@ def process_send_commands(state: dict) -> None:
             del state["pending_drafts"][listing_id]
         else:
             send_message(f"⚠️ Failed to send email for listing {listing_id}.")
+
+    # New: dispatch callback_query events (inline keyboard button taps) from Daniel
+    for update in updates:
+        cq = update.get("callback_query")
+        if cq:
+            process_pending_action(cq)
 
 
 def _alert_cooldown_ok(state: dict, now: datetime) -> bool:

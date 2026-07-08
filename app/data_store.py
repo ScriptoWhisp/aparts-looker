@@ -125,6 +125,46 @@ def load_pending() -> list:
         return load_app_data().get("pending", [])
 
 
+def approve_listing(listing_id: str) -> bool:
+    """Move listing from pending[] to properties[]. Returns False if not found (idempotent — D-05, RESEARCH Pitfall 2)."""
+    with _lock:
+        data = load_app_data()
+        pending = data.get("pending", [])
+        entry = next((e for e in pending if e.get("id") == listing_id), None)
+        if entry is None:
+            return False
+        data["pending"] = [e for e in pending if e.get("id") != listing_id]
+        data["properties"].append(_pending_to_property(entry))
+        save_app_data(data)
+        return True
+
+
+def reject_listing(listing_id: str, reason: str) -> bool:
+    """Move listing from pending[] to rejected[] with reason. Returns False if not found.
+
+    reason is whitelisted to {"price","location","condition","other"} — anything else
+    is clamped to "other" (T-02-CQ-REASON defense in depth per threat model).
+    """
+    from datetime import datetime, timezone  # local import avoids circular dependency
+
+    if reason not in {"price", "location", "condition", "other"}:
+        reason = "other"
+
+    with _lock:
+        data = load_app_data()
+        pending = data.get("pending", [])
+        entry = next((e for e in pending if e.get("id") == listing_id), None)
+        if entry is None:
+            return False
+        data["pending"] = [e for e in pending if e.get("id") != listing_id]
+        rejected_entry = dict(entry)
+        rejected_entry["rejection_reason"] = reason
+        rejected_entry["rejected_at"] = datetime.now(timezone.utc).isoformat()
+        data.setdefault("rejected", []).append(rejected_entry)
+        save_app_data(data)
+        return True
+
+
 def _pending_to_property(entry: dict) -> dict:
     """Convert a pending listing entry (already a dict) to the dossier property schema.
 

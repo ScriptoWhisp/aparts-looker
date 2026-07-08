@@ -117,14 +117,89 @@ def test_send_pending_card_buttons(monkeypatch):
     assert result == (42, -100)
 
 
-@pytest.mark.xfail(reason="pending Phase 2 plan 02 implementation", strict=False)
-def test_callback_query_parse_approve():
-    assert False
+def test_callback_query_parse_approve(monkeypatch, tmp_agent_state):
+    """QUEUE-04: process_pending_action dispatches approve callback_query correctly.
+
+    Verifies:
+    - approve_listing is called with the listing_id
+    - edit_card_resolved is called with caption starting with '✅ Approved'
+    - answer_callback_query is called with the callback_query id
+    - Chat-id guard: wrong chat_id causes approve_listing NOT to be called
+    """
+    from unittest.mock import MagicMock  # noqa: PLC0415
+
+    import agent_job  # noqa: PLC0415
+    import data_store  # noqa: PLC0415
+    import telegram_client  # noqa: PLC0415
+
+    # Patch TELEGRAM_CHAT_ID to a known value on both modules
+    monkeypatch.setattr(agent_job, "TELEGRAM_CHAT_ID", "12345")
+
+    # Patch data_store.approve_listing
+    mock_approve = MagicMock(return_value=True)
+    monkeypatch.setattr(data_store, "approve_listing", mock_approve)
+
+    # Patch telegram_client functions (lazy imports in process_pending_action resolve from the module)
+    mock_answer = MagicMock(return_value=None)
+    mock_edit = MagicMock(return_value=None)
+    mock_reject_prompt = MagicMock(return_value=None)
+    monkeypatch.setattr(telegram_client, "answer_callback_query", mock_answer)
+    monkeypatch.setattr(telegram_client, "edit_card_resolved", mock_edit)
+    monkeypatch.setattr(telegram_client, "send_rejection_prompt", mock_reject_prompt)
+
+    cq = {"id": "cq-1", "data": "approve:1234567", "message": {"chat": {"id": 12345}, "message_id": 42}}
+    agent_job.process_pending_action(cq)
+
+    # Verify approve path
+    mock_approve.assert_called_once_with("1234567")
+    assert mock_edit.called
+    resolved_caption = mock_edit.call_args[0][1]
+    assert resolved_caption.startswith("✅ Approved")
+    mock_answer.assert_called_once_with("cq-1")
+
+    # Sub-assertion: chat_id guard — wrong chat_id drops the update
+    mock_approve.reset_mock()
+    mock_edit.reset_mock()
+    cq_wrong = {"id": "cq-bad", "data": "approve:1234567", "message": {"chat": {"id": 99999}, "message_id": 42}}
+    agent_job.process_pending_action(cq_wrong)
+    mock_approve.assert_not_called()
 
 
-@pytest.mark.xfail(reason="pending Phase 2 plan 02 implementation", strict=False)
-def test_callback_query_parse_reason():
-    assert False
+def test_callback_query_parse_reason(monkeypatch, tmp_agent_state):
+    """QUEUE-05: process_pending_action dispatches rr:<reason>:<id> callback correctly.
+
+    Verifies:
+    - reject_listing is called with listing_id and reason
+    - edit_card_resolved is called with caption starting with '❌ Rejected: Price'
+    """
+    from unittest.mock import MagicMock  # noqa: PLC0415
+
+    import agent_job  # noqa: PLC0415
+    import data_store  # noqa: PLC0415
+    import telegram_client  # noqa: PLC0415
+
+    # Patch TELEGRAM_CHAT_ID to a known value
+    monkeypatch.setattr(agent_job, "TELEGRAM_CHAT_ID", "12345")
+
+    # Patch data_store.reject_listing
+    mock_reject = MagicMock(return_value=True)
+    monkeypatch.setattr(data_store, "reject_listing", mock_reject)
+
+    # Patch telegram_client functions
+    mock_answer = MagicMock(return_value=None)
+    mock_edit = MagicMock(return_value=None)
+    mock_reject_prompt = MagicMock(return_value=None)
+    monkeypatch.setattr(telegram_client, "answer_callback_query", mock_answer)
+    monkeypatch.setattr(telegram_client, "edit_card_resolved", mock_edit)
+    monkeypatch.setattr(telegram_client, "send_rejection_prompt", mock_reject_prompt)
+
+    cq = {"id": "cq-2", "data": "rr:price:1234567", "message": {"chat": {"id": 12345}, "message_id": 42}}
+    agent_job.process_pending_action(cq)
+
+    mock_reject.assert_called_once_with("1234567", "price")
+    assert mock_edit.called
+    resolved_caption = mock_edit.call_args[0][1]
+    assert resolved_caption.startswith("❌ Rejected: Price")
 
 
 @pytest.mark.xfail(reason="pending Phase 2 plan 03 implementation", strict=False)
