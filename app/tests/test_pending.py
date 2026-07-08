@@ -8,9 +8,18 @@ def test_ingest_writes_to_pending():
     assert False
 
 
-@pytest.mark.xfail(reason="pending Phase 2 plan 01 implementation", strict=False)
-def test_data_model_keys():
-    assert False
+def test_data_model_keys(tmp_agent_state):
+    """QUEUE-01: DEFAULT_APP_DATA includes pending[] and rejected[] (D-01, VALIDATION 2-01-02)."""
+    import data_store  # noqa: PLC0415
+
+    data = data_store.load_app_data()
+    assert "pending" in data
+    assert "rejected" in data
+    assert data["pending"] == []
+    assert data["rejected"] == []
+    assert "properties" in data
+    assert "checklists" in data
+    assert "settings" in data
 
 
 @pytest.mark.xfail(reason="pending Phase 2 plan 02 implementation", strict=False)

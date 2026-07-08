@@ -41,7 +41,13 @@ DEFAULT_PROPERTIES = [
     {"id":"retke-tee-22", "name":"Retke tee 22", "district":"Mustamäe", "url":"", "price":175000, "area":74.7, "rooms":4, "pricePerSqm":2343, "year":"1970", "material":"panel", "notes":"Top floor, free parking. Smallest down-payment gap. Strong candidate."}
 ]
 
-DEFAULT_APP_DATA = {"properties": DEFAULT_PROPERTIES, "checklists": {}, "settings": {}}
+DEFAULT_APP_DATA = {
+    "properties": DEFAULT_PROPERTIES,
+    "checklists": {},
+    "settings": {},
+    "pending": [],
+    "rejected": [],
+}
 DEFAULT_AGENT_STATE = {
     "seen_listing_ids": [],
     "pending_drafts": {},
@@ -78,6 +84,8 @@ def load_app_data():
         data.setdefault("properties", [])
         data.setdefault("checklists", {})
         data.setdefault("settings", {})
+        data.setdefault("pending", [])
+        data.setdefault("rejected", [])
         return data
 
 
@@ -95,6 +103,65 @@ def add_property_if_new(prop: dict) -> bool:
         data["properties"].append(prop)
         save_app_data(data)
         return True
+
+
+def add_to_pending(entry: dict) -> bool:
+    """Write a pending listing entry. Returns False if already in pending or properties (per D-05)."""
+    with _lock:
+        data = load_app_data()
+        listing_id = entry.get("id")
+        if any(e.get("id") == listing_id for e in data["pending"]):
+            return False
+        if any(p.get("id") == listing_id for p in data["properties"]):
+            return False
+        data["pending"].append(entry)
+        save_app_data(data)
+        return True
+
+
+def load_pending() -> list:
+    """Return the current pending queue (thread-safe read under _lock)."""
+    with _lock:
+        return load_app_data().get("pending", [])
+
+
+def _pending_to_property(entry: dict) -> dict:
+    """Convert a pending listing entry (already a dict) to the dossier property schema.
+
+    Mirrors _listing_to_property in ingest_handler.py but operates on the
+    already-serialised pending entry dict rather than a Listing dataclass instance.
+    Carries over draft_body, contact_email, draft_subject so POST /api/draft/<id>
+    can access them without a second AI call (per D-15).
+    """
+    verdict = entry.get("verdict", "")
+    strengths = entry.get("strengths", [])
+    concerns = entry.get("concerns", [])
+    score = entry.get("score", 0)
+    notes = f"[Agent, score {score}/100] {verdict}"
+    if strengths:
+        notes += " Strengths: " + "; ".join(strengths) + "."
+    if concerns:
+        notes += " Concerns: " + "; ".join(concerns) + "."
+
+    listing_id = entry.get("id", "")
+    prop = {
+        "id": listing_id,
+        "name": entry.get("title") or ("kv.ee #" + listing_id),
+        "district": "",
+        "url": entry.get("url", ""),
+        "price": entry.get("price_eur") or 0,
+        "area": entry.get("area_sqm") or 0,
+        "rooms": entry.get("rooms") or 0,
+        "pricePerSqm": entry.get("price_per_sqm") or 0,
+        "year": str(entry.get("year_built")) if entry.get("year_built") else "",
+        "material": entry.get("material") or "",
+        "notes": notes,
+        # Carry over draft fields for POST /api/draft/<id> (D-15)
+        "draft_body": entry.get("draft_body", ""),
+        "contact_email": entry.get("contact_email", ""),
+        "draft_subject": entry.get("draft_subject", ""),
+    }
+    return prop
 
 
 def load_agent_state():
