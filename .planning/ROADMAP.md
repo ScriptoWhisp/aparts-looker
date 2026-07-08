@@ -61,14 +61,24 @@ Plans:
   4. Approving a listing via either Telegram or the web app moves it to the main dossier list immediately.
   5. On approval, the AI generates a draft outreach email to the mäkler; the draft is saved but not sent until Daniel runs /send <id>.
 
-**Plans:** TBD
+**Plans:** 4 plans
 
 Plans:
+**Wave 1**
 
-- [ ] 02-01: Add PENDING state to data model; update ingest path to route new listings into pending queue
-- [ ] 02-02: Telegram queue commands — compact pending card with inline /approve /reject /more; /send <id> flow
-- [ ] 02-03: Web app Pending tab — listing detail view with approve/reject actions and rejection reason capture
-- [ ] 02-04: Approval-gated email drafting — trigger AI email draft on approval, extend /send flow
+- [ ] 02-01-PLAN.md — Data model + Wave 0 tests: extend data_store with pending[]/rejected[]; rewire ingest_handler to write pending entries (QUEUE-01)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 02-02-PLAN.md — Telegram approval slice: sendPhoto inline keyboard, callback_query dispatcher, approve_listing/reject_listing (QUEUE-02, QUEUE-04, QUEUE-05 via Telegram)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 02-03-PLAN.md — Web UI Pending tab: GET/POST /api/pending endpoints + static Pending tab with approve/reject reason picker (QUEUE-03, QUEUE-04, QUEUE-05 via browser)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 02-04-PLAN.md — Opt-in email draft: POST /api/draft/{id} + Draft email button in dossier; /send <id> unchanged (QUEUE-06, QUEUE-07)
 
 ### Phase 3: AI Quality & Price Intelligence
 
@@ -174,7 +184,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Scraper Architecture Split | 3/3 | Complete    | 2026-07-07 |
-| 2. Queue & Approval Workflow | 0/4 | Not started | - |
+| 2. Queue & Approval Workflow | 0/4 | Planned | - |
 | 3. AI Quality & Price Intelligence | 0/4 | Not started | - |
 | 4. Additional Scraper Sources | 0/3 | Not started | - |
 | 5. Map & Overview UI | 0/5 | Not started | - |
