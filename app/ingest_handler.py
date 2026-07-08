@@ -38,6 +38,77 @@ def _deserialize_listing(data: dict) -> Listing:
     return Listing(**known)
 
 
+def _build_context_prefix(listing: Listing, data: dict) -> str:
+    """Assemble calibration anchors and district price/m² line for the evaluation prompt.
+
+    Prepends top 2–3 scored properties[] entries (sorted by score descending) as anchor
+    reference points so Claude scores against concrete examples rather than in a vacuum
+    (D-01, D-02, D-03, EVAL-01). Also appends a district average line when other stored
+    entries share the listing's district (D-04, D-05, EVAL-03).
+
+    Returns "" when fewer than 2 scored anchors exist (D-02) or on any exception (never-raise).
+    Note: the Listing dataclass has no district field — district is inferred via getattr with
+    empty-string fallback (RESEARCH Pitfall 2).
+    """
+    try:
+        props = data.get("properties", [])
+        pending = data.get("pending", [])
+
+        # Anchors: top 2–3 properties[] entries with a positive integer score (D-01)
+        scored = sorted(
+            [p for p in props if isinstance(p.get("score"), int) and p["score"] > 0],
+            key=lambda p: p["score"],
+            reverse=True,
+        )[:3]
+
+        if len(scored) < 2:
+            anchor_block = ""
+        else:
+            lines = [
+                "Here are listings Daniel has previously approved, with their AI scores, "
+                "as calibration reference:\n\n"
+            ]
+            for i, anchor in enumerate(scored, 1):
+                lines.append(
+                    f"Anchor {i} — {anchor.get('name', '')} ({anchor.get('district', '')})\n"
+                    f"Score: {anchor['score']}/100 | "
+                    f"{anchor.get('rooms', '?')} rooms, {anchor.get('area', '?')} m², "
+                    f"{anchor.get('pricePerSqm', '?')} EUR/m², "
+                    f"material: {anchor.get('material', '?')}\n\n"
+                )
+            lines.append("Use these as reference points when scoring the new listing below.\n\n")
+            anchor_block = "".join(lines)
+
+        # District average: collect price/m² from all stored entries matching listing's district.
+        # Listing dataclass lacks district field — use getattr with empty-string default (RESEARCH Pitfall 2).
+        dist = getattr(listing, "district", "")
+        if dist:
+            all_entries = list(props) + list(pending)
+            # properties[] use camelCase (pricePerSqm); pending[] use snake_case (price_per_sqm)
+            district_sqm = [
+                e.get("pricePerSqm") or e.get("price_per_sqm")
+                for e in all_entries
+                if (e.get("district") or "") == dist
+                and (e.get("pricePerSqm") or e.get("price_per_sqm"))
+            ]
+            if district_sqm:
+                avg = sum(district_sqm) / len(district_sqm)
+                district_line = (
+                    f"District price/m² average ({dist}, from {len(district_sqm)} seen listings): "
+                    f"{avg:.0f} EUR/m²\n\n"
+                )
+            else:
+                district_line = ""
+        else:
+            district_line = ""
+
+        return anchor_block + district_line
+
+    except Exception:
+        log.exception("_build_context_prefix failed — proceeding without context")
+        return ""
+
+
 def process_ingest_batch(listing_dicts: list[dict]) -> dict:
     """Filter, dedup, evaluate, and notify for a batch of Listing dicts POSTed by the mini PC.
 
@@ -88,7 +159,11 @@ def process_ingest_batch(listing_dicts: list[dict]) -> dict:
 
             try:
                 log.info("Evaluating listing %s: %s", listing.id, listing.title)
-                evaluation = evaluate_listing(listing)
+                # Phase 3: build calibration context (anchors + district avg) before Claude call.
+                # load_app_data() is safe here — data_store._lock is RLock (reentrant, D-04).
+                app_data = data_store.load_app_data()
+                context_prefix = _build_context_prefix(listing, app_data)
+                evaluation = evaluate_listing(listing, context_prefix)
                 log.info("Score: %s/100 — %s", evaluation.get("score"), evaluation.get("verdict"))
 
                 # Build the pending entry (D-02): full Listing fields + evaluation + metadata.

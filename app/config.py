@@ -26,6 +26,7 @@ MIN_ROOMS = int(os.environ.get("MIN_ROOMS", "2"))
 MAX_PRICE_EUR = int(os.environ.get("MAX_PRICE_EUR", "260000"))
 
 CHECK_INTERVAL_HOURS = float(os.environ.get("CHECK_INTERVAL_HOURS", "2"))
+PRICE_DROP_THRESHOLD = float(os.environ.get("PRICE_DROP_THRESHOLD", "0.05"))
 
 INGEST_TOKEN = os.environ.get("INGEST_TOKEN", "")
 WEB_BASE_URL = os.environ.get("WEB_BASE_URL", "")
