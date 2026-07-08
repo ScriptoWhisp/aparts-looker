@@ -1014,6 +1014,10 @@
     +     '<button type="button" class="link-btn" style="flex:1;text-align:center;" data-action="refresh-data">\u21bb Обновить</button>'
     +     '<button type="button" class="link-btn" style="flex:1;text-align:center;" data-action="check-now">Проверить kv.ee сейчас</button>'
     +   '</div>'
+    +   '<div style="display:flex; gap:6px;">'
+    +     '<button type="button" class="link-btn" id="tab-btn-dossier" style="flex:1;text-align:center;background:var(--blueprint);color:#fff;" data-action="show-dossier-tab">Досье</button>'
+    +     '<button type="button" class="link-btn" id="tab-btn-pending" style="flex:1;text-align:center;" data-action="show-pending-tab">Pending</button>'
+    +   '</div>'
     +   '<div id="global-notice" class="global-notice"></div>'
     +   '<div class="prop-list" id="sidebar-list"></div>'
     + '</div>'
@@ -1021,6 +1025,246 @@
 
   renderSidebarAddForm();
   loadData();
+
+
+  // Tab button visual state helper (called by the pending tab module)
+  window._setActiveTabButton = function(tabName) {
+    var dBtn = document.getElementById("tab-btn-dossier");
+    var pBtn = document.getElementById("tab-btn-pending");
+    if (!dBtn || !pBtn) return;
+    if (tabName === "pending") {
+      dBtn.style.background = "";
+      dBtn.style.color = "";
+      pBtn.style.background = "var(--blueprint)";
+      pBtn.style.color = "#fff";
+    } else {
+      dBtn.style.background = "var(--blueprint)";
+      dBtn.style.color = "#fff";
+      pBtn.style.background = "";
+      pBtn.style.color = "";
+    }
+  };
+
+  // Handle dossier tab switch back from pending view
+  app.addEventListener("click", function(eDossier) {
+    var tDossier = eDossier.target.closest("[data-action]");
+    if (tDossier && tDossier.dataset.action === "show-dossier-tab") {
+      window._setActiveTabButton("dossier");
+      renderApp();
+    }
+  });
+
+
+})();
+</script>
+<script>
+/*
+ * Phase 02 Plan 03 — pending queue tab (fetch, render, approve, reject reason picker)
+ */
+(function() {
+  "use strict";
+
+  /* Show the Pending tab — update active state and render */
+  function showPendingTab() {
+    if (window._setActiveTabButton) window._setActiveTabButton("pending");
+    renderPendingTab();
+  }
+
+  /* Fetch /api/pending and render the result into #main-content */
+  function renderPendingTab() {
+    var main = document.getElementById("main-content");
+    if (!main) return;
+
+    while (main.firstChild) main.removeChild(main.firstChild);
+    var loadingDiv = document.createElement("div");
+    loadingDiv.className = "empty-state";
+    var loadingText = document.createElement("div");
+    loadingText.className = "big";
+    loadingText.textContent = "Loading pending listings…";
+    loadingDiv.appendChild(loadingText);
+    main.appendChild(loadingDiv);
+
+    fetch("/api/pending")
+      .then(function(r) {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      })
+      .then(function(data) {
+        renderPendingList(main, data.pending || []);
+      })
+      .catch(function() {
+        while (main.firstChild) main.removeChild(main.firstChild);
+        var errDiv = document.createElement("div");
+        errDiv.className = "empty-state";
+        var errBig = document.createElement("div");
+        errBig.className = "big";
+        errBig.textContent = "Failed to load pending — retry";
+        var retryBtn = document.createElement("button");
+        retryBtn.type = "button";
+        retryBtn.className = "link-btn";
+        retryBtn.style.marginTop = "12px";
+        retryBtn.textContent = "Retry";
+        retryBtn.addEventListener("click", renderPendingTab);
+        errDiv.appendChild(errBig);
+        errDiv.appendChild(retryBtn);
+        main.appendChild(errDiv);
+      });
+  }
+
+  /* Render list of entries into the container element */
+  function renderPendingList(container, entries) {
+    while (container.firstChild) container.removeChild(container.firstChild);
+
+    var header = document.createElement("div");
+    header.className = "dossier-head";
+    var headerTitle = document.createElement("div");
+    headerTitle.style.fontFamily = "var(--font-display)";
+    headerTitle.style.fontWeight = "700";
+    headerTitle.style.fontSize = "22px";
+    headerTitle.textContent = "Pending Listings";
+    header.appendChild(headerTitle);
+    container.appendChild(header);
+
+    if (entries.length === 0) {
+      var emptyDiv = document.createElement("div");
+      emptyDiv.className = "empty-state";
+      emptyDiv.textContent = "No pending listings — new listings will appear here after they are scraped and evaluated.";
+      container.appendChild(emptyDiv);
+      return;
+    }
+
+    entries.forEach(function(entry) {
+      container.appendChild(buildPendingCard(entry));
+    });
+  }
+
+  /* Build a card element for one pending listing (textContent only, no innerHTML for user data) */
+  function buildPendingCard(entry) {
+    var card = document.createElement("div");
+    card.style.background = "var(--paper-card)";
+    card.style.border = "1px solid var(--line)";
+    card.style.borderRadius = "var(--radius)";
+    card.style.padding = "16px";
+    card.style.marginBottom = "14px";
+
+    if (entry.image_url) {
+      var img = document.createElement("img");
+      img.src = entry.image_url;
+      img.alt = "";
+      img.style.width = "100%";
+      img.style.maxHeight = "220px";
+      img.style.objectFit = "cover";
+      img.style.borderRadius = "var(--radius)";
+      img.style.marginBottom = "12px";
+      card.appendChild(img);
+    }
+
+    var cardHeader = document.createElement("div");
+    cardHeader.style.fontWeight = "700";
+    cardHeader.style.fontSize = "15px";
+    cardHeader.style.marginBottom = "6px";
+    cardHeader.textContent = (entry.score != null ? entry.score + "/100" : "?/100") + " — " + (entry.title || entry.url || "");
+    card.appendChild(cardHeader);
+
+    var meta = document.createElement("div");
+    meta.style.fontFamily = "var(--font-mono)";
+    meta.style.fontSize = "11px";
+    meta.style.color = "var(--ink-soft)";
+    meta.style.marginBottom = "10px";
+    var metaParts = [
+      entry.verdict || "",
+      entry.price_eur ? (Number(entry.price_eur).toLocaleString("et-EE") + " €") : "",
+      entry.price_per_sqm ? (entry.price_per_sqm + " €/m²") : "",
+      entry.area_sqm ? (entry.area_sqm + " m²") : "",
+      entry.rooms ? (entry.rooms + " rooms") : ""
+    ].filter(Boolean);
+    meta.textContent = metaParts.join(" · ");
+    card.appendChild(meta);
+
+    var actionRow = document.createElement("div");
+    actionRow.style.display = "flex";
+    actionRow.style.gap = "8px";
+    actionRow.style.alignItems = "center";
+    actionRow.style.flexWrap = "wrap";
+
+    var approveBtn = document.createElement("button");
+    approveBtn.type = "button";
+    approveBtn.className = "btn-mini primary";
+    approveBtn.textContent = "Approve";
+    approveBtn.addEventListener("click", function() { approvePending(entry.id); });
+    actionRow.appendChild(approveBtn);
+
+    var rejectBtn = document.createElement("button");
+    rejectBtn.type = "button";
+    rejectBtn.className = "btn-mini";
+    rejectBtn.textContent = "Reject";
+    rejectBtn.addEventListener("click", function() { showRejectPicker(entry.id, actionRow); });
+    actionRow.appendChild(rejectBtn);
+
+    card.appendChild(actionRow);
+    return card;
+  }
+
+  /* POST approve then re-render pending tab */
+  function approvePending(listingId) {
+    fetch("/api/pending/" + encodeURIComponent(listingId) + "/approve", { method: "POST" })
+      .then(function(r) { return r.json(); })
+      .then(function(d) { if (d.ok) renderPendingTab(); })
+      .catch(function() { renderPendingTab(); });
+  }
+
+  /* Reveal inline 4-reason picker below action row */
+  function showRejectPicker(listingId, actionRow) {
+    var existing = actionRow.querySelector(".reject-picker");
+    if (existing) { existing.remove(); return; }
+
+    var picker = document.createElement("div");
+    picker.className = "reject-picker";
+    picker.style.display = "flex";
+    picker.style.gap = "6px";
+    picker.style.flexWrap = "wrap";
+    picker.style.marginTop = "6px";
+    picker.style.width = "100%";
+
+    [
+      { label: "Price",     value: "price"     },
+      { label: "Location",  value: "location"  },
+      { label: "Condition", value: "condition" },
+      { label: "Other",     value: "other"     }
+    ].forEach(function(r) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn-mini";
+      btn.textContent = r.label;
+      btn.addEventListener("click", function() { rejectPending(listingId, r.value); });
+      picker.appendChild(btn);
+    });
+
+    actionRow.appendChild(picker);
+  }
+
+  /* POST reject with reason then re-render */
+  function rejectPending(listingId, reason) {
+    fetch("/api/pending/" + encodeURIComponent(listingId) + "/reject", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason: reason })
+    })
+      .then(function(r) { return r.json(); })
+      .then(function(d) { if (d.ok) renderPendingTab(); })
+      .catch(function() { renderPendingTab(); });
+  }
+
+  /* Wire the "show-pending-tab" data-action click */
+  var appEl = document.getElementById("app");
+  if (appEl) {
+    appEl.addEventListener("click", function(e) {
+      var t = e.target.closest("[data-action]");
+      if (t && t.dataset.action === "show-pending-tab") {
+        showPendingTab();
+      }
+    });
+  }
 
 })();
 </script>
