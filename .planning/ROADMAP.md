@@ -95,7 +95,7 @@ Plans:
   5. When a seen listing's price drops 5% or more since last scrape, it is automatically re-evaluated and placed back in the PENDING queue.
   6. Listings show days-on-market in the dossier card; listings whose URL returns 404 are marked as removed with the date.
 
-**Plans:** 2/4 plans executed
+**Plans:** 3/4 plans executed
 
 Plans:
 **Wave 1**
@@ -108,7 +108,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 03-03-PLAN.md — Price history tracking: data model migration, record_price_in_data + get_price_history, days-on-market + price history list in card (INTEL-01, INTEL-02)
+- [x] 03-03-PLAN.md — Price history tracking: data model migration, record_price_in_data + get_price_history, days-on-market + price history list in card (INTEL-01, INTEL-02)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
@@ -195,7 +195,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 |-------|----------------|--------|-----------|
 | 1. Scraper Architecture Split | 3/3 | Complete    | 2026-07-07 |
 | 2. Queue & Approval Workflow | 4/4 | Complete    | 2026-07-08 |
-| 3. AI Quality & Price Intelligence | 2/4 | In Progress|  |
+| 3. AI Quality & Price Intelligence | 3/4 | In Progress|  |
 | 4. Additional Scraper Sources | 0/3 | Not started | - |
 | 5. Map & Overview UI | 0/5 | Not started | - |
 | 6. Viewing Workflow & Extras | 0/5 | Not started | - |
