@@ -7,13 +7,13 @@
 
 ### Queue & Approval Workflow
 
-- [ ] **QUEUE-01**: New scraped listings enter a PENDING queue state, not the main dossier list
-- [ ] **QUEUE-02**: Telegram card for pending listings is compact: score + 1-line verdict + price/m² + /approve /reject /more commands
-- [ ] **QUEUE-03**: Web app shows a "Pending" tab with full listing detail and approve/reject actions
-- [ ] **QUEUE-04**: Approving a listing moves it to the main dossier list
-- [ ] **QUEUE-05**: Rejecting a listing archives it with a reason (price, location, other)
-- [ ] **QUEUE-06**: On approval, AI drafts an outreach email to the mäkler (not triggered automatically by score)
-- [ ] **QUEUE-07**: Email draft requires Daniel's explicit `/send <id>` approval before sending
+- [x] **QUEUE-01**: New scraped listings enter a PENDING queue state, not the main dossier list
+- [x] **QUEUE-02**: Telegram card for pending listings is compact: score + 1-line verdict + price/m² + /approve /reject /more commands
+- [x] **QUEUE-03**: Web app shows a "Pending" tab with full listing detail and approve/reject actions
+- [x] **QUEUE-04**: Approving a listing moves it to the main dossier list
+- [x] **QUEUE-05**: Rejecting a listing archives it with a reason (price, location, other)
+- [x] **QUEUE-06**: On approval, AI drafts an outreach email to the mäkler (not triggered automatically by score)
+- [x] **QUEUE-07**: Email draft requires Daniel's explicit `/send <id>` approval before sending
 
 ### AI Evaluation Quality
 
@@ -101,13 +101,13 @@
 | ARCH-02 | Phase 1 | Complete |
 | ARCH-03 | Phase 1 | Complete |
 | ARCH-04 | Phase 1 | Complete |
-| QUEUE-01 | Phase 2 | Pending |
-| QUEUE-02 | Phase 2 | Pending |
-| QUEUE-03 | Phase 2 | Pending |
-| QUEUE-04 | Phase 2 | Pending |
-| QUEUE-05 | Phase 2 | Pending |
-| QUEUE-06 | Phase 2 | Pending |
-| QUEUE-07 | Phase 2 | Pending |
+| QUEUE-01 | Phase 2 | Complete |
+| QUEUE-02 | Phase 2 | Complete |
+| QUEUE-03 | Phase 2 | Complete |
+| QUEUE-04 | Phase 2 | Complete |
+| QUEUE-05 | Phase 2 | Complete |
+| QUEUE-06 | Phase 2 | Complete |
+| QUEUE-07 | Phase 2 | Complete |
 | EVAL-01 | Phase 3 | Pending |
 | EVAL-02 | Phase 3 | Pending |
 | EVAL-03 | Phase 3 | Pending |
