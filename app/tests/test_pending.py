@@ -301,11 +301,119 @@ def test_reject_with_reason(client, tmp_agent_state):
     assert rejected2[0]["rejection_reason"] == "other"
 
 
-@pytest.mark.xfail(reason="pending Phase 2 plan 04 implementation", strict=False)
-def test_draft_endpoint():
-    assert False
+def test_draft_endpoint(client, tmp_agent_state, mock_gmail):
+    """QUEUE-06: POST /api/draft/<id> creates Gmail draft and queues into pending_drafts.
+
+    Three sub-assertions:
+    1. Happy path: listing with contact_email → ok=True, gmail called, pending_drafts populated.
+    2. No-email fallback: listing with empty contact_email → ok=False, reason="no_email".
+    3. Not found: unknown id → 404.
+    """
+    import data_store  # noqa: PLC0415
+
+    # --- 1. Happy path: seed a property with contact_email and draft fields ---
+    with data_store._lock:
+        data = data_store.load_app_data()
+        data["properties"].append({
+            "id": "1234567",
+            "name": "Test",
+            "url": "https://kv.ee/1234567.html",
+            "price": 200000,
+            "contact_email": "agent@test.ee",
+            "draft_subject": "Test",
+            "draft_body": "body",
+        })
+        data_store.save_app_data(data)
+
+    resp = client.post("/api/draft/1234567")
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is True
+
+    # Verify gmail_client.create_draft was called with correct args
+    mock_gmail.assert_called_once_with("agent@test.ee", "Test", "body")
+
+    # Verify pending_drafts was populated
+    state = data_store.load_agent_state()
+    assert "1234567" in state["pending_drafts"]
+    assert state["pending_drafts"]["1234567"]["to_email"] == "agent@test.ee"
+    assert state["pending_drafts"]["1234567"]["subject"] == "Test"
+    assert state["pending_drafts"]["1234567"]["body"] == "body"
+
+    # --- 2. No-email fallback: seed a property with empty contact_email ---
+    with data_store._lock:
+        data2 = data_store.load_app_data()
+        data2["properties"].append({
+            "id": "9999",
+            "name": "No Email Listing",
+            "url": "https://kv.ee/9999.html",
+            "price": 100000,
+            "contact_email": "",
+            "draft_subject": "No email",
+            "draft_body": "body",
+        })
+        data_store.save_app_data(data2)
+
+    resp2 = client.post("/api/draft/9999")
+    assert resp2.status_code == 200
+    assert resp2.json() == {"ok": False, "reason": "no_email"}
+
+    # --- 3. Not found: unknown listing id → 404 ---
+    resp3 = client.post("/api/draft/notthere")
+    assert resp3.status_code == 404
 
 
-@pytest.mark.xfail(reason="pending Phase 2 plan 04 implementation", strict=False)
-def test_send_command_after_draft():
-    assert False
+def test_send_command_after_draft(tmp_agent_state, monkeypatch):
+    """QUEUE-07: process_send_commands consumes pending_drafts and sends via SMTP.
+
+    Seeds agent_state with a queued draft, monkeypatches Telegram + Gmail,
+    calls process_send_commands, and asserts send_email was called and the
+    draft entry was removed (pending_drafts consumed after successful send).
+    """
+    from unittest.mock import MagicMock  # noqa: PLC0415
+
+    import agent_job  # noqa: PLC0415
+    import data_store  # noqa: PLC0415
+    import gmail_client  # noqa: PLC0415
+    import telegram_client  # noqa: PLC0415
+
+    # Seed pending_drafts with a queued draft
+    with data_store._lock:
+        state = data_store.load_agent_state()
+        state["pending_drafts"]["1234567"] = {
+            "to_email": "agent@test.ee",
+            "subject": "Test",
+            "body": "body",
+            "url": "https://kv.ee/1234567.html",
+        }
+        data_store.save_agent_state(state)
+
+    # Load state (as run_check does) to pass to process_send_commands
+    state = data_store.load_agent_state()
+
+    # Monkeypatch telegram_client.get_new_updates to return a /send 1234567 command
+    mock_get_updates = MagicMock(return_value=([{"update_id": 1, "message": {"text": "/send 1234567"}}], 1))
+    monkeypatch.setattr(telegram_client, "get_new_updates", mock_get_updates)
+    monkeypatch.setattr(agent_job, "get_new_updates", mock_get_updates)
+
+    # Monkeypatch gmail_client.send_email to return True
+    mock_send_email = MagicMock(return_value=True)
+    monkeypatch.setattr(gmail_client, "send_email", mock_send_email)
+    monkeypatch.setattr(agent_job, "send_email", mock_send_email)
+
+    # Monkeypatch telegram_client.send_message to suppress output
+    mock_send_msg = MagicMock(return_value=None)
+    monkeypatch.setattr(telegram_client, "send_message", mock_send_msg)
+    monkeypatch.setattr(agent_job, "send_message", mock_send_msg)
+
+    # Monkeypatch extract_send_commands to return our listing id
+    mock_extract = MagicMock(return_value=["1234567"])
+    monkeypatch.setattr(telegram_client, "extract_send_commands", mock_extract)
+    monkeypatch.setattr(agent_job, "extract_send_commands", mock_extract)
+
+    agent_job.process_send_commands(state)
+
+    # Verify send_email was called with the correct args
+    mock_send_email.assert_called_once_with("agent@test.ee", "Test", "body")
+
+    # Verify the draft was consumed from pending_drafts
+    assert "1234567" not in state["pending_drafts"]
