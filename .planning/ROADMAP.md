@@ -61,7 +61,7 @@ Plans:
   4. Approving a listing via either Telegram or the web app moves it to the main dossier list immediately.
   5. On approval, the AI generates a draft outreach email to the mäkler; the draft is saved but not sent until Daniel runs /send <id>.
 
-**Plans:** 1/4 plans executed
+**Plans:** 2/4 plans executed
 
 Plans:
 **Wave 1**
@@ -70,7 +70,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 02-02-PLAN.md — Telegram approval slice: sendPhoto inline keyboard, callback_query dispatcher, approve_listing/reject_listing (QUEUE-02, QUEUE-04, QUEUE-05 via Telegram)
+- [x] 02-02-PLAN.md — Telegram approval slice: sendPhoto inline keyboard, callback_query dispatcher, approve_listing/reject_listing (QUEUE-02, QUEUE-04, QUEUE-05 via Telegram)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -184,7 +184,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Scraper Architecture Split | 3/3 | Complete    | 2026-07-07 |
-| 2. Queue & Approval Workflow | 1/4 | In Progress|  |
+| 2. Queue & Approval Workflow | 2/4 | In Progress|  |
 | 3. AI Quality & Price Intelligence | 0/4 | Not started | - |
 | 4. Additional Scraper Sources | 0/3 | Not started | - |
 | 5. Map & Overview UI | 0/5 | Not started | - |
