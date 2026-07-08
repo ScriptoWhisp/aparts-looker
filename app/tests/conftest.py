@@ -112,3 +112,51 @@ def mock_telegram(monkeypatch):
 
     ns = types.SimpleNamespace(send_message=mock_send, send_photo=mock_photo)
     yield ns
+
+
+@pytest.fixture
+def mock_send_pending_card(monkeypatch):
+    """Monkeypatch send_pending_card to return (42, -100) without real Telegram API calls.
+
+    Patches:
+      telegram_client.send_pending_card
+      ingest_handler.send_pending_card   (in-module reference after Task 3 lands)
+
+    Yields the MagicMock so tests can assert on call counts and arguments.
+    """
+    mock = MagicMock(return_value=(42, -100))
+
+    import telegram_client  # noqa: PLC0415
+    import ingest_handler  # noqa: PLC0415
+
+    monkeypatch.setattr(telegram_client, "send_pending_card", mock)
+    # ingest_handler uses `import telegram_client` + getattr; patch module attribute if present
+    if hasattr(ingest_handler, "send_pending_card"):
+        monkeypatch.setattr(ingest_handler, "send_pending_card", mock)
+
+    yield mock
+
+
+@pytest.fixture
+def mock_gmail(monkeypatch):
+    """Monkeypatch gmail_client.create_draft to return True without IMAP calls.
+
+    Patches:
+      gmail_client.create_draft
+      main.gmail_client.create_draft  (if main.py imports gmail_client as a module)
+
+    Yields the MagicMock so tests can assert on call counts and arguments.
+    """
+    import gmail_client  # noqa: PLC0415
+
+    mock = MagicMock(return_value=True)
+    monkeypatch.setattr(gmail_client, "create_draft", mock)
+
+    try:
+        from importlib import import_module  # noqa: PLC0415
+        main_mod = import_module("main")
+        monkeypatch.setattr(main_mod.gmail_client, "create_draft", mock)
+    except (ImportError, AttributeError):
+        pass  # main.py may not import gmail_client yet — safe to skip
+
+    yield mock
