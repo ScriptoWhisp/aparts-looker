@@ -469,7 +469,7 @@
 
   /* ============================== STATE ============================== */
 
-  var state = { properties:[], checklists:{}, selectedId:null };
+  var state = { properties:[], checklists:{}, selectedId:null, priceHistory:{} };
   var ui = { expanded:{quality:false, ku:false, sellerQuestions:false, deepCheck:false, onsite:false, finance:true},
              addingProperty:false, pendingDeleteId:null };
   var saveTimer = null, sidebarTimer = null;
@@ -500,6 +500,7 @@
       var parsed = await resp.json();
       state.properties = (parsed.properties && parsed.properties.length) ? parsed.properties : [];
       state.checklists = parsed.checklists || {};
+      state.priceHistory = parsed.price_history || {};  // D-11, INTEL-01: price history from server
     } catch(e){
       console.error("load failed", e);
       setGlobalNotice("Не получилось загрузить данные с сервера — проверь, что бэкенд запущен.", "err");
@@ -812,6 +813,24 @@
       + renderSection("onsite");
 
     el.innerHTML = head + overview + notes + sectionsHtml;
+
+    // Append days-on-market and price history AFTER innerHTML so we use safe DOM insertion.
+    // Target .head-actions which was just rendered into el via innerHTML (D-13, INTEL-02, T-03-12).
+    var headActions = el.querySelector(".head-actions");
+    if (headActions) {
+      var dom = daysOnMarket(p.id);
+      if (dom !== null) {
+        var domLabel = document.createElement("div");
+        domLabel.style.fontSize = "11px";
+        domLabel.style.color = "var(--ink-soft)";
+        domLabel.style.fontFamily = "var(--font-mono)";
+        domLabel.style.marginTop = "4px";
+        domLabel.textContent = "Days on market: " + dom + " days";
+        headActions.appendChild(domLabel);
+      }
+      var histEl = buildPriceHistoryEl(p.id);
+      if (histEl) headActions.appendChild(histEl);
+    }
   }
 
   function renderApp(){ renderSidebar(); renderMain(); }
@@ -1139,6 +1158,40 @@
     });
   }
 
+  /* Days-on-market: today minus the date of the first (oldest) price_history entry.
+     Returns an integer (days) or null when no history exists (D-13, INTEL-02).
+     Date arithmetic uses Math.floor(ms / 86400000) — no locale dependency. */
+  function daysOnMarket(listingId) {
+    var hist = state.priceHistory[listingId];
+    if (!hist || !hist.length) return null;
+    var first = new Date(hist[0].date);
+    var now = new Date();
+    var days = Math.floor((now - first) / 86400000);
+    return days >= 0 ? days : null;
+  }
+
+  /* Build a plain-text price history element for a listing (D-11, INTEL-01, T-03-12).
+     Returns a DOM div with one row per history entry, or null when no history exists.
+     All text written via textContent only — never innerHTML (T-03-12, RESEARCH Pattern 9). */
+  function buildPriceHistoryEl(listingId) {
+    var hist = state.priceHistory[listingId];
+    if (!hist || !hist.length) return null;
+
+    var wrap = document.createElement("div");
+    wrap.style.fontFamily = "var(--font-mono)";
+    wrap.style.fontSize = "11px";
+    wrap.style.color = "var(--ink-soft)";
+    wrap.style.marginTop = "8px";
+
+    hist.forEach(function(entry) {
+      var row = document.createElement("div");
+      row.textContent = entry.date + " — " + Number(entry.price).toLocaleString("et-EE") + " €";
+      wrap.appendChild(row);
+    });
+
+    return wrap;
+  }
+
   /* Build AI checklist badge strip for a listing (EVAL-02, D-08).
      Returns a DOM element or null if no ai_checklist exists.
      Uses textContent exclusively — never innerHTML (Security V5, T-03-07). */
@@ -1222,12 +1275,14 @@
     meta.style.fontSize = "11px";
     meta.style.color = "var(--ink-soft)";
     meta.style.marginBottom = "10px";
+    var domDays = daysOnMarket(entry.id);
     var metaParts = [
       entry.verdict || "",
       entry.price_eur ? (Number(entry.price_eur).toLocaleString("et-EE") + " €") : "",
       entry.price_per_sqm ? (entry.price_per_sqm + " €/m²") : "",
       entry.area_sqm ? (entry.area_sqm + " m²") : "",
-      entry.rooms ? (entry.rooms + " rooms") : ""
+      entry.rooms ? (entry.rooms + " rooms") : "",
+      domDays !== null ? (domDays + " days on market") : ""
     ].filter(Boolean);
     meta.textContent = metaParts.join(" · ");
     card.appendChild(meta);
