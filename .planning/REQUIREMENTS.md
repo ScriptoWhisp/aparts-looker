@@ -24,8 +24,8 @@
 
 ### Price & Listing Intelligence
 
-- [ ] **INTEL-01**: Price history is recorded per listing on every scrape (date + price)
-- [ ] **INTEL-02**: Listing longevity (days on market) is tracked and surfaced in the listing card
+- [x] **INTEL-01**: Price history is recorded per listing on every scrape (date + price)
+- [x] **INTEL-02**: Listing longevity (days on market) is tracked and surfaced in the listing card
 - [ ] **INTEL-03**: When a listing URL returns 404, it is marked as sold/removed in the dossier with the date
 
 ### Source Coverage
@@ -112,8 +112,8 @@
 | EVAL-02 | Phase 3 | Complete |
 | EVAL-03 | Phase 3 | Pending |
 | EVAL-04 | Phase 3 | Pending |
-| INTEL-01 | Phase 3 | Pending |
-| INTEL-02 | Phase 3 | Pending |
+| INTEL-01 | Phase 3 | Complete |
+| INTEL-02 | Phase 3 | Complete |
 | INTEL-03 | Phase 3 | Pending |
 | SRC-01 | Phase 4 | Pending |
 | SRC-02 | Phase 4 | Pending |

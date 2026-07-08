@@ -13,7 +13,7 @@ POST /api/draft/<id> in Plan 02-04 (D-13, D-14).
 import dataclasses
 import logging
 from dataclasses import fields as dc_fields
-from datetime import datetime, timezone
+from datetime import date as _date, datetime, timezone
 
 import config
 import data_store
@@ -148,15 +148,24 @@ def process_ingest_batch(listing_dicts: list[dict]) -> dict:
     concurrent API requests (e.g. /api/check-now) cannot interleave state writes.
     Per RESEARCH Pitfall 5. Never raises — per-listing failures are logged and skipped.
     Returns {"ok": True, "processed": <batch size>}.
+
+    Phase 3 (D-11, D-12): records price for every listing on every scrape run — both
+    known (dedup hit) and new listings. today_str is computed once per batch so a midnight
+    rollover during a large batch doesn't split the same batch's entries across two dates.
     """
     log.info("Ingest batch received: %d listings", len(listing_dicts))
 
     with data_store._lock:
         state = data_store.load_agent_state()
+        # Load app_data once before the loop; reload after sub-helpers that self-save
+        # (add_to_pending, write_checklist_ai) so price_history mutations see their writes.
+        app_data = data_store.load_app_data()
+        # Single date snapshot for the entire batch (D-12, RESEARCH Pattern 5)
+        today_str = _date.today().isoformat()
 
-        for data in listing_dicts:
+        for raw_dict in listing_dicts:
             try:
-                listing = _deserialize_listing(data)
+                listing = _deserialize_listing(raw_dict)
             except (TypeError, KeyError) as exc:
                 log.warning("Malformed listing dict in ingest batch: %s", exc)
                 continue
@@ -164,6 +173,12 @@ def process_ingest_batch(listing_dicts: list[dict]) -> dict:
             # Dedup: compute the canonical object ID for the seen-set check.
             dedup_key = extract_object_id(listing.url) or listing.url
             if dedup_key in set(state["seen_listing_ids"]):
+                # Known listing — record price before skipping (D-12, RESEARCH Pattern 5)
+                if isinstance(listing.price_eur, int) and listing.price_eur > 0:
+                    try:
+                        data_store.record_price_in_data(app_data, listing.id, listing.price_eur, today_str)
+                    except Exception:
+                        log.exception("Price recording failed for known listing %s — skipping", listing.id)
                 continue
 
             # Mark as seen by appending the object ID (mirrors the original agent_job behaviour).
@@ -192,8 +207,7 @@ def process_ingest_batch(listing_dicts: list[dict]) -> dict:
             try:
                 log.info("Evaluating listing %s: %s", listing.id, listing.title)
                 # Phase 3: build calibration context (anchors + district avg) before Claude call.
-                # load_app_data() is safe here — data_store._lock is RLock (reentrant, D-04).
-                app_data = data_store.load_app_data()
+                # app_data already loaded; _lock is RLock so re-entrant reads inside helpers are safe.
                 context_prefix = _build_context_prefix(listing, app_data)
                 evaluation = evaluate_listing(listing, context_prefix)
                 log.info("Score: %s/100 — %s", evaluation.get("score"), evaluation.get("verdict"))
@@ -229,21 +243,34 @@ def process_ingest_batch(listing_dicts: list[dict]) -> dict:
                 _send_card = getattr(telegram_client, "send_pending_card", lambda l, e: (None, None))
                 tg_message_id, tg_chat_id = _send_card(listing, evaluation)
 
+                # Reload app_data to pick up add_to_pending / write_checklist_ai writes.
+                # Also apply the Telegram message_id patch in the same reload so we have a
+                # single consistent state to mutate price_history into (D-12).
+                app_data = data_store.load_app_data()
                 if tg_message_id is not None:
                     # Patch the stored pending entry with the Telegram message reference
                     # so edit_card_resolved can update it after approve/reject.
-                    app_data = data_store.load_app_data()
                     for entry in app_data["pending"]:
                         if entry.get("id") == listing.id:
                             entry["tg_message_id"] = tg_message_id
                             entry["tg_chat_id"] = tg_chat_id
                             break
-                    data_store.save_app_data(app_data)
+
+                # Record initial price for newly-seen listing AFTER the reload so the
+                # mutation lands on the same app_data dict that will be saved at loop end
+                # (D-11, D-12, RESEARCH Pattern 5).
+                if isinstance(listing.price_eur, int) and listing.price_eur > 0:
+                    try:
+                        data_store.record_price_in_data(app_data, listing.id, listing.price_eur, today_str)
+                    except Exception:
+                        log.exception("Price recording failed for new listing %s — skipping", listing.id)
 
             except Exception:
                 log.exception("Failed to process listing %s — skipping", listing.id)
 
         data_store.save_agent_state(state)
+        # Persist accumulated price_history mutations from this batch (D-11, D-12)
+        data_store.save_app_data(app_data)
 
     return {"ok": True, "processed": len(listing_dicts)}
 
