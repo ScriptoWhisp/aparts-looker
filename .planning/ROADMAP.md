@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Scraper Architecture Split** - Mini PC scraper POSTs to VPS; Cloudflare bypass moves off datacenter IP (completed 2026-07-07)
 - [x] **Phase 2: Queue & Approval Workflow** - Every listing enters a pending queue; Daniel approves before it reaches the dossier (completed 2026-07-08)
-- [ ] **Phase 3: AI Quality & Price Intelligence** - Calibrated scoring, structured checklist output, price history, longevity, and re-evaluation on drops
+- [x] **Phase 3: AI Quality & Price Intelligence** - Calibrated scoring, structured checklist output, price history, longevity, and re-evaluation on drops (completed 2026-07-09)
 - [ ] **Phase 4: Additional Scraper Sources** - city24.ee and kinnisvara24.ee added; deduplication across all sources
 - [ ] **Phase 5: Map & Overview UI** - Interactive Tallinn map with score pins, district heat zones, commute isochrone, and redesigned dossier
 - [ ] **Phase 6: Viewing Workflow & Extras** - Scheduled viewings, negotiation briefs, building fund lookup, PDF export
@@ -95,7 +95,7 @@ Plans:
   5. When a seen listing's price drops 5% or more since last scrape, it is automatically re-evaluated and placed back in the PENDING queue.
   6. Listings show days-on-market in the dossier card; listings whose URL returns 404 are marked as removed with the date.
 
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 
 Plans:
 **Wave 1**
@@ -112,7 +112,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 03-04-PLAN.md — Re-evaluation on ≥5% price drop across approved/pending/rejected states + raw_ok=False removed marking (EVAL-04, INTEL-03)
+- [x] 03-04-PLAN.md — Re-evaluation on ≥5% price drop across approved/pending/rejected states + raw_ok=False removed marking (EVAL-04, INTEL-03)
 
 ### Phase 4: Additional Scraper Sources
 
@@ -195,7 +195,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 |-------|----------------|--------|-----------|
 | 1. Scraper Architecture Split | 3/3 | Complete    | 2026-07-07 |
 | 2. Queue & Approval Workflow | 4/4 | Complete    | 2026-07-08 |
-| 3. AI Quality & Price Intelligence | 3/4 | In Progress|  |
+| 3. AI Quality & Price Intelligence | 4/4 | Complete    | 2026-07-09 |
 | 4. Additional Scraper Sources | 0/3 | Not started | - |
 | 5. Map & Overview UI | 0/5 | Not started | - |
 | 6. Viewing Workflow & Extras | 0/5 | Not started | - |
