@@ -2,18 +2,24 @@
 Ingest handler: filter + evaluate + notify pipeline for listings POSTed by the mini PC scraper
 client. Also stores heartbeat state consumed by plan 01-03's scheduler-tick alert checks.
 Extracted from agent_job.process_new_listings() as part of Phase 1 (D-08).
+
+Phase 2 changes (D-03): process_ingest_batch now writes to pending[] via
+data_store.add_to_pending() instead of add_property_if_new(). Telegram notification
+uses send_pending_card (a lazy import via getattr — safe before Plan 02-02 ships).
+The should_draft / create_draft block is removed; draft creation moves to
+POST /api/draft/<id> in Plan 02-04 (D-13, D-14).
 """
 
+import dataclasses
 import logging
 from dataclasses import fields as dc_fields
 from datetime import datetime, timezone
 
 import config
 import data_store
+import telegram_client
 from ai_evaluator import evaluate_listing
-from gmail_client import create_draft
 from kv_listing_parser import Listing, extract_object_id
-from telegram_client import format_listing_card, send_message, send_photo
 
 log = logging.getLogger("ingest_handler")
 
@@ -30,36 +36,6 @@ def _deserialize_listing(data: dict) -> Listing:
     """
     known = {k: v for k, v in data.items() if k in LISTING_FIELD_NAMES}
     return Listing(**known)
-
-
-def _listing_to_property(listing, evaluation) -> dict:
-    """Convert a Listing + evaluation dict to the dossier property schema.
-
-    Moved verbatim from agent_job._listing_to_property (Phase 1, D-08).
-    Lives here alongside the code that calls it.
-    """
-    verdict = evaluation.get("verdict", "")
-    strengths = evaluation.get("strengths", [])
-    concerns = evaluation.get("concerns", [])
-    score = evaluation.get("score", 0)
-    notes = f"[Agent, score {score}/100] {verdict}"
-    if strengths:
-        notes += " Strengths: " + "; ".join(strengths) + "."
-    if concerns:
-        notes += " Concerns: " + "; ".join(concerns) + "."
-    return {
-        "id": listing.id,
-        "name": listing.title or ("kv.ee #" + listing.id),
-        "district": "",
-        "url": listing.url,
-        "price": listing.price_eur or 0,
-        "area": listing.area_sqm or 0,
-        "rooms": listing.rooms or 0,
-        "pricePerSqm": listing.price_per_sqm or 0,
-        "year": str(listing.year_built) if listing.year_built else "",
-        "material": listing.material or "",
-        "notes": notes,
-    }
 
 
 def process_ingest_batch(listing_dicts: list[dict]) -> dict:
@@ -115,28 +91,40 @@ def process_ingest_batch(listing_dicts: list[dict]) -> dict:
                 evaluation = evaluate_listing(listing)
                 log.info("Score: %s/100 — %s", evaluation.get("score"), evaluation.get("verdict"))
 
-                data_store.add_property_if_new(_listing_to_property(listing, evaluation))
+                # Build the pending entry (D-02): full Listing fields + evaluation + metadata.
+                pending_entry = {
+                    **dataclasses.asdict(listing),
+                    "score": evaluation.get("score", 0),
+                    "verdict": evaluation.get("verdict", ""),
+                    "strengths": evaluation.get("strengths", []),
+                    "concerns": evaluation.get("concerns", []),
+                    "draft_subject": (
+                        evaluation.get("draft_subject") or f"Inquiry about {listing.title}"
+                    ),
+                    "draft_body": evaluation.get("draft_body") or "",
+                    "queued_at": datetime.now(timezone.utc).isoformat(),
+                    "tg_message_id": None,
+                    "tg_chat_id": None,
+                }
+                data_store.add_to_pending(pending_entry)
 
-                card_text = format_listing_card(listing, evaluation)
-                if listing.image_url:
-                    send_photo(listing.image_url, card_text)
-                else:
-                    send_message(card_text)
+                # send_pending_card is provided by Plan 02-02. Until then, the lazy
+                # getattr fallback returns (None, None) so this module ships before
+                # telegram_client grows the new function (never-raise contract).
+                _send_card = getattr(telegram_client, "send_pending_card", lambda l, e: (None, None))
+                tg_message_id, tg_chat_id = _send_card(listing, evaluation)
 
-                should_draft = (
-                    evaluation.get("should_draft_email")
-                    and evaluation.get("score", 0) >= config.DRAFT_SCORE_THRESHOLD
-                )
-                if should_draft and listing.contact_email:
-                    subject = evaluation.get("draft_subject") or f"Inquiry about {listing.title}"
-                    body = evaluation.get("draft_body") or ""
-                    if create_draft(listing.contact_email, subject, body):
-                        state["pending_drafts"][listing.id] = {
-                            "to_email": listing.contact_email,
-                            "subject": subject,
-                            "body": body,
-                            "url": listing.url,
-                        }
+                if tg_message_id is not None:
+                    # Patch the stored pending entry with the Telegram message reference
+                    # so edit_card_resolved can update it after approve/reject.
+                    app_data = data_store.load_app_data()
+                    for entry in app_data["pending"]:
+                        if entry.get("id") == listing.id:
+                            entry["tg_message_id"] = tg_message_id
+                            entry["tg_chat_id"] = tg_chat_id
+                            break
+                    data_store.save_app_data(app_data)
+
             except Exception:
                 log.exception("Failed to process listing %s — skipping", listing.id)
 
