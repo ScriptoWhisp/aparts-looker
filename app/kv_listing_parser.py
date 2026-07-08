@@ -65,6 +65,7 @@ class Listing:
     contact_email: Optional[str] = None
     description: str = ""
     image_url: str = ""
+    image_count: int = 0
     raw_ok: bool = True
 
 
@@ -159,6 +160,8 @@ def fetch_listing(url: str, timeout: int = 15, session: requests.Session | None 
     og_image = soup.find("meta", property="og:image")
     if og_image and og_image.get("content"):
         listing.image_url = og_image["content"]
+
+    listing.image_count = len(re.findall(r'https://img-kv\.ee/[^"\']+', resp.text))
 
     # Description: og:description meta tends to be the cleanest single
     # block of ad copy without nav/menu noise.

@@ -25,6 +25,22 @@ against his current search criteria. His profile and criteria:
 
 {BUYER_PROFILE}
 
+SCORING RUBRIC — use the full range, do not cluster around 70:
+  0–30  : Skip entirely. Sold/reserved/incomplete listing, wrong area, way over budget,
+           basement or ground floor with no upside, or data is missing/contradictory.
+  31–49 : Poor fit. Serious red flags (extreme price/m², structural concerns, no parking
+           in a bad location, known problematic building).
+  50–64 : Below average. Passes basic filters but has notable drawbacks that make it
+           an unlikely choice unless nothing better is available.
+  65–74 : Average. Meets most criteria, no standout strengths or fatal flaws.
+           Worth keeping an eye on but not urgent.
+  75–84 : Good. Clear value — competitive price/m², good condition signals, decent
+           location, parking included, or strong renovation upside. Should view soon.
+  85–94 : Very good. Multiple strong signals — low price/m², great location, included
+           parking + storage, healthy building, good floor. Prioritise viewing.
+  95–100: Exceptional. Rare combination of price, location, condition, and extras.
+           Contact agent immediately.
+
 You are given data for a single listing. Return STRICTLY valid JSON (no markdown,
 no ``` fences), with the following fields:
 
