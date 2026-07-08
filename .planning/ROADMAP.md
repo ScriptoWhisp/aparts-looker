@@ -14,7 +14,7 @@ The existing kv.ee scraper + Claude evaluation + Telegram + JSON dossier system 
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Scraper Architecture Split** - Mini PC scraper POSTs to VPS; Cloudflare bypass moves off datacenter IP (completed 2026-07-07)
-- [ ] **Phase 2: Queue & Approval Workflow** - Every listing enters a pending queue; Daniel approves before it reaches the dossier
+- [x] **Phase 2: Queue & Approval Workflow** - Every listing enters a pending queue; Daniel approves before it reaches the dossier (completed 2026-07-08)
 - [ ] **Phase 3: AI Quality & Price Intelligence** - Calibrated scoring, structured checklist output, price history, longevity, and re-evaluation on drops
 - [ ] **Phase 4: Additional Scraper Sources** - city24.ee and kinnisvara24.ee added; deduplication across all sources
 - [ ] **Phase 5: Map & Overview UI** - Interactive Tallinn map with score pins, district heat zones, commute isochrone, and redesigned dossier
@@ -61,7 +61,7 @@ Plans:
   4. Approving a listing via either Telegram or the web app moves it to the main dossier list immediately.
   5. On approval, the AI generates a draft outreach email to the mäkler; the draft is saved but not sent until Daniel runs /send <id>.
 
-**Plans:** 2/4 plans executed
+**Plans:** 4/4 plans complete
 
 Plans:
 **Wave 1**
@@ -74,11 +74,11 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 02-03-PLAN.md — Web UI Pending tab: GET/POST /api/pending endpoints + static Pending tab with approve/reject reason picker (QUEUE-03, QUEUE-04, QUEUE-05 via browser)
+- [x] 02-03-PLAN.md — Web UI Pending tab: GET/POST /api/pending endpoints + static Pending tab with approve/reject reason picker (QUEUE-03, QUEUE-04, QUEUE-05 via browser)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 02-04-PLAN.md — Opt-in email draft: POST /api/draft/{id} + Draft email button in dossier; /send <id> unchanged (QUEUE-06, QUEUE-07)
+- [x] 02-04-PLAN.md — Opt-in email draft: POST /api/draft/{id} + Draft email button in dossier; /send <id> unchanged (QUEUE-06, QUEUE-07)
 
 ### Phase 3: AI Quality & Price Intelligence
 
@@ -184,7 +184,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Scraper Architecture Split | 3/3 | Complete    | 2026-07-07 |
-| 2. Queue & Approval Workflow | 2/4 | In Progress|  |
+| 2. Queue & Approval Workflow | 4/4 | Complete   | 2026-07-08 |
 | 3. AI Quality & Price Intelligence | 0/4 | Not started | - |
 | 4. Additional Scraper Sources | 0/3 | Not started | - |
 | 5. Map & Overview UI | 0/5 | Not started | - |
