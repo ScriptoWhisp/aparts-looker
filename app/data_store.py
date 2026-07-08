@@ -262,6 +262,20 @@ def write_checklist_ai(listing_id: str, checklist: dict) -> None:
         save_app_data(data)
 
 
+def get_rejected_by_reason(reason: str) -> list:
+    """Return rejected[] entries whose rejection_reason matches reason.
+
+    Thread-safe reader — acquires _lock. Returns [] on any miss or error (never-raise).
+    Used by _handle_price_drop to look up price-rejected listings for re-queue (D-17).
+    """
+    with _lock:
+        try:
+            data = load_app_data()
+            return [e for e in data.get("rejected", []) if e.get("rejection_reason") == reason]
+        except Exception:
+            return []
+
+
 def get_approved_listing(listing_id: str) -> Optional[dict]:
     """Return the properties[] entry with the given id, or None if not found.
 

@@ -830,6 +830,16 @@
       }
       var histEl = buildPriceHistoryEl(p.id);
       if (histEl) headActions.appendChild(histEl);
+      // Removed badge — shown in red when the listing has been marked absent from kv.ee (D-18, INTEL-03)
+      if (p.removed) {
+        var removedBadge = document.createElement("div");
+        removedBadge.style.color = "var(--red)";
+        removedBadge.style.fontFamily = "var(--font-mono)";
+        removedBadge.style.fontSize = "12px";
+        removedBadge.style.marginTop = "8px";
+        removedBadge.textContent = "Removed from kv.ee — " + (p.removed_at || "unknown date");
+        headActions.appendChild(removedBadge);
+      }
     }
   }
 
@@ -1310,6 +1320,17 @@
     rejectBtn.textContent = "Reject";
     rejectBtn.addEventListener("click", function() { showRejectPicker(entry.id, actionRow); });
     actionRow.appendChild(rejectBtn);
+
+    // Removed badge — shown in red when the listing has been marked absent from kv.ee (D-18, INTEL-03)
+    if (entry.removed) {
+      var removedBadgePending = document.createElement("div");
+      removedBadgePending.style.color = "var(--red)";
+      removedBadgePending.style.fontFamily = "var(--font-mono)";
+      removedBadgePending.style.fontSize = "12px";
+      removedBadgePending.style.marginTop = "8px";
+      removedBadgePending.textContent = "Removed from kv.ee — " + (entry.removed_at || "unknown date");
+      card.appendChild(removedBadgePending);
+    }
 
     card.appendChild(actionRow);
     return card;
