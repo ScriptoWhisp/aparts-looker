@@ -80,6 +80,31 @@ def health():
     return {"ok": True}
 
 
+@app.get("/api/pending")
+def get_pending():
+    return {"pending": data_store.load_pending()}
+
+
+@app.post("/api/pending/{listing_id}/approve")
+def approve_pending(listing_id: str):
+    ok = data_store.approve_listing(listing_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Not found in pending queue")
+    return {"ok": True}
+
+
+@app.post("/api/pending/{listing_id}/reject")
+async def reject_pending(listing_id: str, request: Request):
+    body = await request.json()
+    reason = body.get("reason", "other")
+    if reason not in {"price", "location", "condition", "other"}:
+        reason = "other"
+    ok = data_store.reject_listing(listing_id, reason)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Not found in pending queue")
+    return {"ok": True}
+
+
 @app.post("/api/ingest", dependencies=[Depends(_verify_ingest_token)])
 async def ingest(request: Request) -> dict:
     """Receive a batch of parsed Listing JSON dicts from the mini PC scraper.

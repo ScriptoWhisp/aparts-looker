@@ -202,24 +202,103 @@ def test_callback_query_parse_reason(monkeypatch, tmp_agent_state):
     assert resolved_caption.startswith("❌ Rejected: Price")
 
 
-@pytest.mark.xfail(reason="pending Phase 2 plan 03 implementation", strict=False)
-def test_get_pending_endpoint():
-    assert False
+def _seed_pending(listing_id: str) -> None:
+    """Seed a pending entry directly into data_store for test isolation."""
+    import data_store  # noqa: PLC0415
+
+    with data_store._lock:
+        data = data_store.load_app_data()
+        data["pending"].append({
+            "id": listing_id,
+            "url": f"https://kv.ee/{listing_id}.html",
+            "title": "Test Listing",
+            "price_eur": 200000,
+            "area_sqm": 60.0,
+            "rooms": 3,
+            "price_per_sqm": 3333,
+            "year_built": 2010,
+            "material": "panel",
+            "score": 80,
+            "verdict": "Good",
+            "strengths": [],
+            "concerns": [],
+            "draft_body": "body",
+            "contact_email": "agent@test.ee",
+            "draft_subject": "Test",
+            "queued_at": "2026-07-08T00:00:00+00:00",
+        })
+        data_store.save_app_data(data)
 
 
-@pytest.mark.xfail(reason="pending Phase 2 plan 03 implementation", strict=False)
-def test_approve_moves_listing():
-    assert False
+def test_get_pending_endpoint(client, tmp_agent_state):
+    """QUEUE-03: GET /api/pending returns pending[] from data_store."""
+    import data_store  # noqa: PLC0415
+
+    _seed_pending("1234567")
+
+    resp = client.get("/api/pending")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "pending" in body
+    assert len(body["pending"]) == 1
+    assert body["pending"][0]["id"] == "1234567"
 
 
-@pytest.mark.xfail(reason="pending Phase 2 plan 03 implementation", strict=False)
-def test_double_approve():
-    assert False
+def test_approve_moves_listing(client, tmp_agent_state):
+    """QUEUE-04: POST /api/pending/<id>/approve moves entry to properties[] and returns ok."""
+    import data_store  # noqa: PLC0415
+
+    _seed_pending("1234567")
+
+    resp = client.post("/api/pending/1234567/approve")
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is True
+
+    data = data_store.load_app_data()
+    assert not any(e["id"] == "1234567" for e in data["pending"])
+    assert any(p["id"] == "1234567" for p in data["properties"])
 
 
-@pytest.mark.xfail(reason="pending Phase 2 plan 03 implementation", strict=False)
-def test_reject_with_reason():
-    assert False
+def test_double_approve(client, tmp_agent_state):
+    """QUEUE-04: POST approve twice — first returns 200, second returns 404 (double-tap guard)."""
+    _seed_pending("1234567")
+
+    resp1 = client.post("/api/pending/1234567/approve")
+    assert resp1.status_code == 200
+
+    resp2 = client.post("/api/pending/1234567/approve")
+    assert resp2.status_code == 404
+
+
+def test_reject_with_reason(client, tmp_agent_state):
+    """QUEUE-05: POST /api/pending/<id>/reject with reason moves to rejected[] with metadata.
+
+    Also verifies server-side whitelist clamp: garbage reason stored as 'other'.
+    """
+    import data_store  # noqa: PLC0415
+
+    # Primary assertion: known reason stored correctly
+    _seed_pending("1234567")
+    resp = client.post("/api/pending/1234567/reject", json={"reason": "price"})
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is True
+
+    data = data_store.load_app_data()
+    assert not any(e["id"] == "1234567" for e in data["pending"])
+    rejected = [e for e in data["rejected"] if e["id"] == "1234567"]
+    assert len(rejected) == 1
+    assert rejected[0]["rejection_reason"] == "price"
+    assert "rejected_at" in rejected[0]
+
+    # Secondary assertion: server-side whitelist clamp (garbage → "other")
+    _seed_pending("9999999")
+    resp2 = client.post("/api/pending/9999999/reject", json={"reason": "garbage"})
+    assert resp2.status_code == 200
+
+    data2 = data_store.load_app_data()
+    rejected2 = [e for e in data2["rejected"] if e["id"] == "9999999"]
+    assert len(rejected2) == 1
+    assert rejected2[0]["rejection_reason"] == "other"
 
 
 @pytest.mark.xfail(reason="pending Phase 2 plan 04 implementation", strict=False)
