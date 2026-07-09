@@ -89,6 +89,12 @@ def load_app_data():
         data.setdefault("pending", [])
         data.setdefault("rejected", [])
         data.setdefault("price_history", {})  # D-11: zero-downtime migration for existing installs
+        # Phase 5: per-entry migration — set lat/lng/commute_minutes to None on every
+        # existing entry so downstream consumers never hit KeyError (D-11 pattern).
+        for entry in data.get("properties", []) + data.get("pending", []):
+            entry.setdefault("lat", None)
+            entry.setdefault("lng", None)
+            entry.setdefault("commute_minutes", None)
         return data
 
 
@@ -236,6 +242,10 @@ def _pending_to_property(entry: dict) -> dict:
         "draft_body": entry.get("draft_body", ""),
         "contact_email": entry.get("contact_email", ""),
         "draft_subject": entry.get("draft_subject", ""),
+        # Carry over geocoding fields so map pins remain stable after approval (Phase 5)
+        "lat": entry.get("lat"),
+        "lng": entry.get("lng"),
+        "commute_minutes": entry.get("commute_minutes"),
     }
     return prop
 
@@ -285,6 +295,46 @@ def get_approved_listing(listing_id: str) -> Optional[dict]:
     with _lock:
         data = load_app_data()
         return next((p for p in data["properties"] if p.get("id") == listing_id), None)
+
+
+def update_listing_coords(listing_id: str, lat: float, lng: float, commute_minutes: Optional[int]) -> bool:
+    """Update lat/lng/commute_minutes on a properties or pending entry.
+
+    Returns True if found and updated, False otherwise. Thread-safe (acquires _lock).
+    Searches properties first, then pending. Does not create new entries.
+    Follows the load-modify-save pattern of add_to_pending.
+    """
+    with _lock:
+        data = load_app_data()
+        for entry in data.get("properties", []) + data.get("pending", []):
+            if entry.get("id") == listing_id:
+                entry["lat"] = lat
+                entry["lng"] = lng
+                entry["commute_minutes"] = commute_minutes
+                save_app_data(data)
+                return True
+        return False
+
+
+def get_listing_coords(listing_id: str) -> dict:
+    """Return coord dict for a listing_id.
+
+    Returns all-None dict on miss or error. Thread-safe.
+    Searches properties first, then pending.
+    """
+    try:
+        with _lock:
+            data = load_app_data()
+            for entry in data.get("properties", []) + data.get("pending", []):
+                if entry.get("id") == listing_id:
+                    return {
+                        "lat": entry.get("lat"),
+                        "lng": entry.get("lng"),
+                        "commute_minutes": entry.get("commute_minutes"),
+                    }
+    except Exception:
+        pass
+    return {"lat": None, "lng": None, "commute_minutes": None}
 
 
 def load_agent_state():

@@ -13,12 +13,15 @@ GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
+ORS_API_KEY = os.environ.get("ORS_API_KEY", "")
 
 KV_SEARCH_URL = os.environ.get("KV_SEARCH_URL", "")
 
 IMAP_HOST = "imap.gmail.com"
 SMTP_HOST = "smtp.gmail.com"
 SMTP_PORT = 465
+BOLT_HQ_LAT = 59.4203  # Veerenni 28, Tallinn (Bolt HQ) — Leaflet [lat, lng] order
+BOLT_HQ_LNG = 24.7205  # ORS/GeoJSON uses [lng, lat] order — see RESEARCH Pitfall 2
 
 DRAFT_SCORE_THRESHOLD = int(os.environ.get("DRAFT_SCORE_THRESHOLD", "60"))
 MIN_IMAGES = int(os.environ.get("MIN_IMAGES", "5"))
