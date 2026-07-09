@@ -46,6 +46,17 @@ NEEDS_RENO_RE = re.compile(
 )
 BROKER_RE = re.compile(r"Võta ühendust\s*\n+\s*([^\n]+)")
 
+# Phase 5: coordinate extraction — three fallback patterns covering known kv.ee embedding shapes.
+# Pattern 1: JSON-LD structured data (<script type="application/ld+json">)
+COORD_LAT_JSONLD_RE = re.compile(r'"latitude"\s*:\s*(-?\d+\.\d+)')
+COORD_LNG_JSONLD_RE = re.compile(r'"longitude"\s*:\s*(-?\d+\.\d+)')
+# Pattern 2: JavaScript variable short form (e.g. {"lat":59.4203,"lng":24.7205})
+COORD_LAT_SCRIPT_RE = re.compile(r'["\']lat["\']\s*:\s*(-?\d+\.\d+)')
+COORD_LNG_SCRIPT_RE = re.compile(r'["\']ln[gG]["\']\s*:\s*(-?\d+\.\d+)')  # matches lng or lnG
+# Pattern 3: HTML data attributes (e.g. data-lat="59.4203" data-lng="24.7205")
+COORD_LAT_DATA_RE = re.compile(r'data-lat=["\'](-?\d+\.\d+)["\']')
+COORD_LNG_DATA_RE = re.compile(r'data-lng=["\'](-?\d+\.\d+)["\']')
+
 
 @dataclass
 class Listing:
@@ -69,6 +80,8 @@ class Listing:
     image_url: str = ""
     image_count: int = 0
     raw_ok: bool = True
+    lat: Optional[float] = None
+    lng: Optional[float] = None
 
 
 def _to_int(s: str) -> Optional[int]:
@@ -83,6 +96,44 @@ def _to_float(s: str) -> Optional[float]:
         return float(s.replace(",", ".").replace(" ", ""))
     except (ValueError, AttributeError):
         return None
+
+
+def _extract_coords(html: str) -> tuple[Optional[float], Optional[float]]:
+    """Best-effort lat/lng extraction from raw HTML (not BeautifulSoup text).
+
+    Probes three fallback patterns in order — JSON-LD structured data, script var,
+    HTML data attribute — and returns the first successful match. Never raises
+    (returns (None, None) on any failure). Lat/lng are validated within Estonia
+    bounding box (57.5-59.7 lat, 21.7-28.2 lng) to reject false-positive matches
+    of unrelated decimals in the same page.
+    """
+    try:
+        # Pattern 1: JSON-LD structured data
+        lat_m = COORD_LAT_JSONLD_RE.search(html)
+        lng_m = COORD_LNG_JSONLD_RE.search(html)
+        if lat_m and lng_m:
+            lat, lng = float(lat_m.group(1)), float(lng_m.group(1))
+            if 57.5 <= lat <= 59.7 and 21.7 <= lng <= 28.2:
+                return lat, lng
+
+        # Pattern 2: JavaScript variable short form
+        lat_m = COORD_LAT_SCRIPT_RE.search(html)
+        lng_m = COORD_LNG_SCRIPT_RE.search(html)
+        if lat_m and lng_m:
+            lat, lng = float(lat_m.group(1)), float(lng_m.group(1))
+            if 57.5 <= lat <= 59.7 and 21.7 <= lng <= 28.2:
+                return lat, lng
+
+        # Pattern 3: HTML data attributes
+        lat_m = COORD_LAT_DATA_RE.search(html)
+        lng_m = COORD_LNG_DATA_RE.search(html)
+        if lat_m and lng_m:
+            lat, lng = float(lat_m.group(1)), float(lng_m.group(1))
+            if 57.5 <= lat <= 59.7 and 21.7 <= lng <= 28.2:
+                return lat, lng
+    except Exception:
+        pass
+    return None, None
 
 
 def extract_object_id(url: str) -> Optional[str]:
@@ -170,6 +221,14 @@ def fetch_listing(url: str, timeout: int = 15, session: requests.Session | None 
     og_desc = soup.find("meta", property="og:description")
     if og_desc and og_desc.get("content"):
         listing.description = og_desc["content"]
+
+    # Best-effort coordinate extraction from raw HTML (not soup text — coords
+    # live in script blocks that BeautifulSoup strips). Populates lat/lng when
+    # a pattern matches; Plan 02 Nominatim fallback fills the remaining gaps.
+    lat, lng = _extract_coords(resp.text)
+    if lat is not None and lng is not None:
+        listing.lat = lat
+        listing.lng = lng
 
     return listing
 
