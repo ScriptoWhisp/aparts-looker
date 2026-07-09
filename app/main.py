@@ -276,6 +276,36 @@ def _run_geocode_backfill() -> dict:
     return {"geocoded": geocoded, "skipped": skipped}
 
 
+@app.get("/api/districts")
+def get_districts() -> dict:
+    """Return per-district listing counts and average price/m² aggregated from properties + pending.
+
+    Entries with no district field (empty string or None) are silently skipped.
+    Entries with price_per_sqm=None are counted but excluded from the average; if all
+    entries in a district have no price, avg_price_per_sqm is returned as None.
+    Never raises — wraps body in try/except per never-raise convention (MAP-03).
+    """
+    try:
+        data = data_store.load_app_data()
+        all_entries = data.get("properties", []) + data.get("pending", [])
+        groups: dict[str, list[dict]] = {}
+        for entry in all_entries:
+            district = entry.get("district", "") or ""
+            if not district:
+                continue
+            groups.setdefault(district, []).append(entry)
+        result = []
+        for district_name in sorted(groups):
+            group = groups[district_name]
+            prices = [entry["price_per_sqm"] for entry in group if entry.get("price_per_sqm") is not None]
+            avg = round(sum(prices) / len(prices), 0) if prices else None
+            result.append({"name": district_name, "avg_price_per_sqm": avg, "count": len(group)})
+        return {"districts": result}
+    except Exception:
+        log.exception("get_districts failed")
+        return {"districts": []}
+
+
 @app.post("/api/geocode-backfill")
 def geocode_backfill(sync: int = 0) -> dict:
     """Geocode all entries missing lat/lng via Nominatim. Runs in background by default.
