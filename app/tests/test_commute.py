@@ -180,8 +180,9 @@ def test_geocode_backfill_endpoint(client, tmp_agent_state, monkeypatch):
     """POST /api/geocode-backfill?sync=1 geocodes entries missing coords and skips those with coords."""
     monkeypatch.setattr(config, "ORS_API_KEY", "test-key")
 
-    # Monkeypatch time.sleep to avoid 1.1s delay in tests
-    monkeypatch.setattr(ingest_handler.time, "sleep", lambda _: None)
+    # Monkeypatch time.sleep in main.py to avoid 1.1s delay in tests
+    import main as main_module  # noqa: PLC0415
+    monkeypatch.setattr(main_module.time, "sleep", lambda _: None)
 
     # Monkeypatch Nominatim geocoder to return fixed coords
     mock_geocode = MagicMock(return_value=(59.42, 24.72))
@@ -191,11 +192,12 @@ def test_geocode_backfill_endpoint(client, tmp_agent_state, monkeypatch):
     mock_commute = MagicMock(return_value=15)
     monkeypatch.setattr(ingest_handler, "_fetch_commute_minutes", mock_commute)
 
-    # Seed app_data with two pending entries:
+    # Seed app_data with exactly two entries (clear default properties to control counts):
     # - entry A: has coords already (should be skipped)
     # - entry B: no coords (should be geocoded)
     with data_store._lock:
         data = data_store.load_app_data()
+        data["properties"] = []  # clear defaults so only our 2 entries are iterated
         data["pending"] = [
             {
                 "id": "backfill-has-coords",

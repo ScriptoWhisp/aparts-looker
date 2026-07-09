@@ -6,10 +6,14 @@ process, one container.
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 import threading
+import time
 from typing import Optional
 
+import requests
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -168,6 +172,122 @@ def create_draft_endpoint(listing_id: str) -> dict:
             data_store.save_agent_state(state)
 
     return {"ok": ok}
+
+
+# ---------------------------------------------------------------------------
+# Phase 5: Isochrone + Geocode endpoints (MAP-04, MAP-06)
+# ---------------------------------------------------------------------------
+
+_ISOCHRONE_PATH = os.path.join(os.path.dirname(__file__), "static", "isochrone.geojson")
+_EMPTY_FEATURE_COLLECTION: dict = {"type": "FeatureCollection", "features": []}
+
+
+@app.get("/api/isochrone")
+def get_isochrone() -> dict:
+    """Serve the pre-fetched ORS isochrone GeoJSON stored on disk.
+
+    Returns an empty FeatureCollection if the file is missing or unreadable —
+    never returns 404 so the frontend always gets a valid GeoJSON shape (RESEARCH Pitfall 5).
+    """
+    try:
+        with open(_ISOCHRONE_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        log.warning("isochrone.geojson not found — returning empty FeatureCollection")
+        return _EMPTY_FEATURE_COLLECTION
+    except Exception:
+        log.exception("Failed to read isochrone.geojson — returning empty FeatureCollection")
+        return _EMPTY_FEATURE_COLLECTION
+
+
+@app.post("/api/refresh-isochrone")
+def refresh_isochrone() -> dict:
+    """Fetch a 20-minute driving isochrone from ORS for Veerenni 28 and cache it to disk.
+
+    Returns {"ok": true} on success. Returns {"ok": false, "error": "..."} on failure (200 status,
+    never raises). ORS_API_KEY is never logged (T-05-11).
+    """
+    if not config.ORS_API_KEY:
+        return {"ok": False, "error": "ORS_API_KEY not configured"}
+    payload = {
+        "locations": [[config.BOLT_HQ_LNG, config.BOLT_HQ_LAT]],  # [lon, lat] order per ORS convention; 1200 sec = 20 min per MAP-04
+        "range": [1200],
+        "range_type": "time",
+    }
+    headers = {
+        "Authorization": f"Bearer {config.ORS_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    try:
+        resp = requests.post(
+            "https://api.openrouteservice.org/v2/isochrones/driving-car",
+            json=payload,
+            headers=headers,
+            timeout=15,
+        )
+        resp.raise_for_status()
+        geojson = resp.json()
+        with open(_ISOCHRONE_PATH, "w", encoding="utf-8") as f:
+            json.dump(geojson, f)
+        return {"ok": True}
+    except Exception:
+        log.exception("ORS isochrone refresh failed")
+        return {"ok": False, "error": "ORS call failed"}
+
+
+def _run_geocode_backfill() -> dict:
+    """Background function that geocodes all entries missing lat/lng via Nominatim.
+
+    Iterates properties[] + pending[], calls Nominatim for entries with lat/lng None,
+    sleeps 1.1s between calls (Nominatim usage policy), then saves updated app_data.
+    Returns {"geocoded": N, "skipped": M} for the sync path.
+    Never raises — wraps body in try/except per never-raise convention.
+    """
+    geocoded = 0
+    skipped = 0
+    try:
+        with data_store._lock:
+            data = data_store.load_app_data()
+            all_entries = data.get("properties", []) + data.get("pending", [])
+            for entry in all_entries:
+                if entry.get("lat") is not None and entry.get("lng") is not None:
+                    skipped += 1
+                    continue
+                # Build query from entry name/title; append Tallinn if not present
+                query = entry.get("name") or entry.get("title") or ""
+                if not query:
+                    skipped += 1
+                    continue
+                if "tallinn" not in query.lower():
+                    query = query + ", Tallinn"
+                lat, lng = ingest_handler._geocode_with_nominatim(query)
+                if lat is not None and lng is not None:
+                    commute_mins = ingest_handler._fetch_commute_minutes(lat, lng)
+                    entry["lat"] = lat
+                    entry["lng"] = lng
+                    entry["commute_minutes"] = commute_mins
+                    geocoded += 1
+                else:
+                    skipped += 1
+                time.sleep(1.1)  # Nominatim usage policy: max 1 request/second
+            data_store.save_app_data(data)
+    except Exception:
+        log.exception("_run_geocode_backfill failed")
+    return {"geocoded": geocoded, "skipped": skipped}
+
+
+@app.post("/api/geocode-backfill")
+def geocode_backfill(sync: int = 0) -> dict:
+    """Geocode all entries missing lat/lng via Nominatim. Runs in background by default.
+
+    When sync=1 is passed as a query parameter, runs inline and returns geocode counts.
+    Background mode (default) returns immediately with a status message.
+    """
+    if sync:
+        result = _run_geocode_backfill()
+        return {"ok": True, **result}
+    threading.Thread(target=_run_geocode_backfill, daemon=True).start()
+    return {"ok": True, "message": "Backfill running in background — see logs"}
 
 
 # Static frontend last, so it doesn't shadow the /api/* routes above.
