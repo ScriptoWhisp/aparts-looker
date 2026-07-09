@@ -12,8 +12,12 @@ POST /api/draft/<id> in Plan 02-04 (D-13, D-14).
 
 import dataclasses
 import logging
+import time
 from dataclasses import fields as dc_fields
 from datetime import date as _date, datetime, timezone
+from typing import Optional
+
+import requests
 
 import config
 import data_store
@@ -68,6 +72,72 @@ def _whitelist_checklist(raw: dict) -> dict:
     except Exception:
         log.exception("_whitelist_checklist failed — returning all-unknown checklist")
         return {key: "unknown" for key in EXPECTED_CHECKLIST_KEYS}
+
+
+def _fetch_commute_minutes(lat: float, lng: float) -> Optional[int]:
+    """Call ORS Matrix API for driving minutes from Veerenni 28 (config.BOLT_HQ_LAT/LNG) to one listing at (lat, lng).
+
+    Returns None on failure (never-raise). Returns None if config.ORS_API_KEY is empty (soft skip).
+    """
+    if not config.ORS_API_KEY:
+        return None
+    payload = {
+        "locations": [
+            [config.BOLT_HQ_LNG, config.BOLT_HQ_LAT],  # [lon, lat] order per ORS/GeoJSON convention; DO NOT swap. See RESEARCH Pitfall 2.
+            [lng, lat],  # [lon, lat] order per ORS/GeoJSON convention; DO NOT swap. See RESEARCH Pitfall 2.
+        ],
+        "sources": [0],
+        "destinations": [1],
+        "metrics": ["duration"],
+    }
+    headers = {
+        "Authorization": f"Bearer {config.ORS_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    try:
+        resp = requests.post(
+            "https://api.openrouteservice.org/v2/matrix/driving-car",
+            json=payload,
+            headers=headers,
+            timeout=10,
+        )
+        resp.raise_for_status()
+        # durations[row=source_idx][col=destination_idx]: sources=[0] (Bolt HQ), destinations=[1] (listing).
+        # The matrix includes all locations: col 0 = source-to-source (null), col 1 = source-to-dest.
+        duration_secs = resp.json()["durations"][0][1]
+        if duration_secs is None:
+            return None
+        return max(1, round(duration_secs / 60))
+    except Exception:
+        log.exception("ORS matrix call failed for lat=%s lng=%s — skipping commute_minutes", lat, lng)
+        return None
+
+
+def _geocode_with_nominatim(query: str) -> tuple[Optional[float], Optional[float]]:
+    """Geocode an address string via Nominatim. Returns (lat, lng) tuple on success or (None, None) on failure.
+
+    Never raises. Caller is responsible for sleeping 1.1 seconds between successive calls
+    per Nominatim usage policy (RESEARCH section 3).
+    """
+    headers = {
+        # NON-NEGOTIABLE per Nominatim usage policy (RESEARCH Pitfall 4).
+        "User-Agent": "ApartsLooker/1.0 daniel.tjulinov@gmail.com",
+    }
+    try:
+        resp = requests.get(
+            "https://nominatim.openstreetmap.org/search",
+            params={"q": query, "format": "json", "limit": 1},
+            headers=headers,
+            timeout=10,
+        )
+        resp.raise_for_status()
+        results = resp.json()
+        if not results or not isinstance(results, list):
+            return (None, None)
+        return (float(results[0]["lat"]), float(results[0]["lon"]))
+    except Exception:
+        log.exception("Nominatim geocode failed for query=%s", query)
+        return (None, None)
 
 
 def _build_context_prefix(listing: Listing, data: dict) -> str:
@@ -417,6 +487,19 @@ def process_ingest_batch(listing_dicts: list[dict]) -> dict:
                         if entry.get("id") == listing.id:
                             entry["tg_message_id"] = tg_message_id
                             entry["tg_chat_id"] = tg_chat_id
+                            break
+
+                # Phase 5 (MAP-06): compute driving commute time from Veerenni 28 to this listing.
+                # Coords come from kv_listing_parser (D-03) or Nominatim backfill (D-04).
+                # In-place mutation of app_data['pending'] entry mirrors _handle_price_drop pattern
+                # (RESEARCH section 10) — do NOT call update_listing_coords here (would re-enter _lock).
+                if listing.lat is not None and listing.lng is not None:
+                    commute_mins = _fetch_commute_minutes(listing.lat, listing.lng)
+                    for entry in app_data.get("pending", []):
+                        if entry.get("id") == listing.id:
+                            entry["lat"] = listing.lat
+                            entry["lng"] = listing.lng
+                            entry["commute_minutes"] = commute_mins
                             break
 
                 # Record initial price for newly-seen listing AFTER the reload so the
