@@ -4,15 +4,15 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 5
 current_phase_name: Map & Overview UI
-status: planning
-stopped_at: Phase 5 context gathered
-last_updated: "2026-07-08T21:54:08.645Z"
+status: ready
+stopped_at: Phase 5 planned — 4 plans across 3 waves
+last_updated: "2026-07-09T11:35:00.000Z"
 last_activity: 2026-07-09
-last_activity_desc: Phase 04 deferred; advancing to Phase 5
+last_activity_desc: Phase 05 planned (4 plans written, plan checker passed)
 progress:
   total_phases: 6
   completed_phases: 3
-  total_plans: 11
+  total_plans: 15
   completed_plans: 11
   percent: 50
 ---
@@ -29,9 +29,9 @@ See: .planning/PROJECT.md (updated 2026-07-07)
 ## Current Position
 
 Phase: 5 — Map & Overview UI
-Plan: Not started
-Status: Ready to plan (Phase 4 deferred)
-Last activity: 2026-07-09 — Phase 04 deferred; advancing to Phase 5
+Plan: 4 plans written (05-01 through 05-04)
+Status: Ready to execute
+Last activity: 2026-07-09 — Phase 05 planned; 4 PLAN.md files across 3 waves
 
 Progress: [████████░░] ~50% (phases 1-3 complete; 4 deferred)
 

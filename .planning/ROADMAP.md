@@ -150,15 +150,14 @@ Plans:
   6. The redesigned dossier layout is modern and information-dense (replacing the existing single-file SPA design).
   7. Daniel can select 2–4 listings and view them side-by-side with all fields aligned.
 
-**Plans:** TBD
+**Plans:** 4/4 planned
 
 Plans:
 
-- [ ] 05-01: Redesigned dossier layout — modern information-dense UI replacing index.html
-- [ ] 05-02: Interactive map layer — Leaflet/Mapbox pins, score colour coding, click-to-preview card
-- [ ] 05-03: District heat zone overlay — compute price/m² per district from dossier data; render as map layer
-- [ ] 05-04: Commute isochrone + per-listing commute time (OTP or routing API from Veerenni 28)
-- [ ] 05-05: Side-by-side comparison view for 2–4 pinned listings
+- [ ] 05-01-PLAN.md — Data model + coordinate extraction (Listing.lat/lng, data_store helpers, kv.ee HTML coord probe)
+- [ ] 05-02-PLAN.md — ORS integration + backend endpoints (isochrone, matrix commute, Nominatim backfill)
+- [ ] 05-03-PLAN.md — Tallinn district GeoJSON + GET /api/districts heat zone data
+- [ ] 05-04-PLAN.md — Full frontend redesign (map-first dashboard, KPI strip, charts, detail panel, comparison)
 
 **UI hint**: yes
 
