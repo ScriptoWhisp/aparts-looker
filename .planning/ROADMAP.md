@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: AI Quality & Price Intelligence** - Calibrated scoring, structured checklist output, price history, longevity, and re-evaluation on drops (completed 2026-07-09)
 - [ ] **Phase 4: Additional Scraper Sources** - city24.ee and kinnisvara24.ee added; deduplication across all sources *(deferred — cross-portal dedup complexity vs MVP value)*
 - [ ] **Phase 5: Map & Overview UI** - Interactive Tallinn map with score pins, district heat zones, commute isochrone, and redesigned dossier
-- [ ] **Phase 6: Viewing Workflow & Extras** - Scheduled viewings, negotiation briefs, building fund lookup, PDF export
+- [x] **Phase 6: Viewing Workflow & Extras** - Scheduled viewings, negotiation briefs, building fund lookup, PDF export (completed 2026-07-10)
 
 ## Phase Details
 
@@ -175,7 +175,7 @@ Plans:
   4. If korteriühistu (KT/remondifond) data is found for a listing's address, the result is surfaced in the listing card.
   5. ~~Daniel can export the full dossier as a PDF suitable for sharing with a bank or advisor.~~ *(DEFERRED in Phase 6 discussion — see .planning/phases/06-viewing-workflow-extras/06-CONTEXT.md § Deferred Ideas, D-14. Track in v2 or a follow-up phase if needed.)*
 
-**Plans:** 4/5 plans executed
+**Plans:** 5/5 plans complete
 
 Plans:
 **Wave 0**
@@ -196,7 +196,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 06-05-PLAN.md — Polish + governance: sidebar status glyphs; formally defer EXPORT-01 in ROADMAP + REQUIREMENTS; full-suite green gate
+- [x] 06-05-PLAN.md — Polish + governance: sidebar status glyphs; formally defer EXPORT-01 in ROADMAP + REQUIREMENTS; full-suite green gate
 
 ## Progress
 
@@ -210,4 +210,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 3. AI Quality & Price Intelligence | 4/4 | Complete    | 2026-07-09 |
 | 4. Additional Scraper Sources | 0/3 | Not started | - |
 | 5. Map & Overview UI | 0/5 | Not started | - |
-| 6. Viewing Workflow & Extras | 4/5 | In Progress|  |
+| 6. Viewing Workflow & Extras | 5/5 | Complete   | 2026-07-10 |
