@@ -454,6 +454,13 @@
       main.appendChild(_buildCostOfOwnership(entry.cost_of_ownership, entry));
     }
 
+    /* ---- KÜ data card (ENRICH-01, D-13 hide-when-empty) ---- */
+    var kuHasAuto = entry.ku && entry.ku.auto && entry.ku.auto.reg_code;
+    var kuHasManual = entry.ku && entry.ku.manual;
+    if (kuHasAuto || kuHasManual) {
+      main.appendChild(_buildKuCard(entry.ku, entry));
+    }
+
     /* ---- Full checklist ---- */
     var clData = window.state.checklists[entry.id] || {};
     var manualChecklist = clData.manual_checklist || {};
@@ -1137,6 +1144,123 @@
   }
 
   /* ================================================================
+     Private: _buildKuCard(ku, entry) — KÜ data card (ENRICH-01, D-11, D-13)
+     Mirrors _buildNegotiationBrief shape. Renders only when ku.auto has content
+     (D-13 hide-when-empty). If ku.manual is present but ku.auto is empty,
+     renders a minimal card with just the manual textarea (notes are never hidden).
+     All registry/API-supplied strings written via .textContent (XSS-safe, T-06-13).
+     ================================================================ */
+  function _buildKuCard(ku, entry) {
+    var card = document.createElement("div");
+    card.className = "ku-card";
+
+    /* Headline row: label + timestamp on left, Refresh button on right */
+    var head = document.createElement("div");
+    head.className = "ku-headline";
+
+    var labelWrap = document.createElement("div");
+    labelWrap.className = "ku-label-wrap";
+
+    var labelEl = document.createElement("div");
+    labelEl.className = "ku-card-label";
+    labelEl.textContent = "KÜ data";
+    labelWrap.appendChild(labelEl);
+
+    if (ku.looked_up_at) {
+      var tsEl = document.createElement("span");
+      tsEl.className = "ku-timestamp";
+      try {
+        tsEl.textContent = " — " + new Date(ku.looked_up_at).toLocaleDateString();
+      } catch (_) {
+        tsEl.textContent = "";
+      }
+      labelWrap.appendChild(tsEl);
+    }
+    head.appendChild(labelWrap);
+
+    var refreshBtn = document.createElement("button");
+    refreshBtn.type = "button";
+    refreshBtn.className = "coo-edit-btn";
+    refreshBtn.textContent = "Refresh";
+    refreshBtn.addEventListener("click", function () {
+      refreshBtn.disabled = true;
+      window.refreshKuClick && window.refreshKuClick(entry.id, refreshBtn);
+    });
+    head.appendChild(refreshBtn);
+
+    card.appendChild(head);
+
+    /* Auto lookup results — only when present */
+    if (ku.auto && ku.auto.reg_code) {
+      var auto = ku.auto;
+
+      var nameRow = document.createElement("div");
+      nameRow.className = "ku-row";
+      var nameLabel = document.createElement("span");
+      nameLabel.className = "ku-row-label";
+      nameLabel.textContent = "Name";
+      var nameVal = document.createElement("span");
+      nameVal.className = "ku-row-val";
+      nameVal.textContent = auto.name || "";
+      nameRow.appendChild(nameLabel);
+      nameRow.appendChild(nameVal);
+      card.appendChild(nameRow);
+
+      var codeRow = document.createElement("div");
+      codeRow.className = "ku-row";
+      var codeLabel = document.createElement("span");
+      codeLabel.className = "ku-row-label";
+      codeLabel.textContent = "Reg code";
+      var codeVal = document.createElement("span");
+      codeVal.className = "ku-row-val";
+      codeVal.textContent = auto.reg_code != null ? String(auto.reg_code) : "";
+      codeRow.appendChild(codeLabel);
+      codeRow.appendChild(codeVal);
+      card.appendChild(codeRow);
+
+      var addrRow = document.createElement("div");
+      addrRow.className = "ku-row";
+      var addrLabel = document.createElement("span");
+      addrLabel.className = "ku-row-label";
+      addrLabel.textContent = "Address";
+      var addrVal = document.createElement("span");
+      addrVal.className = "ku-row-val";
+      addrVal.textContent = auto.legal_address || "";
+      addrRow.appendChild(addrLabel);
+      addrRow.appendChild(addrVal);
+      card.appendChild(addrRow);
+
+      /* ariregister source link — href set via property assignment (XSS-safe) */
+      if (auto.url) {
+        var linkEl = document.createElement("a");
+        linkEl.className = "ku-source-link";
+        linkEl.href = auto.url;  // property assignment, not innerHTML
+        linkEl.target = "_blank";
+        linkEl.rel = "noopener noreferrer";
+        linkEl.textContent = "ariregister.rik.ee";
+        card.appendChild(linkEl);
+      }
+    }
+
+    /* Manual notes textarea — always rendered when the card is visible */
+    var notesLabel = document.createElement("span");
+    notesLabel.className = "ku-notes-label";
+    notesLabel.textContent = "Notes";
+    card.appendChild(notesLabel);
+
+    var textarea = document.createElement("textarea");
+    textarea.className = "ku-notes-textarea";
+    textarea.placeholder = "Notes: paste facts from meeting minutes here";
+    textarea.value = (ku && ku.manual) ? ku.manual : "";
+    textarea.addEventListener("blur", function () {
+      window.saveKuManualNotes && window.saveKuManualNotes(entry.id, textarea.value);
+    });
+    card.appendChild(textarea);
+
+    return card;
+  }
+
+  /* ================================================================
      Private: _buildAiDepthSection(entry) — verdict + score breakdown + risks + strengths
      ================================================================ */
   function _buildAiDepthSection(entry) {
@@ -1507,5 +1631,63 @@ window.regenerateBriefClick = function (listingId, btn) {
     .catch(function () {
       window.showToast && window.showToast("Network error — retry", "error");
       if (btn) btn.disabled = false;
+    });
+};
+
+/* ================================================================
+   Global: refreshKuClick(listingId, btn)
+   POSTs to /api/entry/{id}/refresh-ku and refreshes UI after ~1500ms
+   to give the daemon thread time to save the KÜ enrichment result.
+   (ENRICH-01, D-12 Refresh KÜ button)
+   ================================================================ */
+window.refreshKuClick = function (listingId, btn) {
+  fetch("/api/entry/" + encodeURIComponent(listingId) + "/refresh-ku", {
+    method: "POST",
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (d.ok) {
+        window.showToast && window.showToast("KÜ lookup running…", "ok");
+        // Wait ~1500ms for the daemon thread to finish before refreshing
+        setTimeout(function () {
+          window.loadData && window.loadData();
+          if (btn) btn.disabled = false;
+        }, 1500);
+      } else {
+        window.showToast && window.showToast("KÜ refresh failed", "error");
+        if (btn) btn.disabled = false;
+      }
+    })
+    .catch(function () {
+      window.showToast && window.showToast("Network error — retry", "error");
+      if (btn) btn.disabled = false;
+    });
+};
+
+/* ================================================================
+   Global: saveKuManualNotes(listingId, notes)
+   Persists the ku.manual textarea value via the existing PUT /api/data path.
+   Loads current data, patches the matching entry's ku.manual field, then PUTs
+   the full dataset back. This reuses the existing data persistence path so no
+   new backend endpoint is needed for manual-note editing (RESEARCH.md A1,
+   Pitfall 7 — manual notes must survive future Refresh clicks because
+   save_ku_enrichment on the backend preserves entry.ku.manual).
+   ================================================================ */
+window.saveKuManualNotes = function (listingId, notes) {
+  fetch("/api/data")
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      var entry = (data.properties || []).find(function (p) { return p.id === listingId; });
+      if (!entry) return;
+      if (!entry.ku) entry.ku = {};
+      entry.ku.manual = notes;
+      return fetch("/api/data", {
+        method: "PUT",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(data),
+      });
+    })
+    .catch(function () {
+      window.showToast && window.showToast("Could not save notes", "error");
     });
 };

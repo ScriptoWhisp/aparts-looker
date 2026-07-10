@@ -185,4 +185,66 @@ def test_regenerate_brief(client, tmp_agent_state, monkeypatch):
 
 def test_refresh_ku(client, tmp_agent_state, monkeypatch):
     """ENRICH-01: POST /api/entry/{id}/refresh-ku triggers KU lookup + updates entry."""
-    pytest.skip("Filled by Plan 06-04")
+    import data_store  # noqa: PLC0415
+    import ingest_handler  # noqa: PLC0415
+    import main as main_mod  # noqa: PLC0415
+
+    # Seed a properties[] entry with address so refresh-ku can dispatch
+    app_data = data_store.load_app_data()
+    app_data["properties"].append({
+        "id": "abc",
+        "price": 175000,
+        "address": "Retke tee 22, Tallinn",
+        "status": "approved",
+    })
+    data_store.save_app_data(app_data)
+
+    ku_result = {
+        "reg_code": 80499321,
+        "name": "KÜ Test",
+        "legal_address": "Retke tee 22, Tallinn",
+        "url": "https://ariregister.rik.ee/est/company/80499321",
+    }
+
+    # Monkeypatch threading.Thread to run the target synchronously in-process
+    # (avoids race conditions between daemon thread and assertions).
+    class _SyncThread:
+        """Fake Thread that runs target synchronously on .start()."""
+        def __init__(self, target, args=(), daemon=False, **kw):
+            self._target = target
+            self._args = args
+
+        def start(self):
+            self._target(*self._args)
+
+    # Stub _dispatch_ku_lookup to call save_ku_enrichment synchronously
+    def _stub_dispatch(listing_id: str, address: str) -> None:
+        data_store.save_ku_enrichment(listing_id, ku_result)
+
+    monkeypatch.setattr(main_mod, "threading", type("T", (), {"Thread": _SyncThread})())
+    monkeypatch.setattr(ingest_handler, "_dispatch_ku_lookup", _stub_dispatch)
+
+    # POST refresh-ku → 200
+    resp = client.post("/api/entry/abc/refresh-ku")
+    assert resp.status_code == 200, f"expected 200 got {resp.status_code}: {resp.text}"
+    body = resp.json()
+    assert body.get("ok") is True
+
+    # Verify KÜ enrichment was saved (synchronous stub ran immediately)
+    data = data_store.load_app_data()
+    entry = next((p for p in data["properties"] if p.get("id") == "abc"), None)
+    assert entry is not None
+    assert entry.get("ku") is not None, "ku field should be set after refresh"
+    assert entry["ku"]["auto"]["reg_code"] == 80499321
+    assert entry["ku"]["looked_up_at"] is not None
+
+    # 404 for nonexistent listing
+    resp2 = client.post("/api/entry/nonexistent/refresh-ku")
+    assert resp2.status_code == 404, f"expected 404 got {resp2.status_code}: {resp2.text}"
+
+    # 400 for listing without an address
+    app_data2 = data_store.load_app_data()
+    app_data2["properties"].append({"id": "noaddr", "price": 100000, "address": ""})
+    data_store.save_app_data(app_data2)
+    resp3 = client.post("/api/entry/noaddr/refresh-ku")
+    assert resp3.status_code == 400, f"expected 400 got {resp3.status_code}: {resp3.text}"

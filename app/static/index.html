@@ -575,6 +575,49 @@
   }
   .detail-main .brief-card { padding: 10px 14px !important; margin: 10px 0 !important; }
 
+  /* ---------- KÜ data card (ENRICH-01, D-13) ---------- */
+  .ku-card {
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 6px; padding: 14px 16px; margin: 16px 0;
+  }
+  .ku-headline {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; margin-bottom: 10px;
+  }
+  .ku-card-label {
+    font-size: 12px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.5px; color: var(--text-muted); font-family: var(--font-mono);
+  }
+  .ku-timestamp {
+    font-size: 10px; color: var(--text-muted); font-family: var(--font-mono);
+    margin-left: 8px;
+  }
+  .ku-label-wrap { display: flex; align-items: baseline; gap: 0; }
+  .ku-row {
+    display: flex; justify-content: space-between; gap: 8px;
+    font-size: 12px; padding: 3px 0; border-bottom: 1px dashed var(--border);
+  }
+  .ku-row:last-of-type { border-bottom: none; }
+  .ku-row-label { color: var(--text-muted); }
+  .ku-row-val { color: var(--text); font-family: var(--font-mono); text-align: right; }
+  .ku-source-link {
+    display: block; font-size: 11px; font-family: var(--font-mono);
+    color: var(--blue); margin-top: 8px; word-break: break-all;
+  }
+  .ku-notes-label {
+    font-size: 10px; color: var(--text-muted); font-family: var(--font-mono);
+    text-transform: uppercase; letter-spacing: 0.3px; margin-top: 10px;
+    margin-bottom: 4px; display: block;
+  }
+  .ku-notes-textarea {
+    width: 100%; background: var(--surface); color: var(--text);
+    border: 1px solid var(--border); border-radius: 4px;
+    padding: 7px 9px; font-family: var(--font-mono); font-size: 12px;
+    resize: vertical; min-height: 64px; box-sizing: border-box; line-height: 1.5;
+  }
+  .ku-notes-textarea:focus { outline: none; border-color: var(--blue); }
+  .detail-main .ku-card { padding: 10px 14px !important; margin: 10px 0 !important; }
+
   /* ---------- Settings tab ---------- */
   .settings-wrap { max-width: 780px; margin: 0 auto; padding: 32px 24px 60px; }
   .settings-page-title {
