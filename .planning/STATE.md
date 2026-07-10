@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 5
 current_phase_name: Map & Overview UI
 status: ready
-stopped_at: Phase 5 planned — 4 plans across 3 waves
-last_updated: "2026-07-09T11:35:00.000Z"
+stopped_at: Phase 6 context gathered
+last_updated: "2026-07-10T16:30:41.271Z"
 last_activity: 2026-07-09
-last_activity_desc: Phase 05 planned (4 plans written, plan checker passed)
+last_activity_desc: Phase 05 planned; 4 PLAN.md files across 3 waves
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 15
-  completed_plans: 11
+  completed_plans: 14
   percent: 50
 ---
 
@@ -97,6 +97,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-08T21:54:08.638Z
-Stopped at: Phase 5 context gathered
-Resume file: .planning/phases/05-map-overview-ui/05-CONTEXT.md
+Last session: 2026-07-10T16:30:41.259Z
+Stopped at: Phase 6 context gathered
+Resume file: .planning/phases/06-viewing-workflow-extras/06-CONTEXT.md
