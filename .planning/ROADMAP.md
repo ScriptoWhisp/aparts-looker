@@ -175,12 +175,12 @@ Plans:
   4. If korteriühistu (KT/remondifond) data is found for a listing's address, the result is surfaced in the listing card.
   5. Daniel can export the full dossier as a PDF suitable for sharing with a bank or advisor.
 
-**Plans:** 5 plans
+**Plans:** 1/5 plans executed
 
 Plans:
 **Wave 0**
 
-- [ ] 06-01-PLAN.md — Test scaffolds + data_store setdefault migration + 4 new state-transition helpers (VIEW-01 foundation)
+- [x] 06-01-PLAN.md — Test scaffolds + data_store setdefault migration + 4 new state-transition helpers (VIEW-01 foundation)
 
 **Wave 1** *(blocked on Wave 0 completion)*
 
@@ -210,4 +210,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 3. AI Quality & Price Intelligence | 4/4 | Complete    | 2026-07-09 |
 | 4. Additional Scraper Sources | 0/3 | Not started | - |
 | 5. Map & Overview UI | 0/5 | Not started | - |
-| 6. Viewing Workflow & Extras | 0/5 | Not started | - |
+| 6. Viewing Workflow & Extras | 1/5 | In Progress|  |
