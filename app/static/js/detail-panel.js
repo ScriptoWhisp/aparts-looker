@@ -96,6 +96,23 @@
   };
 
   /* ================================================================
+     Private: statusGlyph(entry) — returns a Unicode glyph for the viewing
+     status to show in the sidebar meta line.
+     - 📅 for viewing_scheduled
+     - ✓  for viewed
+     - ""  for approved / any other / missing status (Pitfall 6 default)
+     - ""  if entry.removed is truthy — removed indicator already covers this (Open Question 4)
+     Uses textContent-only writes (T-06-14 XSS guard).
+     ================================================================ */
+  function statusGlyph(entry) {
+    if (entry.removed) return "";
+    var status = entry.status || "approved";
+    if (status === "viewing_scheduled") return "📅";
+    if (status === "viewed") return "✓";
+    return "";
+  }
+
+  /* ================================================================
      Private: _buildSidebarItem(entry, isPending)
      ================================================================ */
   function _buildSidebarItem(entry, isPending) {
@@ -127,6 +144,15 @@
     if (entry.energy_class) parts.push("энерг. " + entry.energy_class);
     meta.textContent = parts.join(" · ");
     info.appendChild(meta);
+
+    /* Status glyph — append after meta text, hidden when blank (VIEW-01 / T-06-14) */
+    var glyph = statusGlyph(entry);
+    if (glyph) {
+      var glyphSpan = document.createElement("span");
+      glyphSpan.className = "si-status-glyph";
+      glyphSpan.textContent = glyph;
+      info.appendChild(glyphSpan);
+    }
 
     item.appendChild(info);
 
