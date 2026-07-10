@@ -67,7 +67,7 @@
 
 ### Export & Access
 
-- [ ] **EXPORT-01**: Dossier can be exported as a PDF (for bank/advisor review)
+- [ ] **EXPORT-01**: Dossier can be exported as a PDF (for bank/advisor review) *(Deferred in Phase 6 discussion — see .planning/phases/06-viewing-workflow-extras/06-CONTEXT.md § Deferred Ideas, D-14.)*
 
 ## v2 Requirements
 
@@ -130,7 +130,7 @@
 | VIEW-02 | Phase 6 | Pending |
 | VIEW-03 | Phase 6 | Pending |
 | ENRICH-01 | Phase 6 | Pending |
-| EXPORT-01 | Phase 6 | Pending |
+| EXPORT-01 | Phase 6 (deferred) | Deferred |
 
 **Coverage:**
 

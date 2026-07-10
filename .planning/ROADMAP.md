@@ -173,7 +173,7 @@ Plans:
   2. When a listing enters "viewing scheduled" state, a one-page negotiation brief is auto-generated (listing age, price trajectory, district comps, suggested opening offer) and attached to the dossier card.
   3. After a viewing, Telegram prompts Daniel to fill the 11-category checklist inline; responses are saved to the listing.
   4. If korteriühistu (KT/remondifond) data is found for a listing's address, the result is surfaced in the listing card.
-  5. Daniel can export the full dossier as a PDF suitable for sharing with a bank or advisor.
+  5. ~~Daniel can export the full dossier as a PDF suitable for sharing with a bank or advisor.~~ *(DEFERRED in Phase 6 discussion — see .planning/phases/06-viewing-workflow-extras/06-CONTEXT.md § Deferred Ideas, D-14. Track in v2 or a follow-up phase if needed.)*
 
 **Plans:** 4/5 plans executed
 
