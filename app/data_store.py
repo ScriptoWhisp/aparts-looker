@@ -222,6 +222,128 @@ def reject_listing(listing_id: str, reason: str) -> bool:
         return True
 
 
+def set_viewing_scheduled(listing_id: str, scheduled_at_iso: str) -> bool:
+    """Mark an approved listing as viewing_scheduled. Records scheduled_at UTC ISO and
+    appends a viewing_history entry. Returns False if listing not found in properties[].
+
+    Thread-safe (acquires _lock). Never-raise — returns False on any exception (VIEW-01, D-01, D-02, D-04).
+    Idempotent — resetting to "viewing_scheduled" after a previous set appends a new
+    viewing_history entry so Daniel can see reschedules.
+    """
+    from datetime import datetime, timezone
+    try:
+        with _lock:
+            data = load_app_data()
+            entry = next(
+                (p for p in data.get("properties", []) if p.get("id") == listing_id),
+                None,
+            )
+            if entry is None:
+                return False
+            entry["status"] = "viewing_scheduled"
+            entry["scheduled_at"] = scheduled_at_iso
+            history = entry.setdefault("viewing_history", [])
+            history.append({
+                "action": "scheduled",
+                "at": datetime.now(timezone.utc).isoformat(),
+                "scheduled_for": scheduled_at_iso,
+            })
+            save_app_data(data)
+            return True
+    except Exception:
+        return False
+
+
+def mark_viewed(listing_id: str) -> bool:
+    """Flip a viewing_scheduled listing to 'viewed'. Returns False if not found or if
+    the current status is not 'viewing_scheduled' (invalid transition per D-03).
+
+    Thread-safe (acquires _lock). Never-raise — returns False on any exception (VIEW-01, D-03).
+    """
+    from datetime import datetime, timezone
+    try:
+        with _lock:
+            data = load_app_data()
+            entry = next(
+                (p for p in data.get("properties", []) if p.get("id") == listing_id),
+                None,
+            )
+            if entry is None:
+                return False
+            if entry.get("status") != "viewing_scheduled":
+                import logging as _logging
+                _logging.getLogger("data_store").warning(
+                    "mark_viewed: listing %s has status=%r — expected 'viewing_scheduled'; "
+                    "transition rejected (D-03 no-auto-transition rule)",
+                    listing_id,
+                    entry.get("status"),
+                )
+                return False
+            entry["status"] = "viewed"
+            history = entry.setdefault("viewing_history", [])
+            history.append({
+                "action": "viewed",
+                "at": datetime.now(timezone.utc).isoformat(),
+            })
+            save_app_data(data)
+            return True
+    except Exception:
+        return False
+
+
+def save_negotiation_brief(listing_id: str, brief: dict) -> bool:
+    """Persist the AI-generated negotiation brief onto a properties[] entry.
+
+    Overwrites entry['negotiation_brief'] and records a freshness timestamp in
+    entry['negotiation_brief_generated_at'] (VIEW-03, D-06). Thread-safe. Never-raise.
+    """
+    from datetime import datetime, timezone
+    try:
+        with _lock:
+            data = load_app_data()
+            entry = next(
+                (p for p in data.get("properties", []) if p.get("id") == listing_id),
+                None,
+            )
+            if entry is None:
+                return False
+            entry["negotiation_brief"] = brief
+            entry["negotiation_brief_generated_at"] = datetime.now(timezone.utc).isoformat()
+            save_app_data(data)
+            return True
+    except Exception:
+        return False
+
+
+def save_ku_enrichment(listing_id: str, ku_auto: dict) -> bool:
+    """Persist the ariregister lookup result. Preserves any existing 'manual' subkey (Pitfall 7).
+
+    Structures entry['ku'] as {'auto': ku_auto, 'manual': <prior or ''>, 'looked_up_at': <utc iso>}
+    so that 'Refresh KÜ' overwrites only the auto sub-key and never clobbers Daniel's manual notes
+    (ENRICH-01, D-11, D-13). Thread-safe. Never-raise.
+    """
+    from datetime import datetime, timezone
+    try:
+        with _lock:
+            data = load_app_data()
+            entry = next(
+                (p for p in data.get("properties", []) if p.get("id") == listing_id),
+                None,
+            )
+            if entry is None:
+                return False
+            existing = entry.get("ku") or {}
+            entry["ku"] = {
+                "auto": ku_auto,
+                "manual": existing.get("manual", ""),  # preserve user notes (Pitfall 7)
+                "looked_up_at": datetime.now(timezone.utc).isoformat(),
+            }
+            save_app_data(data)
+            return True
+    except Exception:
+        return False
+
+
 def _pending_to_property(entry: dict) -> dict:
     """Convert a pending listing entry (already a dict) to the dossier property schema.
 
