@@ -25,6 +25,7 @@ import config
 import data_store
 import gmail_client
 import ingest_handler
+import ku_lookup
 import scheduler
 import ai_evaluator
 import settings_store
@@ -475,6 +476,22 @@ def approve_pending(listing_id: str):
     ok = data_store.approve_listing(listing_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Not found in pending queue")
+    # Fire-and-forget KÜ lookup (D-12: fires once on pending → approved transition)
+    # Pattern: load address under lock, release, then spawn thread — never hold _lock across HTTP.
+    address = ""
+    with data_store._lock:
+        data = data_store.load_app_data()
+        entry = next((p for p in data.get("properties", []) if p.get("id") == listing_id), None)
+        if entry is not None:
+            address = entry.get("address", "") or ""
+    if address:
+        threading.Thread(
+            target=ingest_handler._dispatch_ku_lookup,
+            args=(listing_id, address),
+            daemon=True,
+        ).start()
+    else:
+        log.info("approve_pending: no address on %s — skipping KÜ lookup", listing_id)
     return {"ok": True}
 
 
@@ -557,6 +574,35 @@ async def regenerate_brief(listing_id: str) -> dict:
         daemon=True,
     ).start()
     return {"ok": True, "message": "Brief regenerating in background"}
+
+
+@app.post("/api/entry/{listing_id}/refresh-ku")
+async def refresh_ku(listing_id: str) -> dict:
+    """Trigger on-demand KÜ re-fetch for an existing properties[] entry.
+
+    No body required. Verifies the listing exists and has an address, then spawns a
+    daemon thread to call ingest_handler._dispatch_ku_lookup (D-12 Refresh KÜ button).
+    Returns 200 immediately (fire-and-forget). Returns 404 if the listing is not in
+    properties[]. Returns 400 if the listing has no address field (silent noop with
+    informative error so the frontend can surface a helpful message to Daniel).
+    """
+    with data_store._lock:
+        data = data_store.load_app_data()
+        entry = next(
+            (p for p in data.get("properties", []) if p.get("id") == listing_id),
+            None,
+        )
+        address = entry.get("address", "") if entry is not None else None
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Listing not found in properties")
+    if not address:
+        raise HTTPException(status_code=400, detail="Listing has no address to look up")
+    threading.Thread(
+        target=ingest_handler._dispatch_ku_lookup,
+        args=(listing_id, address),
+        daemon=True,
+    ).start()
+    return {"ok": True, "message": "KÜ lookup running in background"}
 
 
 @app.post("/api/ingest", dependencies=[Depends(_verify_ingest_token)])

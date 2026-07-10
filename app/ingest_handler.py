@@ -12,6 +12,7 @@ POST /api/draft/<id> in Plan 02-04 (D-13, D-14).
 
 import dataclasses
 import logging
+import threading
 import time
 from dataclasses import fields as dc_fields
 from datetime import date as _date, datetime, timezone
@@ -102,9 +103,11 @@ def _fetch_commute_minutes(lat: float, lng: float) -> Optional[int]:
             timeout=10,
         )
         resp.raise_for_status()
-        # durations[row=source_idx][col=destination_idx]: sources=[0] (Bolt HQ), destinations=[1] (listing).
-        # The matrix includes all locations: col 0 = source-to-source (null), col 1 = source-to-dest.
-        duration_secs = resp.json()["durations"][0][1]
+        # ORS collapses the matrix when sources/destinations are subset — result is
+        # len(sources) rows × len(destinations) cols, indexed by their POSITION in
+        # the filter list (not in the full locations array). sources=[0]+destinations=[1]
+        # → single-cell matrix [[X]]. Old code assumed the full 1×2 matrix and hit IndexError.
+        duration_secs = resp.json()["durations"][0][0]
         if duration_secs is None:
             return None
         return max(1, round(duration_secs / 60))
@@ -270,7 +273,19 @@ def _handle_price_drop(app_data: dict, listing: Listing, prev_price: int, new_pr
         context_prefix = _build_context_prefix(listing, app_data)
 
         try:
-            evaluation = evaluate_listing(listing, context_prefix)
+            # Try to reuse an existing commute value from the stored entry so we
+            # don't burn an ORS call on every price-drop re-evaluation.
+            existing_commute = None
+            for e in app_data.get("pending", []) + app_data.get("properties", []) + app_data.get("rejected", []):
+                if e.get("id") == listing.id:
+                    existing_commute = e.get("commute_minutes")
+                    break
+            evaluation = evaluate_listing(
+                listing,
+                context_prefix,
+                commute_minutes=existing_commute,
+                district=getattr(listing, "district", "") or "",
+            )
         except Exception:
             log.exception(
                 "_handle_price_drop: evaluate_listing failed for %s — aborting drop dispatch",
@@ -376,6 +391,29 @@ def _mark_removed_listings(app_data: dict, batch_dicts: list[dict]) -> None:
         log.exception("_mark_removed_listings failed — skipping")
 
 
+def _dispatch_ku_lookup(listing_id: str, address: str) -> None:
+    """Daemon-thread target: look up KÜ for the given address and persist the result.
+
+    Follows the Pitfall 5 pattern — this function runs OUTSIDE data_store._lock.
+    HTTP call to ariregister is made first; then save_ku_enrichment acquires the lock
+    to save (same pattern as brief_generator.generate_and_save_brief).
+
+    On no match: logs and returns without writing anything to data_store (D-13 hide-when-empty).
+    On any error: logs and returns (never-raise, mirrors _mark_removed_listings).
+    """
+    import ku_lookup  # noqa: PLC0415 — imported here to avoid circular dependency at module scope
+
+    try:
+        ku_data = ku_lookup.lookup_ku_for_address(address)
+        if ku_data is None:
+            log.info("No KÜ found for %s (%s) — noop", listing_id, address)
+            return
+        data_store.save_ku_enrichment(listing_id, ku_data)
+        log.info("KÜ enrichment saved for %s: %s (reg_code=%s)", listing_id, ku_data.get("name"), ku_data.get("reg_code"))
+    except Exception:
+        log.exception("_dispatch_ku_lookup failed for listing_id=%s address=%s", listing_id, address)
+
+
 def process_ingest_batch(listing_dicts: list[dict]) -> dict:
     """Filter, dedup, evaluate, and notify for a batch of Listing dicts POSTed by the mini PC.
 
@@ -439,19 +477,40 @@ def process_ingest_batch(listing_dicts: list[dict]) -> dict:
 
             try:
                 log.info("Evaluating listing %s: %s", listing.id, listing.title)
-                # Phase 3: build calibration context (anchors + district avg) before Claude call.
-                # app_data already loaded; _lock is RLock so re-entrant reads inside helpers are safe.
+                # Compute commute + cost-of-ownership BEFORE the AI call so the
+                # model has the real values and can factor them into the score.
+                pre_commute_mins = None
+                if listing.lat is not None and listing.lng is not None:
+                    pre_commute_mins = _fetch_commute_minutes(listing.lat, listing.lng)
+                import cost_calculator
+                coo = cost_calculator.compute_cost_of_ownership(
+                    listing.price_eur, listing.area_sqm, listing.year_built,
+                )
                 context_prefix = _build_context_prefix(listing, app_data)
-                evaluation = evaluate_listing(listing, context_prefix)
+                evaluation = evaluate_listing(
+                    listing,
+                    context_prefix,
+                    commute_minutes=pre_commute_mins,
+                    district=getattr(listing, "district", "") or "",
+                    cost_of_ownership=coo,
+                )
                 log.info("Score: %s/100 — %s", evaluation.get("score"), evaluation.get("verdict"))
 
-                # Build the pending entry (D-02): full Listing fields + evaluation + metadata.
+                # Build the pending entry: full Listing fields + evaluation + metadata.
+                # New AI schema fields (score_breakdown, risks) are carried through so
+                # the frontend can render the structured breakdown. The old vague
+                # ai_checklist is no longer written — deleted from the writing path
+                # entirely (existing on-disk entries still readable, just not updated).
                 pending_entry = {
                     **dataclasses.asdict(listing),
                     "score": evaluation.get("score", 0),
                     "verdict": evaluation.get("verdict", ""),
+                    "score_breakdown": evaluation.get("score_breakdown", {}),
+                    "risks": evaluation.get("risks", []),
                     "strengths": evaluation.get("strengths", []),
-                    "concerns": evaluation.get("concerns", []),
+                    "concerns": evaluation.get("concerns", []),  # legacy, kept for old-frontend fallback
+                    "ai_checklist_fills": evaluation.get("checklist_fills", {}),
+                    "cost_of_ownership": coo,
                     "draft_subject": (
                         evaluation.get("draft_subject") or f"Inquiry about {listing.title}"
                     ),
@@ -461,20 +520,20 @@ def process_ingest_batch(listing_dicts: list[dict]) -> dict:
                     "tg_chat_id": None,
                 }
                 data_store.add_to_pending(pending_entry)
-                # Phase 3: persist AI checklist (EVAL-02, D-08). Whitelist before write to
-                # guard against non-canonical keys/values from the model (RESEARCH Pitfall 3).
-                # write_checklist_ai acquires _lock internally; safe because _lock is RLock
-                # (reentrant — same thread can re-enter, RESEARCH Pitfall 1).
-                data_store.write_checklist_ai(
-                    listing.id,
-                    _whitelist_checklist(evaluation.get("checklist", {})),
-                )
 
                 # send_pending_card is provided by Plan 02-02. Until then, the lazy
                 # getattr fallback returns (None, None) so this module ships before
                 # telegram_client grows the new function (never-raise contract).
                 _send_card = getattr(telegram_client, "send_pending_card", lambda l, e: (None, None))
-                tg_message_id, tg_chat_id = _send_card(listing, evaluation)
+                try:
+                    tg_message_id, tg_chat_id = _send_card(listing, evaluation)
+                    log.info(
+                        "Telegram send_pending_card for %s → message_id=%s chat_id=%s",
+                        listing.id, tg_message_id, tg_chat_id,
+                    )
+                except Exception:
+                    log.exception("Telegram send_pending_card failed for %s", listing.id)
+                    tg_message_id, tg_chat_id = None, None
 
                 # Reload app_data to pick up add_to_pending / write_checklist_ai writes.
                 # Also apply the Telegram message_id patch in the same reload so we have a
@@ -489,17 +548,15 @@ def process_ingest_batch(listing_dicts: list[dict]) -> dict:
                             entry["tg_chat_id"] = tg_chat_id
                             break
 
-                # Phase 5 (MAP-06): compute driving commute time from Veerenni 28 to this listing.
-                # Coords come from kv_listing_parser (D-03) or Nominatim backfill (D-04).
+                # Persist coords + commute (already computed pre-evaluation above).
                 # In-place mutation of app_data['pending'] entry mirrors _handle_price_drop pattern
                 # (RESEARCH section 10) — do NOT call update_listing_coords here (would re-enter _lock).
                 if listing.lat is not None and listing.lng is not None:
-                    commute_mins = _fetch_commute_minutes(listing.lat, listing.lng)
                     for entry in app_data.get("pending", []):
                         if entry.get("id") == listing.id:
                             entry["lat"] = listing.lat
                             entry["lng"] = listing.lng
-                            entry["commute_minutes"] = commute_mins
+                            entry["commute_minutes"] = pre_commute_mins
                             break
 
                 # Record initial price for newly-seen listing AFTER the reload so the
