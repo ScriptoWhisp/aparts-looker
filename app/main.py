@@ -29,6 +29,7 @@ import scheduler
 import ai_evaluator
 import settings_store
 import dataclasses
+import brief_generator
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("app")
@@ -497,7 +498,7 @@ async def schedule_viewing(listing_id: str, request: Request) -> dict:
     The browser must convert datetime-local to UTC ISO via new Date(input.value).toISOString()
     before POST (06-RESEARCH Pitfall 1). Backend validates via datetime.fromisoformat.
     Returns 400 for malformed ISO strings; 404 if listing not found in properties[].
-    # Plan 06-03 will wire brief_generator here
+    Spawns a daemon thread to generate the negotiation brief in background (D-06, VIEW-03).
     """
     body = await request.json()
     if not isinstance(body, dict):
@@ -510,7 +511,13 @@ async def schedule_viewing(listing_id: str, request: Request) -> dict:
     ok = data_store.set_viewing_scheduled(listing_id, scheduled_at)
     if not ok:
         raise HTTPException(status_code=404, detail="Listing not found in properties")
-    return {"ok": True, "message": "Scheduled"}
+    # Fire-and-forget brief generation (mirrors main.py check-now daemon-thread pattern)
+    threading.Thread(
+        target=brief_generator.generate_and_save_brief,
+        args=(listing_id,),
+        daemon=True,
+    ).start()
+    return {"ok": True, "message": "Scheduled; negotiation brief generating in background"}
 
 
 @app.post("/api/entry/{listing_id}/mark-viewed")
@@ -525,6 +532,31 @@ async def mark_viewed_endpoint(listing_id: str) -> dict:
     if not ok:
         raise HTTPException(status_code=400, detail="Listing not found or not in viewing_scheduled state")
     return {"ok": True, "message": "Marked as viewed"}
+
+
+@app.post("/api/entry/{listing_id}/regenerate-brief")
+async def regenerate_brief(listing_id: str) -> dict:
+    """Trigger on-demand regeneration of the negotiation brief for an existing entry.
+
+    No body required. Verifies the listing exists, then spawns a daemon thread
+    to call brief_generator.generate_and_save_brief (D-06 regenerate semantics:
+    overwrites entry.negotiation_brief). Returns 200 immediately (fire-and-forget).
+    Returns 404 if the listing is not in properties[].
+    """
+    with data_store._lock:
+        data = data_store.load_app_data()
+        entry = next(
+            (p for p in data.get("properties", []) if p.get("id") == listing_id),
+            None,
+        )
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Listing not found in properties")
+    threading.Thread(
+        target=brief_generator.generate_and_save_brief,
+        args=(listing_id,),
+        daemon=True,
+    ).start()
+    return {"ok": True, "message": "Brief regenerating in background"}
 
 
 @app.post("/api/ingest", dependencies=[Depends(_verify_ingest_token)])
