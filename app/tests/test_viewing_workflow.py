@@ -126,7 +126,61 @@ def test_mark_viewed_flips_status(client, tmp_agent_state):
 
 def test_regenerate_brief(client, tmp_agent_state, monkeypatch):
     """VIEW-03: POST /api/entry/{id}/regenerate-brief triggers generation + updates entry."""
-    pytest.skip("Filled by Plan 06-03")
+    import data_store  # noqa: PLC0415
+    import brief_generator  # noqa: PLC0415
+
+    # Seed a properties[] entry with status=viewing_scheduled
+    app_data = data_store.load_app_data()
+    app_data["properties"].append({
+        "id": "abc",
+        "price": 175000,
+        "status": "viewing_scheduled",
+        "scheduled_at": "2026-08-01T14:00:00Z",
+    })
+    data_store.save_app_data(app_data)
+
+    # Monkeypatch threading.Thread so the target runs synchronously in the test
+    # (avoids race conditions — the daemon thread would race the assertions).
+    import threading as threading_mod  # noqa: PLC0415
+    import main as main_mod  # noqa: PLC0415
+
+    brief_payload = {
+        "brief_ru": "тест",
+        "suggested_offer_low_eur": 100,
+        "suggested_offer_high_eur": 200,
+    }
+
+    class _SyncThread:
+        """Fake Thread that runs target synchronously on .start()."""
+        def __init__(self, target, args=(), daemon=False):
+            self._target = target
+            self._args = args
+
+        def start(self):
+            self._target(*self._args)
+
+    def _stub_generate(listing_id: str) -> None:
+        data_store.save_negotiation_brief(listing_id, brief_payload)
+
+    monkeypatch.setattr(main_mod, "threading", type("T", (), {"Thread": _SyncThread})())
+    monkeypatch.setattr(brief_generator, "generate_and_save_brief", _stub_generate)
+
+    # POST regenerate-brief → 200
+    resp = client.post("/api/entry/abc/regenerate-brief")
+    assert resp.status_code == 200, f"expected 200 got {resp.status_code}: {resp.text}"
+    body = resp.json()
+    assert body.get("ok") is True
+
+    # Verify brief was saved (synchronous stub ran immediately)
+    data = data_store.load_app_data()
+    entry = next((p for p in data["properties"] if p.get("id") == "abc"), None)
+    assert entry is not None
+    assert entry.get("negotiation_brief") is not None
+    assert entry["negotiation_brief"].get("brief_ru") == "тест"
+
+    # Also verify 404 for nonexistent listing
+    resp2 = client.post("/api/entry/nonexistent/regenerate-brief")
+    assert resp2.status_code == 404, f"expected 404 got {resp2.status_code}: {resp2.text}"
 
 
 def test_refresh_ku(client, tmp_agent_state, monkeypatch):

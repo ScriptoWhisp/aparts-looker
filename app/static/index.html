@@ -543,6 +543,38 @@
   .coo-btn-primary:hover:not(:disabled) { filter: brightness(1.1); }
   .coo-btn-ghost { border-style: dashed; color: var(--text-muted); }
 
+  /* ---------- Negotiation brief card ---------- */
+  .brief-card {
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 6px; padding: 14px 16px; margin: 16px 0;
+  }
+  .brief-headline {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; margin-bottom: 10px;
+  }
+  .brief-card-label {
+    font-size: 12px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.5px; color: var(--text-muted); font-family: var(--font-mono);
+  }
+  .brief-body {
+    font-size: 13px; color: var(--text); line-height: 1.6;
+    margin: 0 0 10px 0;
+  }
+  .brief-offer-range {
+    font-size: 12px; color: var(--text); font-family: var(--font-mono);
+    padding: 6px 10px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 4px; display: inline-block;
+  }
+  .brief-review-badge {
+    display: inline-block; font-size: 11px; font-family: var(--font-mono);
+    background: var(--amber, #d97706); color: #fff;
+    padding: 2px 8px; border-radius: 3px; margin-bottom: 8px;
+  }
+  .brief-error {
+    font-size: 12px; color: var(--text-muted); font-style: italic; margin: 0;
+  }
+  .detail-main .brief-card { padding: 10px 14px !important; margin: 10px 0 !important; }
+
   /* ---------- Settings tab ---------- */
   .settings-wrap { max-width: 780px; margin: 0 auto; padding: 32px 24px 60px; }
   .settings-page-title {

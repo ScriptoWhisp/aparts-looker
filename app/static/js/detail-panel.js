@@ -441,13 +441,18 @@
 
     main.appendChild(fieldsDiv);
 
+    /* ---- AI evaluation depth blocks (verdict first, per D-07 ordering) ---- */
+    main.appendChild(_buildAiDepthSection(entry));
+
+    /* ---- Negotiation brief card (below AI Verdict, above COO per D-07) ---- */
+    if (entry.negotiation_brief && entry.negotiation_brief.brief_ru) {
+      main.appendChild(_buildNegotiationBrief(entry.negotiation_brief, entry));
+    }
+
     /* ---- Cost of ownership block ---- */
     if (entry.cost_of_ownership) {
       main.appendChild(_buildCostOfOwnership(entry.cost_of_ownership, entry));
     }
-
-    /* ---- AI evaluation depth blocks ---- */
-    main.appendChild(_buildAiDepthSection(entry));
 
     /* ---- Full checklist ---- */
     var clData = window.state.checklists[entry.id] || {};
@@ -1062,6 +1067,76 @@
   }
 
   /* ================================================================
+     Private: _buildNegotiationBrief(brief, entry) — AI negotiation brief card
+     Mirrors _buildCostOfOwnership shape: card root, headline row with Regenerate
+     button, brief text via textContent (XSS-safe per project convention), offer
+     range line, optional needs_review warning badge. D-07 placement: rendered
+     AFTER AI Verdict block and BEFORE COO card in _renderMainPane.
+     ================================================================ */
+  function _buildNegotiationBrief(brief, entry) {
+    var card = document.createElement("div");
+    card.className = "brief-card";
+
+    /* Headline row: label on left, Regenerate button on right */
+    var head = document.createElement("div");
+    head.className = "brief-headline";
+
+    var labelEl = document.createElement("div");
+    labelEl.className = "brief-card-label";
+    labelEl.textContent = "Negotiation brief";
+    head.appendChild(labelEl);
+
+    var regenBtn = document.createElement("button");
+    regenBtn.type = "button";
+    regenBtn.className = "coo-edit-btn";
+    regenBtn.textContent = "Regenerate";
+    // Debounce: disable for 2 seconds after click to prevent runaway Anthropic calls (T-06-09)
+    regenBtn.addEventListener("click", function () {
+      regenBtn.disabled = true;
+      window.regenerateBriefClick && window.regenerateBriefClick(entry.id, regenBtn);
+    });
+    head.appendChild(regenBtn);
+
+    card.appendChild(head);
+
+    /* needs_review warning badge (Pitfall 4 surfacing) */
+    if (brief.needs_review === true) {
+      var badge = document.createElement("div");
+      badge.className = "brief-review-badge";
+      badge.textContent = "⚠ Numbers may need review";
+      card.appendChild(badge);
+    }
+
+    /* Error state */
+    if (brief.error) {
+      var errEl = document.createElement("p");
+      errEl.className = "brief-error";
+      errEl.textContent = brief.error;
+      card.appendChild(errEl);
+      return card;
+    }
+
+    /* Brief text — textContent only, never innerHTML (XSS safety, T-06-06) */
+    var body = document.createElement("p");
+    body.className = "brief-body";
+    body.textContent = brief.brief_ru;
+    card.appendChild(body);
+
+    /* Suggested offer range */
+    var low = brief.suggested_offer_low_eur;
+    var high = brief.suggested_offer_high_eur;
+    if (low || high) {
+      var offerLine = document.createElement("div");
+      offerLine.className = "brief-offer-range";
+      var fmtEur = window.fmtEur || function (n) { return n + " €"; };
+      offerLine.textContent = "Suggested offer range: " + fmtEur(low) + " – " + fmtEur(high);
+      card.appendChild(offerLine);
+    }
+
+    return card;
+  }
+
+  /* ================================================================
      Private: _buildAiDepthSection(entry) — verdict + score breakdown + risks + strengths
      ================================================================ */
   function _buildAiDepthSection(entry) {
@@ -1396,6 +1471,36 @@ window.markViewedClick = function (listingId) {
         window.loadData && window.loadData();
       } else {
         window.showToast && window.showToast("Failed to mark as viewed", "error");
+        if (btn) btn.disabled = false;
+      }
+    })
+    .catch(function () {
+      window.showToast && window.showToast("Network error — retry", "error");
+      if (btn) btn.disabled = false;
+    });
+};
+
+/* ================================================================
+   Global: regenerateBriefClick(listingId, btn)
+   POSTs to /api/entry/{id}/regenerate-brief and refreshes UI after ~1500ms
+   to give the daemon thread time to save the brief. Client-side debounce via
+   the button disable (2s) to prevent runaway Anthropic calls (T-06-09).
+   ================================================================ */
+window.regenerateBriefClick = function (listingId, btn) {
+  fetch("/api/entry/" + encodeURIComponent(listingId) + "/regenerate-brief", {
+    method: "POST",
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (d.ok) {
+        window.showToast && window.showToast("Generating…", "ok");
+        // Wait ~1500ms for the daemon thread to finish before refreshing
+        setTimeout(function () {
+          window.loadData && window.loadData();
+          if (btn) btn.disabled = false;
+        }, 1500);
+      } else {
+        window.showToast && window.showToast("Regenerate failed", "error");
         if (btn) btn.disabled = false;
       }
     })
