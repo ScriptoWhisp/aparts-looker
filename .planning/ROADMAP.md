@@ -175,15 +175,28 @@ Plans:
   4. If korteriühistu (KT/remondifond) data is found for a listing's address, the result is surfaced in the listing card.
   5. Daniel can export the full dossier as a PDF suitable for sharing with a bank or advisor.
 
-**Plans:** TBD
+**Plans:** 5 plans
 
 Plans:
+**Wave 0**
 
-- [ ] 06-01: Viewing state machine — "viewing scheduled" state, Telegram command, state transitions
-- [ ] 06-02: Negotiation brief generator — auto-generate memo on state entry; attach to listing card
-- [ ] 06-03: Post-viewing checklist — Telegram inline prompts; save responses to listing record
-- [ ] 06-04: Building fund (KT) enrichment — attempt korteriühistu lookup per address; surface result in card
-- [ ] 06-05: PDF export — dossier to PDF endpoint (for bank/advisor review)
+- [ ] 06-01-PLAN.md — Test scaffolds + data_store setdefault migration + 4 new state-transition helpers (VIEW-01 foundation)
+
+**Wave 1** *(blocked on Wave 0 completion)*
+
+- [ ] 06-02-PLAN.md — VIEW-01 + VIEW-02 vertical slice: /schedule-viewing + /mark-viewed endpoints + detail-panel buttons + datetime picker
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 06-03-PLAN.md — VIEW-03 vertical slice: brief_generator.py (Anthropic call + post-hoc number grounding) + /regenerate-brief endpoint + detail-panel brief card
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 06-04-PLAN.md — ENRICH-01 vertical slice: ku_lookup.py (ariregister autocomplete) + approval-hook dispatcher + /refresh-ku endpoint + detail-panel KÜ card
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 06-05-PLAN.md — Polish + governance: sidebar status glyphs; formally defer EXPORT-01 in ROADMAP + REQUIREMENTS; full-suite green gate
 
 ## Progress
 
