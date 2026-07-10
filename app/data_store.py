@@ -59,6 +59,7 @@ DEFAULT_AGENT_STATE = {
     "last_heartbeat_listing_count": None,
     "consecutive_zero_count": 0,
     "last_scraper_alert_sent_at": None,
+    "telegram_silenced_until": None,  # ISO8601 UTC; when > now, send_pending_card is a no-op
 }
 
 
@@ -81,6 +82,13 @@ def _write_json(path, data):
 
 
 def load_app_data():
+    """Load app_data.json and back-fill missing fields via setdefault.
+
+    Phase 5 added lat/lng/commute_minutes/energy_class (zero-downtime setdefault pattern).
+    Phase 6 adds status/scheduled_at/viewing_history/negotiation_brief/ku on properties[]
+    and pending[] entries. All fields are additive — existing JSON loads unchanged (D-01, D-11).
+    See .claude/CLAUDE.md Conventions for the never-raise + setdefault convention.
+    """
     with _lock:
         data = _read_json(config.APP_DATA_FILE, DEFAULT_APP_DATA)
         data.setdefault("properties", [])
@@ -95,6 +103,13 @@ def load_app_data():
             entry.setdefault("lat", None)
             entry.setdefault("lng", None)
             entry.setdefault("commute_minutes", None)
+            entry.setdefault("energy_class", "")
+            # Phase 6: viewing lifecycle fields (VIEW-01, VIEW-03, ENRICH-01)
+            entry.setdefault("status", "approved")           # VIEW-01 legacy default (D-01)
+            entry.setdefault("scheduled_at", None)           # VIEW-01 UTC ISO 8601 string (D-02)
+            entry.setdefault("viewing_history", [])          # VIEW-01 append-only transition log (D-04)
+            entry.setdefault("negotiation_brief", None)      # VIEW-03 dict or None (D-06)
+            entry.setdefault("ku", None)                     # ENRICH-01 dict or None (D-11)
         return data
 
 
@@ -225,28 +240,13 @@ def _pending_to_property(entry: dict) -> dict:
     if concerns:
         notes += " Concerns: " + "; ".join(concerns) + "."
 
-    listing_id = entry.get("id", "")
-    prop = {
-        "id": listing_id,
-        "name": entry.get("title") or ("kv.ee #" + listing_id),
-        "district": "",
-        "url": entry.get("url", ""),
-        "price": entry.get("price_eur") or 0,
-        "area": entry.get("area_sqm") or 0,
-        "rooms": entry.get("rooms") or 0,
-        "pricePerSqm": entry.get("price_per_sqm") or 0,
-        "year": str(entry.get("year_built")) if entry.get("year_built") else "",
-        "material": entry.get("material") or "",
-        "notes": notes,
-        # Carry over draft fields for POST /api/draft/<id> (D-15)
-        "draft_body": entry.get("draft_body", ""),
-        "contact_email": entry.get("contact_email", ""),
-        "draft_subject": entry.get("draft_subject", ""),
-        # Carry over geocoding fields so map pins remain stable after approval (Phase 5)
-        "lat": entry.get("lat"),
-        "lng": entry.get("lng"),
-        "commute_minutes": entry.get("commute_minutes"),
-    }
+    # Preserve every field from the pending entry (canonical Listing schema) and
+    # only add the human-readable notes summary on top. Earlier versions of this
+    # function rewrote fields into legacy names (name/price/area/pricePerSqm/year)
+    # and hardcoded district="" — that stripped district, price, area, rooms from
+    # every approved listing and forced the frontend to handle two schemas.
+    prop = dict(entry)
+    prop["notes"] = notes
     return prop
 
 
