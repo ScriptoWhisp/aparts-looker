@@ -57,13 +57,13 @@
 
 ### Viewing Workflow
 
-- [ ] **VIEW-01**: Approved listings can be set to "viewing scheduled" state
-- [ ] **VIEW-02**: After a viewing, Telegram prompts Daniel to fill the 11-category checklist inline
-- [ ] **VIEW-03**: Negotiation brief is auto-generated for listings in "viewing scheduled" state: listing age, price trajectory, district comps, suggested opening offer
+- [x] **VIEW-01**: Approved listings can be set to "viewing scheduled" state *(Phase 6, 2026-07-10)*
+- [x] **VIEW-02**: Post-viewing checklist filled via the existing web-UI FULL_CHECKLIST — Telegram Q&A dropped per D-08 *(Phase 6, 2026-07-10)*
+- [x] **VIEW-03**: Negotiation brief auto-generated on state entry: single Russian paragraph citing listing age, price trajectory, district comps, suggested opening-offer range *(Phase 6, 2026-07-10)*
 
 ### Building Fund & Enrichment
 
-- [ ] **ENRICH-01**: Attempt korteriühistu (KT/remondifond) data lookup per listing address; surface result in card if found
+- [x] **ENRICH-01**: Best-effort korteriühistu lookup via ariregister.rik.ee autocomplete fires on approval; result surfaced in card when found *(Phase 6, 2026-07-10)*
 
 ### Export & Access
 
