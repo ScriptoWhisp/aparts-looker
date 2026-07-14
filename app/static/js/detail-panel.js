@@ -208,13 +208,18 @@
     while (main.firstChild) main.removeChild(main.firstChild);
     currentListingId = listingId;
 
-    var entry = null, isPending = false;
+    var entry = null, isPending = false, isRejected = false;
     for (var i = 0; i < window.state.properties.length; i++) {
       if (window.state.properties[i].id === listingId) { entry = window.state.properties[i]; break; }
     }
     if (!entry) {
       for (var j = 0; j < window.state.pending.length; j++) {
         if (window.state.pending[j].id === listingId) { entry = window.state.pending[j]; isPending = true; break; }
+      }
+    }
+    if (!entry) {
+      for (var k = 0; k < (window.state.rejected || []).length; k++) {
+        if (window.state.rejected[k].id === listingId) { entry = window.state.rejected[k]; isRejected = true; break; }
       }
     }
     if (!entry) return;
@@ -558,6 +563,16 @@
       });
       actionsDiv.appendChild(rejectBtn);
 
+      main.appendChild(actionsDiv);
+    }
+
+    /* ---- Draft Email button (approved listings only — per PROJECT.md decision
+       "approval-gated email drafting" and per main.py:/api/draft/{id} which
+       calls data_store.get_approved_listing).  ---- */
+    if (!isPending && !isRejected) {
+      var draftActionsDiv = document.createElement("div");
+      draftActionsDiv.className = "detail-actions";
+      draftActionsDiv.style.marginTop = "16px";
       var draftBtn = document.createElement("button");
       draftBtn.type = "button";
       draftBtn.className = "action-btn action-btn-secondary";
@@ -576,8 +591,8 @@
             }
           }).catch(function () { draftStatus.textContent = "Failed — retry"; draftBtn.disabled = false; });
       });
-      actionsDiv.appendChild(draftBtn);
-      main.appendChild(actionsDiv);
+      draftActionsDiv.appendChild(draftBtn);
+      main.appendChild(draftActionsDiv);
       main.appendChild(draftStatus);
     }
 
