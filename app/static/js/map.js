@@ -26,7 +26,8 @@
     if (map) return; // already initialised
 
     // Leaflet [lat, lng] order — Veerenni 28 / Bolt HQ hard-coded (config.BOLT_HQ_LAT=59.4203, LNG=24.7205)
-    map = L.map("map-container").setView([59.4203, 24.7205], 12); // Leaflet [lat, lng] order
+    // scrollWheelZoom disabled so the page can be scrolled normally; user zooms via +/- or pinch
+    map = L.map("map-container", {scrollWheelZoom: false}).setView([59.4203, 24.7205], 12); // Leaflet [lat, lng] order
 
     // OpenStreetMap tile layer
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -64,6 +65,7 @@
         if (districtLayer) {
           if (districtsVisible) {
             districtLayer.addTo(map);
+            districtLayer.bringToBack();
           } else {
             map.removeLayer(districtLayer);
           }
@@ -90,6 +92,13 @@
       // "all"
       entries = window.state.properties.map(function (e) { return {entry: e, isApproved: true}; })
         .concat(window.state.pending.map(function (e) { return {entry: e, isApproved: false}; }));
+    }
+
+    // Apply the shared Detail-tab filter state too so map + list stay in sync
+    if (window.filterListing) {
+      entries = entries.filter(function (item) {
+        return window.filterListing(item.entry, !item.isApproved, false);
+      });
     }
 
     entries.forEach(function (item) {
@@ -135,8 +144,13 @@
       var scoreStr = window.escapeHtml(entry.score != null ? entry.score + "/100" : "—");
       marker.bindTooltip(titleStr + " · " + priceStr + " · " + scoreStr);
 
-      // Click opens detail panel (window.openDetailPanel bound by detail-panel.js)
+      // Click: dispatch a real click on the Detail nav button (fires the whole
+      // tab-switch handler including renderApp() + section visibility toggle),
+      // then open the detail panel for this listing. Same pattern the BEST
+      // hero card uses in ui.js so both entry points route the user identically.
       marker.on("click", function () {
+        var detailBtn = document.querySelector('.tab-nav button[data-tab="detail"]');
+        if (detailBtn) detailBtn.click();
         if (window.openDetailPanel) window.openDetailPanel(entry.id);
       });
 
@@ -172,7 +186,7 @@
   function _loadDistrictLayer() {
     Promise.all([
       fetch("/api/districts").then(function (r) { return r.ok ? r.json() : null; }),
-      fetch("/static/tallinn-districts.geojson").then(function (r) { return r.ok ? r.json() : null; })
+      fetch("/tallinn-districts.geojson").then(function (r) { return r.ok ? r.json() : null; })
     ]).then(function (results) {
       var districtsApiData = results[0];
       var districtsGeoJson = results[1];
@@ -261,6 +275,7 @@
 
     if (districtsVisible) {
       districtLayer.addTo(map);
+      districtLayer.bringToBack(); // pins must render above district polygons
     }
   }
 
