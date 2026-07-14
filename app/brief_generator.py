@@ -82,22 +82,21 @@ def _extract_json(text: str) -> dict:
         raise
 
 
-def _validate_no_hallucinated_numbers(brief: str, authoritative: dict) -> bool:
-    """Return True if every 4-6 digit number in brief appears in the input facts.
+def _validate_no_hallucinated_numbers(brief: str, authoritative_facts: str) -> bool:
+    """Return True if every 4-6 digit number in brief appears in the input facts text.
 
     Pitfall 4: LLMs interpolate plausible numbers in prose. This post-hoc check
-    extracts every 4-6 digit sequence from brief_ru and verifies it matches a
-    value in the authoritative facts dict (as a string, comma/space stripped).
-    Returns False if any number is not in the facts — caller sets needs_review=True.
+    extracts every 4-6 digit sequence from brief_ru and verifies each one also
+    appears verbatim in the authoritative facts block the model was fed.
+
+    The authoritative set is derived from the raw facts text (not a curated dict)
+    so year_built, ISO-date year components, and all price/price_per_sqm/district
+    numbers are covered without having to enumerate them by field. Prevents the
+    'year 1970 always flags needs_review' cry-wolf noted by cross-AI review.
     """
-    authoritative_numbers = {
-        str(v).replace(",", "").replace(" ", "")
-        for v in authoritative.values()
-        if isinstance(v, (int, float))
-    }
+    authoritative_numbers = set(re.findall(r"\d{4,6}", authoritative_facts))
     for m in re.finditer(r"(\d{4,6})", brief):
-        n = m.group(1)
-        if n not in authoritative_numbers:
+        if m.group(1) not in authoritative_numbers:
             return False
     return True
 
@@ -185,18 +184,6 @@ def generate_negotiation_brief(
         + "\n\nСоставь абзац для подготовки к просмотру и переговоров."
     )
 
-    # Build authoritative-numbers dict for post-hoc validation
-    authoritative: dict = {
-        "price_eur": entry.get("price", entry.get("price_eur", 0)),
-        "price_per_sqm": entry.get("pricePerSqm", entry.get("price_per_sqm", 0)),
-        "score": entry.get("score", 0),
-        "district_avg": district_avg_price_per_sqm or 0,
-        "coo": coo_monthly_eur or 0,
-    }
-    if price_history:
-        authoritative["first_price"] = price_history[0].get("price", 0)
-        authoritative["last_price"] = price_history[-1].get("price", 0)
-
     try:
         resp = requests.post(
             API_URL,
@@ -222,9 +209,10 @@ def generate_negotiation_brief(
         result.setdefault("brief_ru", "")
         result.setdefault("suggested_offer_low_eur", 0)
         result.setdefault("suggested_offer_high_eur", 0)
-        # Post-hoc number grounding (Pitfall 4)
+        # Post-hoc number grounding (Pitfall 4) — every 4-6 digit number in the
+        # brief must also appear in the facts block the model saw.
         if result["brief_ru"] and not _validate_no_hallucinated_numbers(
-            result["brief_ru"], authoritative
+            result["brief_ru"], facts_block
         ):
             result["needs_review"] = True
             log.warning(
@@ -274,10 +262,23 @@ def generate_and_save_brief(listing_id: str) -> None:
             # while building the facts block or making the HTTP call.
             snapshot = dict(entry)
             price_history = data.get("price_history", {}).get(listing_id, [])
+            # Compute district avg €/m² from all seen entries in the same district
+            # (properties[] + pending[]) — mirrors ingest_handler._build_context_prefix
+            # (D-04/D-05) but computed inline to avoid a circular import. Excludes the
+            # listing itself so the comparison is against peer listings.
+            district = snapshot.get("district") or ""
+            if district:
+                peer_sqm = [
+                    e.get("pricePerSqm") or e.get("price_per_sqm")
+                    for e in list(data.get("properties", [])) + list(data.get("pending", []))
+                    if (e.get("district") or "") == district
+                    and e.get("id") != listing_id
+                    and (e.get("pricePerSqm") or e.get("price_per_sqm"))
+                ]
+                district_avg = round(sum(peer_sqm) / len(peer_sqm)) if peer_sqm else None
+            else:
+                district_avg = None
 
-        # Extract district avg and coo from the snapshotted entry
-        # These may be stored on the entry by prior phases (Phase 3 price intelligence)
-        district_avg = None
         coo_monthly_eur = None
         coo = snapshot.get("cost_of_ownership")
         if isinstance(coo, dict):

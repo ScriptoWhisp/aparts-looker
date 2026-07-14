@@ -78,23 +78,32 @@ def test_never_raises_on_network_error(monkeypatch):
 
 
 def test_number_validation():
-    """VIEW-03: _validate_no_hallucinated_numbers flags €-amounts not present in input facts."""
+    """VIEW-03: _validate_no_hallucinated_numbers flags €-amounts not present in input facts.
+
+    Validator takes the raw facts-block text as its second argument (not a curated dict),
+    so year_built and ISO-date years are covered without having to enumerate every field.
+    """
     import brief_generator
 
-    # All 4-6 digit numbers in brief are in authoritative facts → True
+    facts = "Цена 175000 EUR, район 2800/m², год постройки 1970, история 2026-07-10"
+
+    # All 4-6 digit numbers in brief also appear in facts → True
     assert brief_generator._validate_no_hallucinated_numbers(
-        "Цена 175000 EUR, район 2800/m²",
-        {"price_eur": 175000, "district_avg": 2800},
+        "Цена 175000 EUR, район 2800/m²", facts,
     ) is True, "expected True when all numbers in facts"
 
-    # 9999 is NOT in authoritative facts → False
+    # year_built regression: 1970 in the brief must NOT trigger needs_review
+    # since it's in the facts (cross-AI review MEDIUM finding).
     assert brief_generator._validate_no_hallucinated_numbers(
-        "Цена 9999 EUR",
-        {"price_eur": 175000},
+        "Дом 1970 года постройки, цена 175000 EUR.", facts,
+    ) is True, "expected True — year_built in facts must not flag needs_review"
+
+    # 9999 is NOT in facts → False
+    assert brief_generator._validate_no_hallucinated_numbers(
+        "Цена 9999 EUR", facts,
     ) is False, "expected False when number not in facts"
 
     # No 4-6 digit numbers in brief → True (vacuously)
     assert brief_generator._validate_no_hallucinated_numbers(
-        "Хорошая квартира в Таллине.",
-        {"price_eur": 175000},
+        "Хорошая квартира в Таллине.", facts,
     ) is True, "expected True when no numbers in brief"
