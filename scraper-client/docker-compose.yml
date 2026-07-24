@@ -4,3 +4,21 @@ services:
     restart: unless-stopped
     env_file: .env
     shm_size: '256m'
+    ports:
+      # Web UI (Scrape now button + Settings). Bound to 0.0.0.0 inside the
+      # container so any device on the home LAN can hit http://<mini-pc-lan-ip>:8002.
+      # Not exposed to the internet — the mini PC has no port forward.
+      - "8002:8002"
+    volumes:
+      # Named volume for the runtime-editable settings file. Persists across
+      # container rebuilds so the UI-configured search URL, interval, etc.
+      # survive `docker compose up --build`.
+      - scraper_data:/app/data
+    # host-gateway lets the container reach the host machine at
+    # http://host.docker.internal:8001 for local dev where the backend
+    # runs on the host (not inside Docker). No effect in production.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  scraper_data:

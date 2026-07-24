@@ -45,6 +45,13 @@ NEEDS_RENO_RE = re.compile(
     re.IGNORECASE,
 )
 BROKER_RE = re.compile(r"Võta ühendust\s*\n+\s*([^\n]+)")
+# Energy performance certificate: kv.ee labels the row "Energiamärgis" (older) or
+# "Energiaklass" (newer). Value is one of A/B/C/D/E/F/G/H, sometimes with a suffix
+# like "A+" or "B2". Kept as a raw string — we don't try to normalise.
+ENERGY_CLASS_RE = re.compile(
+    r"Energia(?:märgis|klass)\s*[\|:]?\s*\n?\s*[\|:]?\s*([A-H][+0-9]?)\b",
+    re.IGNORECASE,
+)
 
 # Phase 5: coordinate extraction — three fallback patterns covering known kv.ee embedding shapes.
 # Pattern 1: JSON-LD structured data (<script type="application/ld+json">)
@@ -56,6 +63,33 @@ COORD_LNG_SCRIPT_RE = re.compile(r'["\']ln[gG]["\']\s*:\s*(-?\d+\.\d+)')  # matc
 # Pattern 3: HTML data attributes (e.g. data-lat="59.4203" data-lng="24.7205")
 COORD_LAT_DATA_RE = re.compile(r'data-lat=["\'](-?\d+\.\d+)["\']')
 COORD_LNG_DATA_RE = re.compile(r'data-lng=["\'](-?\d+\.\d+)["\']')
+# Pattern 4: Google Maps link embedded in the page (kv.ee current format).
+# e.g. href="https://www.google.com/maps/search/?api=1&amp;query=59.4472862,24.8743791"
+# Single regex — both coords come from one match, no chance of lat/lng mismatch.
+COORD_GMAPS_RE = re.compile(
+    r'google\.com/maps/search/\?api=1&(?:amp;)?query=(-?\d+\.\d+),(-?\d+\.\d+)'
+)
+
+
+TALLINN_DISTRICTS = (
+    "Haabersti", "Kesklinn", "Kristiine", "Lasnamäe",
+    "Mustamäe", "Nõmme", "Pirita", "Põhja-Tallinn",
+)
+
+
+def _extract_district(title: str) -> str:
+    """Match one of the 8 official Tallinn districts against the title.
+
+    kv.ee titles look like: "Müüa korter, 3 tuba - Rõugu tn 1/1, Haabersti, Tallinn, Harjumaa"
+    Case-sensitive match — Estonian diacritics matter (Nõmme, Lasnamäe).
+    Returns empty string when nothing matches.
+    """
+    if not title:
+        return ""
+    for district in TALLINN_DISTRICTS:
+        if district in title:
+            return district
+    return ""
 
 
 @dataclass
@@ -63,6 +97,7 @@ class Listing:
     id: str
     url: str
     title: str = ""
+    district: str = ""
     price_eur: Optional[int] = None
     price_per_sqm: Optional[int] = None
     rooms: Optional[int] = None
@@ -70,6 +105,7 @@ class Listing:
     year_built: Optional[int] = None
     condition: str = ""
     material: str = ""
+    energy_class: str = ""
     floor: Optional[int] = None
     floor_total: Optional[int] = None
     parking: str = "unknown"  # "free" | "paid_or_mandatory" | "unknown"
@@ -131,6 +167,13 @@ def _extract_coords(html: str) -> tuple[Optional[float], Optional[float]]:
             lat, lng = float(lat_m.group(1)), float(lng_m.group(1))
             if 57.5 <= lat <= 59.7 and 21.7 <= lng <= 28.2:
                 return lat, lng
+
+        # Pattern 4: Google Maps link (current kv.ee format)
+        m = COORD_GMAPS_RE.search(html)
+        if m:
+            lat, lng = float(m.group(1)), float(m.group(2))
+            if 57.5 <= lat <= 59.7 and 21.7 <= lng <= 28.2:
+                return lat, lng
     except Exception:
         pass
     return None, None
@@ -161,6 +204,7 @@ def fetch_listing(url: str, timeout: int = 15, session: requests.Session | None 
 
     title_tag = soup.find("h1")
     listing.title = title_tag.get_text(strip=True) if title_tag else ""
+    listing.district = _extract_district(listing.title)
 
     price_m = PRICE_RE.search(text)
     if price_m:
@@ -186,6 +230,10 @@ def fetch_listing(url: str, timeout: int = 15, session: requests.Session | None 
     mat_m = MATERIAL_RE.search(text)
     if mat_m:
         listing.material = mat_m.group(1).lower()
+
+    energy_m = ENERGY_CLASS_RE.search(text)
+    if energy_m:
+        listing.energy_class = energy_m.group(1).upper()
 
     floor_m = FLOOR_RE.search(text)
     if floor_m:
@@ -216,11 +264,23 @@ def fetch_listing(url: str, timeout: int = 15, session: requests.Session | None 
 
     listing.image_count = len(re.findall(r'https://img-kv\.ee/[^"\']+', resp.text))
 
-    # Description: og:description meta tends to be the cleanest single
-    # block of ad copy without nav/menu noise.
-    og_desc = soup.find("meta", property="og:description")
-    if og_desc and og_desc.get("content"):
-        listing.description = og_desc["content"]
+    # Description: kv.ee stuffs og:description with a short comma-separated
+    # feature list (bad for AI evaluation). The real seller ad copy lives in
+    # <p class="description-content">, with <div class="description"> as a
+    # broader fallback. Prefer specific → general → meta.
+    desc = ""
+    p_desc = soup.find("p", class_="description-content")
+    if p_desc:
+        desc = p_desc.get_text(" ", strip=True)
+    if not desc:
+        div_desc = soup.find("div", class_="description")
+        if div_desc:
+            desc = div_desc.get_text(" ", strip=True)
+    if not desc:
+        og_desc = soup.find("meta", property="og:description")
+        if og_desc and og_desc.get("content"):
+            desc = og_desc["content"]
+    listing.description = desc
 
     # Best-effort coordinate extraction from raw HTML (not soup text — coords
     # live in script blocks that BeautifulSoup strips). Populates lat/lng when

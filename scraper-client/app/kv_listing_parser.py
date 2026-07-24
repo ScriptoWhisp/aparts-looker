@@ -10,6 +10,8 @@ the site's normal-user-facing vocabulary and changes far less often than
 markup.
 """
 
+from __future__ import annotations
+
 import re
 import time
 from dataclasses import dataclass, field
@@ -44,12 +46,51 @@ NEEDS_RENO_RE = re.compile(
 )
 BROKER_RE = re.compile(r"Võta ühendust\s*\n+\s*([^\n]+)")
 
+# Phase 5: coordinate extraction — three fallback patterns covering known kv.ee embedding shapes.
+# Pattern 1: JSON-LD structured data (<script type="application/ld+json">)
+COORD_LAT_JSONLD_RE = re.compile(r'"latitude"\s*:\s*(-?\d+\.\d+)')
+COORD_LNG_JSONLD_RE = re.compile(r'"longitude"\s*:\s*(-?\d+\.\d+)')
+# Pattern 2: JavaScript variable short form (e.g. {"lat":59.4203,"lng":24.7205})
+COORD_LAT_SCRIPT_RE = re.compile(r'["\']lat["\']\s*:\s*(-?\d+\.\d+)')
+COORD_LNG_SCRIPT_RE = re.compile(r'["\']ln[gG]["\']\s*:\s*(-?\d+\.\d+)')  # matches lng or lnG
+# Pattern 3: HTML data attributes (e.g. data-lat="59.4203" data-lng="24.7205")
+COORD_LAT_DATA_RE = re.compile(r'data-lat=["\'](-?\d+\.\d+)["\']')
+COORD_LNG_DATA_RE = re.compile(r'data-lng=["\'](-?\d+\.\d+)["\']')
+# Pattern 4: Google Maps link embedded in the page (kv.ee current format).
+# e.g. href="https://www.google.com/maps/search/?api=1&amp;query=59.4472862,24.8743791"
+# Single regex — both coords come from one match, no chance of lat/lng mismatch.
+COORD_GMAPS_RE = re.compile(
+    r'google\.com/maps/search/\?api=1&(?:amp;)?query=(-?\d+\.\d+),(-?\d+\.\d+)'
+)
+
+
+TALLINN_DISTRICTS = (
+    "Haabersti", "Kesklinn", "Kristiine", "Lasnamäe",
+    "Mustamäe", "Nõmme", "Pirita", "Põhja-Tallinn",
+)
+
+
+def _extract_district(title: str) -> str:
+    """Match one of the 8 official Tallinn districts against the title.
+
+    kv.ee titles look like: "Müüa korter, 3 tuba - Rõugu tn 1/1, Haabersti, Tallinn, Harjumaa"
+    Case-sensitive match — Estonian diacritics matter (Nõmme, Lasnamäe).
+    Returns empty string when nothing matches.
+    """
+    if not title:
+        return ""
+    for district in TALLINN_DISTRICTS:
+        if district in title:
+            return district
+    return ""
+
 
 @dataclass
 class Listing:
     id: str
     url: str
     title: str = ""
+    district: str = ""
     price_eur: Optional[int] = None
     price_per_sqm: Optional[int] = None
     rooms: Optional[int] = None
@@ -67,6 +108,8 @@ class Listing:
     image_url: str = ""
     image_count: int = 0
     raw_ok: bool = True
+    lat: Optional[float] = None
+    lng: Optional[float] = None
 
 
 def _to_int(s: str) -> Optional[int]:
@@ -81,6 +124,51 @@ def _to_float(s: str) -> Optional[float]:
         return float(s.replace(",", ".").replace(" ", ""))
     except (ValueError, AttributeError):
         return None
+
+
+def _extract_coords(html: str) -> tuple[Optional[float], Optional[float]]:
+    """Best-effort lat/lng extraction from raw HTML (not BeautifulSoup text).
+
+    Probes three fallback patterns in order — JSON-LD structured data, script var,
+    HTML data attribute — and returns the first successful match. Never raises
+    (returns (None, None) on any failure). Lat/lng are validated within Estonia
+    bounding box (57.5-59.7 lat, 21.7-28.2 lng) to reject false-positive matches
+    of unrelated decimals in the same page.
+    """
+    try:
+        # Pattern 1: JSON-LD structured data
+        lat_m = COORD_LAT_JSONLD_RE.search(html)
+        lng_m = COORD_LNG_JSONLD_RE.search(html)
+        if lat_m and lng_m:
+            lat, lng = float(lat_m.group(1)), float(lng_m.group(1))
+            if 57.5 <= lat <= 59.7 and 21.7 <= lng <= 28.2:
+                return lat, lng
+
+        # Pattern 2: JavaScript variable short form
+        lat_m = COORD_LAT_SCRIPT_RE.search(html)
+        lng_m = COORD_LNG_SCRIPT_RE.search(html)
+        if lat_m and lng_m:
+            lat, lng = float(lat_m.group(1)), float(lng_m.group(1))
+            if 57.5 <= lat <= 59.7 and 21.7 <= lng <= 28.2:
+                return lat, lng
+
+        # Pattern 3: HTML data attributes
+        lat_m = COORD_LAT_DATA_RE.search(html)
+        lng_m = COORD_LNG_DATA_RE.search(html)
+        if lat_m and lng_m:
+            lat, lng = float(lat_m.group(1)), float(lng_m.group(1))
+            if 57.5 <= lat <= 59.7 and 21.7 <= lng <= 28.2:
+                return lat, lng
+
+        # Pattern 4: Google Maps link (current kv.ee format)
+        m = COORD_GMAPS_RE.search(html)
+        if m:
+            lat, lng = float(m.group(1)), float(m.group(2))
+            if 57.5 <= lat <= 59.7 and 21.7 <= lng <= 28.2:
+                return lat, lng
+    except Exception:
+        pass
+    return None, None
 
 
 def extract_object_id(url: str) -> Optional[str]:
@@ -108,6 +196,7 @@ def fetch_listing(url: str, timeout: int = 15, session: requests.Session | None 
 
     title_tag = soup.find("h1")
     listing.title = title_tag.get_text(strip=True) if title_tag else ""
+    listing.district = _extract_district(listing.title)
 
     price_m = PRICE_RE.search(text)
     if price_m:
@@ -163,11 +252,31 @@ def fetch_listing(url: str, timeout: int = 15, session: requests.Session | None 
 
     listing.image_count = len(re.findall(r'https://img-kv\.ee/[^"\']+', resp.text))
 
-    # Description: og:description meta tends to be the cleanest single
-    # block of ad copy without nav/menu noise.
-    og_desc = soup.find("meta", property="og:description")
-    if og_desc and og_desc.get("content"):
-        listing.description = og_desc["content"]
+    # Description: kv.ee stuffs og:description with a short comma-separated
+    # feature list (bad for AI evaluation). The real seller ad copy lives in
+    # <p class="description-content">, with <div class="description"> as a
+    # broader fallback. Prefer specific → general → meta.
+    desc = ""
+    p_desc = soup.find("p", class_="description-content")
+    if p_desc:
+        desc = p_desc.get_text(" ", strip=True)
+    if not desc:
+        div_desc = soup.find("div", class_="description")
+        if div_desc:
+            desc = div_desc.get_text(" ", strip=True)
+    if not desc:
+        og_desc = soup.find("meta", property="og:description")
+        if og_desc and og_desc.get("content"):
+            desc = og_desc["content"]
+    listing.description = desc
+
+    # Best-effort coordinate extraction from raw HTML (not soup text — coords
+    # live in script blocks that BeautifulSoup strips). Populates lat/lng when
+    # a pattern matches; Plan 02 Nominatim fallback fills the remaining gaps.
+    lat, lng = _extract_coords(resp.text)
+    if lat is not None and lng is not None:
+        listing.lat = lat
+        listing.lng = lng
 
     return listing
 

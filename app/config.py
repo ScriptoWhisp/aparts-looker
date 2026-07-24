@@ -13,6 +13,15 @@ GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
+# Cap on Claude response tokens. Bumped from the historical 4000 because the
+# Russian-language expanded schema plus checklist_fills was truncating on
+# listings with long descriptions, causing JSON parse failures and blank
+# verdicts. Editable via Settings so we can tune without a restart.
+AI_MAX_TOKENS = int(os.environ.get("AI_MAX_TOKENS", "6000"))
+# How much of the listing's free-text description we hand to the model.
+# Longer = more context but more input tokens. 1500 was safe but often clipped
+# the interesting parts of Russian-language kv.ee ads.
+AI_DESCRIPTION_MAX_CHARS = int(os.environ.get("AI_DESCRIPTION_MAX_CHARS", "3000"))
 ORS_API_KEY = os.environ.get("ORS_API_KEY", "")
 
 KV_SEARCH_URL = os.environ.get("KV_SEARCH_URL", "")
@@ -27,6 +36,27 @@ DRAFT_SCORE_THRESHOLD = int(os.environ.get("DRAFT_SCORE_THRESHOLD", "60"))
 MIN_IMAGES = int(os.environ.get("MIN_IMAGES", "5"))
 MIN_ROOMS = int(os.environ.get("MIN_ROOMS", "2"))
 MAX_PRICE_EUR = int(os.environ.get("MAX_PRICE_EUR", "260000"))
+
+# Telegram tiered delivery thresholds.
+#   >= PHOTO: full card with photo + inline keyboard (highest signal listings)
+#   >= TEXT:  compact one-line text notification (worth a glance)
+#   below both: silent — still in the dashboard, not in Telegram
+# High-severity risks flagged by the AI suppress delivery regardless of score.
+TELEGRAM_MIN_SCORE_PHOTO = int(os.environ.get("TELEGRAM_MIN_SCORE_PHOTO", "80"))
+TELEGRAM_MIN_SCORE_TEXT = int(os.environ.get("TELEGRAM_MIN_SCORE_TEXT", "65"))
+
+# ---- Cost-of-ownership assumptions ----
+# Defaults tuned for Tallinn 2025-2026 market: 20% down, 4.5% Euribor+margin,
+# 30-year term; KÜ fee heuristic split at 1990 (Soviet-era vs post-independence
+# builds); central district heating; electricity+water baseline. All editable
+# via env vars, and (planned) via a backend settings pane later.
+COST_DOWN_PCT       = float(os.environ.get("COST_DOWN_PCT",       "20"))    # % of price as down payment
+COST_INTEREST_PCT   = float(os.environ.get("COST_INTEREST_PCT",   "4.5"))   # annual rate (Euribor + margin)
+COST_TERM_YEARS     = int  (os.environ.get("COST_TERM_YEARS",     "30"))    # loan term
+COST_KU_RATE_OLD    = float(os.environ.get("COST_KU_RATE_OLD",    "2.0"))   # EUR/m²/mo, pre-1990
+COST_KU_RATE_NEW    = float(os.environ.get("COST_KU_RATE_NEW",    "1.5"))   # EUR/m²/mo, 1990+
+COST_HEATING_RATE   = float(os.environ.get("COST_HEATING_RATE",   "1.2"))   # EUR/m²/mo, year avg
+COST_UTILITIES_BASE = float(os.environ.get("COST_UTILITIES_BASE", "60"))    # EUR/mo baseline (elec + water)
 
 CHECK_INTERVAL_HOURS = float(os.environ.get("CHECK_INTERVAL_HOURS", "2"))
 PRICE_DROP_THRESHOLD = float(os.environ.get("PRICE_DROP_THRESHOLD", "0.05"))

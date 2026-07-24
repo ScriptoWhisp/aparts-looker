@@ -11,14 +11,39 @@ listing for a fraction of a cent.
 """
 
 import json
+import logging
 import re
+from typing import Optional
 
 import requests
 
-from config import ANTHROPIC_API_KEY, ANTHROPIC_MODEL, BUYER_PROFILE
+import config
+from config import ANTHROPIC_API_KEY, BUYER_PROFILE
 from kv_listing_parser import Listing
 
+log = logging.getLogger("ai_evaluator")
+
 API_URL = "https://api.anthropic.com/v1/messages"
+
+# Whitelist of manual-checklist item keys the AI is allowed to auto-fill.
+# Kept in sync with the prompt's checklist_fills section — anything the model
+# returns outside this set is dropped defensively.
+AI_FILLABLE_CHECKLIST_KEYS = frozenset({
+    "s09_01", "s09_02",
+    "s14_01", "s14_02", "s14_03", "s14_04", "s14_05", "s14_09", "s14_10",
+    "s16_01", "s16_02", "s16_03", "s16_04",
+})
+
+
+def _whitelist_checklist_fills(raw: dict) -> dict:
+    """Keep only allow-listed keys with non-empty string values."""
+    if not isinstance(raw, dict):
+        return {}
+    out = {}
+    for k, v in raw.items():
+        if k in AI_FILLABLE_CHECKLIST_KEYS and isinstance(v, str) and v.strip():
+            out[k] = v.strip()
+    return out
 
 SYSTEM_PROMPT = f"""You help Daniel evaluate apartment listings in Tallinn (kv.ee)
 against his current search criteria. His profile and criteria:
@@ -41,87 +66,193 @@ SCORING RUBRIC — use the full range, do not cluster around 70:
   95–100: Exceptional. Rare combination of price, location, condition, and extras.
            Contact agent immediately.
 
-You are given data for a single listing. Return STRICTLY valid JSON (no markdown,
-no ``` fences), with the following fields:
+OUTPUT LANGUAGE — critical:
+  All natural-language field values (verdict, score_breakdown[*].reason,
+  risks[*].text, risks[*].mitigation, strengths[*], checklist_fills[*],
+  draft_subject, draft_body) MUST be written in RUSSIAN.
+  Field NAMES stay in English (they are keys). Verdict openers stay in English
+  ("Worth viewing IF", "Skip because", "Prioritise —") so downstream code can
+  parse them, but the rest of the sentence continues in Russian.
+  Enum values stay English: severity (low/medium/high), category (financial/legal/
+  physical/location/data). Numbers are numbers.
+
+Return STRICTLY valid JSON (no markdown, no ``` fences), with this exact shape:
 
 {{
-  "score": <int 0-100>,
-  "verdict": "<one sentence in English — the main takeaway>",
-  "strengths": ["<brief>", ...],
-  "concerns": ["<brief>", ...],
-  "should_draft_email": <bool — true if the listing is interesting enough to contact the agent>,
-  "draft_subject": "<email subject in English if should_draft_email=true, otherwise empty string>",
-  "draft_body": "<email body in English, polite, concise, asking about condition, remondifond, mandatory extras (parking), viewing availability — if should_draft_email=true, otherwise empty string>",
-  "checklist": {{
-    "price_per_sqm":        "pass" | "fail" | "unknown",
-    "rooms_area":           "pass" | "fail" | "unknown",
-    "parking":              "pass" | "fail" | "unknown",
-    "renovation_potential": "pass" | "fail" | "unknown",
-    "floor":                "pass" | "fail" | "unknown",
-    "year_material":        "pass" | "fail" | "unknown",
-    "mandatory_extras":     "pass" | "fail" | "unknown"
-  }}
+  "score": <int 0-100 — MUST equal the sum of score_breakdown[*].points>,
+  "verdict": "<one sentence — MUST start with 'Worth viewing IF …', 'Skip because …', or 'Prioritise — …' followed by a specific condition, IN RUSSIAN after the opener>",
+  "score_breakdown": {{
+    "location":    {{"points": <int 0-25>, "max": 25, "reason": "<RUSSIAN — cite specific district, commute minutes, or noise/transit fact>"}},
+    "price_value": {{"points": <int 0-25>, "max": 25, "reason": "<RUSSIAN — MUST cite €/m² number and compare to district avg or anchor listing>"}},
+    "condition":   {{"points": <int 0-20>, "max": 20, "reason": "<RUSSIAN — MUST cite year built, renovation year, or specific system update>"}},
+    "layout":      {{"points": <int 0-15>, "max": 15, "reason": "<RUSSIAN — MUST cite room count and m² and comment on ratio>"}},
+    "extras":      {{"points": <int 0-15>, "max": 15, "reason": "<RUSSIAN — MUST cite parking / storage / balcony status and any mandatory add-on cost>"}}
+  }},
+  "risks": [
+    {{
+      "severity": "low" | "medium" | "high",
+      "category": "financial" | "legal" | "physical" | "location" | "data",
+      "text": "<RUSSIAN — specific to THIS listing, cite exact numbers or phrases>",
+      "mitigation": "<RUSSIAN — what would offset it — or null if none>"
+    }}
+    // 0-5 items, ranked severity descending
+  ],
+  "strengths": ["<RUSSIAN — specific to THIS property>", ...],
+  "checklist_fills": {{
+    // Auto-fill values for specific manual checklist items when the listing text
+    // EXPLICITLY provides the answer. Return an empty string for items where the
+    // listing does NOT clearly say. Do NOT infer, guess, or invent facts.
+    // Keys must be from this exact allow-list:
+    "s14_01": "<RUSSIAN — location convenience summary; can include district, commute to Bolt HQ, transit>",
+    "s14_02": "<RUSSIAN — 'X XXX € · Y YYY €/м²' from listing data>",
+    "s14_03": "<RUSSIAN — 'год постройки XXXX, материал ..., энергокласс ...' — leave energy blank if not stated>",
+    "s14_04": "<RUSSIAN — heating type if stated in listing (central/gas/electric/individual/etc.), else empty>",
+    "s14_05": "<RUSSIAN — 'балкон: X м², кладовка: есть/нет, паркоместо: включено/€X' — from listing only>",
+    "s14_09": "<RUSSIAN — street noise info IF description mentions it, else empty>",
+    "s14_10": "<RUSSIAN — sun/orientation info IF description mentions it, else empty>",
+    "s16_01": "<RUSSIAN — distance to public transit IF description mentions it, else empty>",
+    "s16_02": "<RUSSIAN — nearby shops/pharmacies IF description mentions it, else empty>",
+    "s16_03": "<RUSSIAN — road/tram noise IF description mentions it, else empty>",
+    "s16_04": "<RUSSIAN — nearby construction/plans IF description mentions it, else empty>",
+    "s09_01": "<RUSSIAN — year of plumbing/electrical replacement IF description mentions it, else empty>",
+    "s09_02": "<RUSSIAN — facade insulation / windows year IF description mentions it, else empty>"
+  }},
+  "should_draft_email": <bool — true if score >= 65 and no high-severity blockers>,
+  "draft_subject": "<RUSSIAN — email subject if should_draft_email=true, else empty string>",
+  "draft_body": "<RUSSIAN — polite email body asking about condition, remondifond, mandatory extras, viewing availability — if should_draft_email=true, else empty string>"
 }}
 
-For the "checklist" field, assess each criterion from the listing text only.
-Use exactly these key names. Use "unknown" when the listing text does not address the criterion.
+HARD RULES — non-negotiable:
 
-Criterion guidance:
-  price_per_sqm       — competitive pricing: "pass" if < ~3000 EUR/m² for the condition, "fail" if high, "unknown" if data missing
-  rooms_area          — "pass" if 3–4 rooms and 50–80 m², "fail" if outside target range, "unknown" if data missing
-  parking             — "pass" if free parking included, "fail" if paid/mandatory extra cost, "unknown" if not mentioned
-  renovation_potential — "pass" if renovation signals present and structurally sound, "unknown" if not mentioned
-  floor               — "pass" if not ground floor (floor >= 2), "fail" if ground floor, "unknown" if not mentioned
-  year_material       — "pass" if building age/material is acceptable, "fail" if 1960s panel with no renovation signals, "unknown" if missing
-  mandatory_extras    — "pass" if no mandatory extras or they are reasonably priced, "fail" if mandatory extras add >10% to price, "unknown" if not mentioned
+1. Every 'reason' field MUST cite at least one concrete number or fact from the listing
+   (€/m², year, area, floor, district, commute min). Reasons without a number are rejected.
+
+2. BANNED PHRASES in any reason, verdict, risk.text, or strengths — they are meaningless:
+   Russian equivalents to avoid: "выгодная цена", "хороший вариант", "престижный район",
+   "отличное соотношение", "перспективный объект", "современные удобства".
+
+3. Every risk.text MUST reference this specific property. Bad: "верхний этаж — риск
+   протечек крыши". Good: "5-й этаж из 5, год ремонта крыши в описании не указан,
+   дом 1966 г. — требует проверки".
+
+4. Verdict MUST use one of these three openers (English) followed by a specific
+   condition (Russian):
+   - "Worth viewing IF <specific condition>" — e.g. "Worth viewing IF цена снизится до 200k€"
+   - "Skip because <specific dealbreaker>" — e.g. "Skip because 4200 €/м² на 40% выше медианы Kesklinn"
+   - "Prioritise — <specific standout>" — e.g. "Prioritise — 2400 €/м² в Kesklinn с паркингом — редкость"
+
+5. score_breakdown.points MUST sum EXACTLY to score. Category maxes are fixed:
+   25 + 25 + 20 + 15 + 15 = 100. Do not change them.
+
+6. If data for a category is missing, cap that category at 50% of max and put
+   'DATA GAP: <what is missing>' (in Russian) at the start of the reason.
+
+7. Return maximum 5 risks, minimum 0. Rank by severity descending. If a risk has
+   no obvious mitigation, use null (not the string 'None' or 'нет').
+
+8. Return maximum 4 strengths, minimum 0. Only include items that would positively
+   affect a decision — do not pad the list.
+
+9. checklist_fills: fill ONLY items where the listing text explicitly provides the
+   answer. For anything not covered by the listing, return an empty string "".
+   Do NOT invent nearby shops, heating types, or noise levels the description
+   does not mention. Empty is the correct answer when unsure.
 """
 
 
 def _extract_json(text: str) -> dict:
+    """Pull the first complete JSON object out of Claude's response.
+
+    Claude occasionally wraps output in ```json ... ``` fences, and sometimes
+    appends a trailing prose paragraph ("Note: I based this on…") that made
+    a plain json.loads fail with 'Extra data'. Using raw_decode lets us keep
+    the first valid object and ignore anything after it.
+    """
     text = text.strip()
     text = re.sub(r"^```(?:json)?\s*", "", text)
     text = re.sub(r"\s*```$", "", text)
-    return json.loads(text)
+    # Find the first '{' — Claude might emit a short intro before the JSON.
+    start = text.find("{")
+    if start == -1:
+        raise ValueError("no JSON object found in AI response")
+    obj, _end = json.JSONDecoder().raw_decode(text[start:])
+    return obj
 
 
-def evaluate_listing(listing: Listing, context_prefix: str = "") -> dict:
+def evaluate_listing(
+    listing: Listing,
+    context_prefix: str = "",
+    commute_minutes: Optional[int] = None,
+    district: str = "",
+    cost_of_ownership: Optional[dict] = None,
+) -> dict:
     """Returns a dict with score/verdict/strengths/concerns/draft fields.
     On any failure, returns a safe fallback dict with score=0 so the
     listing still gets a (minimal) Telegram notification rather than
     silently vanishing.
 
-    context_prefix: optional string prepended to the user message — used to inject
-    calibration anchors and district price/m² average per D-01/D-04. Defaults to
-    empty string for backward compatibility with existing callers.
+    context_prefix:  optional string prepended to the user message — used to inject
+                     calibration anchors and district price/m² average per D-01/D-04.
+    commute_minutes: pre-computed ORS driving time from Bolt HQ (Veerenni 28) — passed
+                     in so the AI does not speculate about "no commute data available"
+                     and dock points for a value we already have.
+    district:        Tallinn district name extracted from the listing title (e.g.,
+                     "Kesklinn", "Põhja-Tallinn") — passed in for the same reason.
     """
+    commute_line = (
+        f"Driving commute to Bolt HQ (Veerenni 28): {commute_minutes} min"
+        if commute_minutes is not None
+        else "Driving commute to Bolt HQ (Veerenni 28): not yet computed"
+    )
+    district_line = (
+        f"District: {district}"
+        if district
+        else "District: not extracted from title"
+    )
+
+    if cost_of_ownership:
+        b = cost_of_ownership.get("breakdown", {})
+        a = cost_of_ownership.get("assumptions", {})
+        cost_line = (
+            f"Estimated monthly cost of ownership: {cost_of_ownership.get('monthly_total_eur')} EUR "
+            f"({cost_of_ownership.get('cost_per_sqm_eur')} EUR/m²/mo). "
+            f"Breakdown: mortgage {b.get('mortgage')} · KÜ {b.get('ku_fee')} · "
+            f"heating {b.get('heating')} · utilities {b.get('utilities')}. "
+            f"Assumptions: {a.get('down_pct')}% down, {a.get('interest_pct')}% rate, "
+            f"{a.get('term_years')}y term"
+        )
+    else:
+        cost_line = "Estimated monthly cost of ownership: not computed (missing price or area)"
 
     listing_summary = f"""
 Title/address: {listing.title}
 URL: {listing.url}
+{district_line}
+{commute_line}
+{cost_line}
 Price: {listing.price_eur} EUR ({listing.price_per_sqm} EUR/m2)
 Rooms: {listing.rooms}
 Area: {listing.area_sqm} m2
 Year built: {listing.year_built}
 Material: {listing.material}
+Energy class: {getattr(listing, 'energy_class', '') or 'not stated'}
 Condition (stated): {listing.condition}
 Floor: {listing.floor}/{listing.floor_total}
 Parking: {listing.parking}
 Renovation needed (text signals): {listing.needs_renovation}
-Description: {listing.description[:1500]}
+Description: {listing.description[:config.AI_DESCRIPTION_MAX_CHARS]}
+
+IMPORTANT: The 'District', 'Driving commute to Bolt HQ', and 'Estimated monthly
+cost of ownership' values above are computed externally by this system. Do NOT
+dock points for these being 'unstated in the listing' — you have the
+authoritative value here. Cite the monthly cost when discussing affordability
+in the price_value reason.
 """
     # Phase 3: prepend context_prefix to user turn (anchors + district avg per D-01/D-04)
     user_content = context_prefix + listing_summary
 
     if not ANTHROPIC_API_KEY:
-        return {
-            "score": 0,
-            "verdict": "ANTHROPIC_API_KEY not set — evaluation unavailable.",
-            "strengths": [],
-            "concerns": [],
-            "should_draft_email": False,
-            "draft_subject": "",
-            "draft_body": "",
-        }
+        return _fallback_result("Skip because ANTHROPIC_API_KEY is not set — evaluation unavailable.")
 
     try:
         resp = requests.post(
@@ -132,37 +263,81 @@ Description: {listing.description[:1500]}
                 "content-type": "application/json",
             },
             json={
-                "model": ANTHROPIC_MODEL,
-                "max_tokens": 1500,  # increased from 1000 — plan 03-02 adds checklist output (~150 tokens)
+                "model": config.ANTHROPIC_MODEL,
+                "max_tokens": config.AI_MAX_TOKENS,
                 "system": SYSTEM_PROMPT,
                 "messages": [{"role": "user", "content": user_content}],
             },
-            timeout=30,
+            timeout=45,
         )
-        resp.raise_for_status()
+    except requests.RequestException as exc:
+        log.error("AI evaluation network error for %s: %s", listing.id, exc)
+        return _fallback_result(f"Skip because AI request failed: {exc}")
+
+    if resp.status_code != 200:
+        # Surface Anthropic errors (rate limit, invalid model, oversize prompt, etc.)
+        # so future runs can be diagnosed instead of showing a generic fallback.
+        try:
+            err_body = resp.json()
+        except ValueError:
+            err_body = resp.text[:400]
+        log.error(
+            "AI evaluation HTTP %s for %s: %s", resp.status_code, listing.id, err_body,
+        )
+        detail = ""
+        if isinstance(err_body, dict):
+            detail = err_body.get("error", {}).get("message") or str(err_body)[:200]
+        else:
+            detail = str(err_body)[:200]
+        return _fallback_result(
+            f"Skip because Anthropic returned HTTP {resp.status_code}: {detail}"
+        )
+
+    try:
         data = resp.json()
         text_blocks = [b["text"] for b in data.get("content", []) if b.get("type") == "text"]
         raw_text = "\n".join(text_blocks)
+        # If Claude ran out of tokens the JSON is guaranteed to be broken —
+        # surface it clearly instead of masking it as a generic parse error so
+        # we know to bump AI_MAX_TOKENS in the Settings tab.
+        if data.get("stop_reason") == "max_tokens":
+            log.warning(
+                "AI evaluation for %s hit max_tokens=%d — response truncated, "
+                "consider raising AI_MAX_TOKENS in Settings",
+                listing.id, config.AI_MAX_TOKENS,
+            )
         result = _extract_json(raw_text)
+    except (json.JSONDecodeError, KeyError, ValueError) as exc:
+        log.error(
+            "AI evaluation JSON parse failed for %s: %s. Raw response head: %s",
+            listing.id, exc, (raw_text[:500] if "raw_text" in dir() else "<no text>"),
+        )
+        return _fallback_result(f"Skip because AI output was not valid JSON: {exc}")
 
-        result.setdefault("score", 0)
-        result.setdefault("verdict", "")
-        result.setdefault("strengths", [])
-        result.setdefault("concerns", [])
-        result.setdefault("should_draft_email", False)
-        result.setdefault("draft_subject", "")
-        result.setdefault("draft_body", "")
-        result.setdefault("checklist", {})
-        return result
+    result.setdefault("score", 0)
+    result.setdefault("verdict", "")
+    result.setdefault("score_breakdown", {})
+    result.setdefault("risks", [])
+    result.setdefault("strengths", [])
+    result.setdefault("should_draft_email", False)
+    result.setdefault("draft_subject", "")
+    result.setdefault("draft_body", "")
+    # Sanitise checklist_fills — drop anything outside the allow-list or empty.
+    result["checklist_fills"] = _whitelist_checklist_fills(result.get("checklist_fills", {}))
+    return result
 
-    except (requests.RequestException, json.JSONDecodeError, KeyError, ValueError):
-        return {
-            "score": 0,
-            "verdict": "Could not get AI evaluation (API error) — review this listing manually.",
-            "strengths": [],
-            "concerns": [],
-            "should_draft_email": False,
-            "draft_subject": "",
-            "draft_body": "",
-            "checklist": {},
-        }
+
+def _fallback_result(verdict: str) -> dict:
+    """Empty-shell result used when the model can't be reached. Keeps every field
+    in the new schema so the frontend can render a graceful zero-state."""
+    return {
+        "score": 0,
+        "verdict": verdict,
+        "score_breakdown": {},
+        "risks": [],
+        "strengths": [],
+        "checklist_fills": {},
+        "should_draft_email": False,
+        "draft_subject": "",
+        "draft_body": "",
+    }
