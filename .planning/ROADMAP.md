@@ -19,6 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 4: Additional Scraper Sources** - city24.ee and kinnisvara24.ee added; deduplication across all sources *(deferred — cross-portal dedup complexity vs MVP value)*
 - [ ] **Phase 5: Map & Overview UI** - Interactive Tallinn map with score pins, district heat zones, commute isochrone, and redesigned dossier
 - [x] **Phase 6: Viewing Workflow & Extras** - Scheduled viewings, negotiation briefs, building fund lookup, PDF export (completed 2026-07-10)
+- [ ] **Phase 7: Database Migration** - Postgres via SQLAlchemy 2.x replaces JSON files; Alembic for schema migrations; single `listings` table with status enum + JSONB for nested structures
 
 ## Phase Details
 
@@ -211,3 +212,15 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 4. Additional Scraper Sources | 0/3 | Not started | - |
 | 5. Map & Overview UI | 0/5 | Not started | - |
 | 6. Viewing Workflow & Extras | 5/5 | Complete   | 2026-07-10 |
+| 7. Database Migration | 0/? | Not planned | - |
+
+### Phase 7: Database Migration
+
+**Goal:** Replace JSON file persistence with Postgres + SQLAlchemy 2.x. Introduce Alembic for schema migrations. Model data as a single `listings` table with a `status` enum (pending/approved/rejected/viewing_scheduled/viewed) plus JSONB columns for nested structures (cost_of_ownership, viewing_history, negotiation_brief, ku). Keep the kv.ee id as VARCHAR primary key so existing routes and downstream code continue to work. Backups are explicitly deferred to a future phase.
+**Requirements**: TBD
+**Depends on:** Phase 6
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 7 to break down)

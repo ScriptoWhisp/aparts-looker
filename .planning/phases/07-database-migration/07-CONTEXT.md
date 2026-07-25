@@ -1,0 +1,119 @@
+# Phase 7: Database Migration - Context
+
+**Gathered:** 2026-07-25
+**Status:** Ready for planning
+
+<domain>
+## Phase Boundary
+
+Replace the JSON-file persistence layer (`app/data_store.py` reading/writing `app_data.json`, `settings.json`, `agent_state.json` under `apartment_data` Docker volume) with a real relational store: Postgres accessed via SQLAlchemy 2.x, with Alembic for schema migrations. Ship a one-shot data migration that loads existing listings into the new store on first deploy, and rewire `data_store.py`'s public API (`load_app_data`, `save_app_data`, `set_viewing_scheduled`, `mark_viewed`, `save_negotiation_brief`, `save_ku_enrichment`, `set_cost_override`, etc.) so the rest of the app (main.py, ingest_handler.py, brief_generator.py, agent_job.py, scheduler.py, settings_store.py) is untouched at the call site.
+
+**In scope:** Postgres container in docker-compose, SQLAlchemy models, Alembic setup + baseline migration, data migration script, rewiring `data_store.py`, updating deployment (GitHub Actions workflow already does `up -d --build`), tests for the new persistence layer.
+
+**Out of scope:** Backups (explicitly deferred by user — future phase), settings_store persistence changes (its `settings.json` write-through can stay filesystem-based, or migrate too — planner decides based on cost), agent_state.json migration (planner decides — small enough to keep on disk or roll into DB).
+
+</domain>
+
+<decisions>
+## Implementation Decisions
+
+### DB engine + ORM
+- **D-01:** **Postgres**, not SQLite. User picked this over the SQLite recommendation. Rationale (inferred from context): richer types (JSONB with GIN indexes for future queries, native geo types available via PostGIS if Phase 5 map ever needs server-side district queries), room to grow to multi-user / cloud without another migration, and the operational cost of adding one more container in docker-compose is acceptable.
+- **D-02:** **SQLAlchemy 2.x** (not SQLModel, not raw sqlite3). Industry standard, first-class Alembic integration, most examples in the wild, typed API in 2.x. Prefer the new-style `MappedAsDataclass` + `Mapped[T]` annotations over legacy declarative.
+
+### Schema modeling
+- **D-03:** **Hybrid schema.** Flat scalar fields (id, title, url, price_eur, area_sqm, rooms, year_built, energy_class, lat, lng, district, score, status, created_at, updated_at, evaluated_at, scheduled_at, viewed_at) get their own columns and can be indexed. Complex nested dicts (`cost_of_ownership`, `viewing_history`, `negotiation_brief`, `ku`, `ai_output_raw`, `checklist`, `price_history`) live in **JSONB columns**. Postgres GIN indexes on JSONB can be added later if we ever need to query into nested fields.
+- **D-04:** **Single `listings` table + `status` enum**, not three separate tables. Status values: `pending`, `approved`, `rejected`, `viewing_scheduled`, `viewed`. Moving pending → approved is a single UPDATE. Aggregations (`COUNT BY status`) are trivial. Matches the direction Phase 6 already took (added `status` field on entries).
+- **D-05:** **Primary key = VARCHAR** with the kv.ee id as-is (`"3883234"`). No surrogate int PK. Every existing `/api/entry/{id}/...` route continues to work without changes. When Phase 4 adds city24/kinnisvara24, the plan is to add a `source` column (default `"kv"`) and a compound unique on `(source, external_id)`; the PK stays a string but becomes prefixed (`"kv:3883234"`, `"city24:...")` at that point. **Not** implementing multi-source now — this is planned-for compatibility only.
+
+### Backups
+- **D-06:** **No backups in Phase 7.** User explicitly declined all four backup options (B2, S3, rsync-to-Mac, combo). Postgres volume is the sole copy. Data-loss risk on server disk failure is accepted for now. Deferred to a future phase — see `<deferred>` below.
+
+### Claude's Discretion
+Areas Daniel did not want to discuss — planner decides based on standard practice:
+
+- **Cutover strategy.** Planner picks one of: (a) one-shot migration script run on first boot that reads the old JSON files from `/app/data`, populates Postgres, then leaves the JSON in place as a read-only historical reference for one week; (b) shadow-writes for a week; (c) accept 5 min downtime, migrate offline. Recommended default: **(a)** — simplest, safe (originals preserved), and appropriate for one user.
+- **settings.json + agent_state.json handling.** Planner decides whether to migrate these into DB tables or leave on filesystem. Recommended default: **leave on filesystem** — they're runtime state, small, and not what the user was worried about losing. Reduces scope.
+- **Password / connection secrets.** Planner adds `POSTGRES_PASSWORD` to `.env` (following existing secret pattern), constructs `DATABASE_URL` in `config.py`. Local dev uses the same compose stack (Docker Postgres), no separate dev DB.
+- **Alembic layout.** Standard: `app/alembic/` with `env.py` reading `DATABASE_URL` from config, baseline autogenerated from the SQLAlchemy models. First revision = "initial schema".
+- **Testing.** Planner picks in-memory SQLite for unit tests (fast, no fixtures) OR spins up an ephemeral Postgres via testcontainers/docker-compose for integration tests. Recommended default: **hybrid** — pytest fixtures using a scoped SQLAlchemy session against a real Postgres in CI, in-memory SQLite for logic-only tests where SQL dialect doesn't matter.
+- **`data_store._lock` fate.** The `threading.RLock` in `data_store.py` was there to serialize whole-file JSON reads/writes. With Postgres, per-row atomicity is handled by the DB. Planner removes the lock (or reduces it to a no-op wrapper) — but must audit the ~7 places that use `with data_store._lock: snapshot ... release lock ... http call ... re-acquire ... save` (Pitfall 5 pattern) and rewrite them to use SQLAlchemy sessions instead.
+
+</decisions>
+
+<canonical_refs>
+## Canonical References
+
+**Downstream agents MUST read these before planning or implementing.**
+
+### Project baseline
+- `.planning/PROJECT.md` — project constraints (single-user, low request volume, Docker deployment via GitHub Actions)
+- `.planning/ROADMAP.md` §Phase 7 — the goal statement + scope fence
+- `.claude/CLAUDE.md` — coding conventions (naming, error handling, function design, layered imports)
+
+### Persistence layer being replaced
+- `app/data_store.py` — the module to rewire; all public functions (`load_app_data`, `save_app_data`, `set_viewing_scheduled`, `mark_viewed`, `save_negotiation_brief`, `save_ku_enrichment`, `set_cost_override`, `save_settings`) must retain their signatures OR every caller must be updated in the same commit
+- `app/config.py` — `APP_DATA_FILE`, `SETTINGS_FILE`, `AGENT_STATE_FILE`, `DATA_DIR` constants will need to be joined by `DATABASE_URL` (or replaced)
+
+### Callers that must not break
+- `app/main.py` — 30+ HTTP routes that read/write via `data_store`
+- `app/ingest_handler.py` — POST /api/ingest writer path
+- `app/brief_generator.py` — Pitfall 5 snapshot-outside-lock pattern (must translate to SQLAlchemy session scoping)
+- `app/agent_job.py` — scheduler-driven writes
+- `app/settings_store.py` — reads config, writes back to `settings.json`; may or may not migrate to DB (Claude's discretion above)
+
+### Phase 6 patterns to preserve
+- `.planning/phases/06-viewing-workflow-extras/06-PATTERNS.md` — Pitfall 5 (never hold lock across HTTP), Pitfall 7 (preserve `ku.manual` on refresh), setdefault migration pattern in `load_app_data` (this is what the new schema must handle at INSERT-time via nullable columns / JSONB defaults)
+- `.planning/phases/06-viewing-workflow-extras/06-VERIFICATION.md` — the invariants that Phase 6 tests confirmed; these must still pass after migration
+
+### Deployment
+- `.github/workflows/deploy.yml` — SSHes to `root@46.62.152.9`, runs `git pull && docker compose up -d --build`. Migration must be safe to run under this flow (Alembic `upgrade head` on container start, or explicit pre-deploy step).
+- `docker-compose.yml` — where the new Postgres service gets added; existing `apartment_data` volume can stay (holds legacy JSON during cutover) or be renamed to `apartment_data_legacy`.
+
+</canonical_refs>
+
+<code_context>
+## Existing Code Insights
+
+### Reusable Assets
+- `data_store._lock` (`threading.RLock`) — serializes JSON I/O today; will be superseded by DB-level atomicity, but the *pattern* (snapshot-under-lock, HTTP outside, re-acquire to save) must translate cleanly to SQLAlchemy session scoping.
+- Atomic file-write pattern in `settings_store._persist()` (`tmp = X.tmp; write; os.replace(tmp, X)`) — POSIX-atomic. If settings_store keeps its filesystem home (Claude's discretion), this pattern is fine and can stay untouched.
+- Setdefault-based schema migration in `data_store.load_app_data()` — Phase 6 uses this to hot-migrate old records into the new shape at read time. In the DB world this becomes Alembic revisions + nullable columns with defaults.
+
+### Established Patterns
+- **Never-raise pattern** (`log.exception + return fallback`) — all data_store callers assume writes don't raise. Must preserve: catch SQLAlchemyError, log, return sane default. No unhandled exceptions bubbling to HTTP handlers.
+- **Layered imports** — data_store is imported by main, ingest_handler, agent_job, brief_generator, settings_store. New SQLAlchemy session factory must live in data_store (or a new `app/db.py`) to preserve the one-way dependency graph.
+- **UPPERCASE module constants** for env-driven config — `DATABASE_URL` follows this convention in `config.py`.
+
+### Integration Points
+- **APScheduler** (`app/scheduler.py`) — runs `run_check` in a background thread; must have its own DB session (SQLAlchemy sessions aren't thread-safe).
+- **`/api/check-now`** spawns a daemon thread — same rule: fresh session per thread.
+- **Docker container lifecycle** — Postgres container must be `healthy` before app starts. Use `depends_on: postgres: condition: service_healthy` with a Postgres healthcheck.
+- **CI/CD** — GitHub Actions `deploy.yml` currently does `git pull && docker compose up -d --build`. Migration options: (a) Alembic runs at app startup (fail-fast if migration fails), (b) explicit migration step in the workflow before `up -d`. Recommended default: **(a)** — simpler, atomic with the deploy.
+
+</code_context>
+
+<specifics>
+## Specific Ideas
+
+- User's original motivation: *"меня беспокоит где хранится всё то что мы сохраняем в плане квартир, и в особенности то что мы не храним это в нормальной базе данных"* — the driver is confidence that data survives, not a specific query the JSON layer can't answer. The migration is about reliability (transactions, atomic status transitions, real schema) not about new features. Planner should NOT invent new query capabilities to justify the migration.
+- User rejected NestJS rewrite (mentioned as alternative earlier in conversation) — Python/FastAPI stack stays. The DB layer changes; nothing else does. If the plan proposes to change any of: web framework, scheduler, scraper, AI evaluator, Telegram integration, Gmail integration — that is out of scope.
+- User answered `Postgres` when `SQLite` was recommended. Take that as a signal they're okay with more operational surface area (extra container, extra secret) for future flexibility.
+
+</specifics>
+
+<deferred>
+## Deferred Ideas
+
+- **Automated backups.** User declined all four backup destinations offered (Backblaze B2, AWS S3, rsync-to-Mac, combo). This is the single largest operational risk after Phase 7 — Postgres data lives in one Docker volume on one server. Recommend surfacing as a candidate for Phase 8 or as a standalone quick task after Phase 7 ships. Cheapest reasonable setup: nightly `pg_dump | gzip | rclone copy` to Backblaze B2 via a cron in the app container, ~$0.005/GB/month.
+- **Multi-source support (Phase 4 compatibility).** The PK-as-VARCHAR decision leaves room for a `source` column later. Not implementing now — no city24/kinnisvara24 scraper exists yet.
+- **PostGIS.** Postgres was picked partly for future geo capabilities, but Phase 5 already uses Leaflet + client-side district polygons. PostGIS only becomes relevant if server-side geospatial queries appear as a requirement — deferred.
+- **Query-driven features** ("cheapest per district", "listings you scored highest that got rejected"). The DB migration enables these; they are separate phases if/when Daniel wants them.
+- **settings_store migration to DB.** Left to planner's discretion; if the planner picks filesystem, this becomes deferred by default.
+
+</deferred>
+
+---
+
+*Phase: 7-Database Migration*
+*Context gathered: 2026-07-25*
