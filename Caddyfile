@@ -12,7 +12,7 @@
 	# All other routes (dossier frontend + remaining /api/* endpoints) require basic auth.
 	handle {
 		basicauth {
-			daniel $2a$14$ltXqsLzSQO7XpcFerMU8K.WBtphoHWGYqtUotJhiq.6H5sp2rWB4C
+			daniel $2a$14$I0kSivoGjrJLmTRJMSCocunDP/DT.zTN91mt58vi1.sUrA/BYklFi
 		}
 		reverse_proxy app:8000
 	}
