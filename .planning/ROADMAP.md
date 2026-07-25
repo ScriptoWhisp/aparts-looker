@@ -212,15 +212,40 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 4. Additional Scraper Sources | 0/3 | Not started | - |
 | 5. Map & Overview UI | 0/5 | Not started | - |
 | 6. Viewing Workflow & Extras | 5/5 | Complete   | 2026-07-10 |
-| 7. Database Migration | 0/? | Not planned | - |
+| 7. Database Migration | 0/7 | Not started | - |
 
 ### Phase 7: Database Migration
 
 **Goal:** Replace JSON file persistence with Postgres + SQLAlchemy 2.x. Introduce Alembic for schema migrations. Model data as a single `listings` table with a `status` enum (pending/approved/rejected/viewing_scheduled/viewed) plus JSONB columns for nested structures (cost_of_ownership, viewing_history, negotiation_brief, ku). Keep the kv.ee id as VARCHAR primary key so existing routes and downstream code continue to work. Backups are explicitly deferred to a future phase.
-**Requirements**: TBD
+**Requirements**: DB-01, DB-02, DB-03, DB-04, DB-05, DB-06, DB-07, DB-08
 **Depends on:** Phase 6
-**Plans:** 0 plans
+**Plans:** 7 plans
 
 Plans:
+**Wave 0**
 
-- [ ] TBD (run /gsd-plan-phase 7 to break down)
+- [ ] 07-00-PLAN.md — Deploy-prerequisite checkpoint + Wave 0 RED test scaffolds + pytest-postgresql fixture + requirements.txt (DB-01, DB-02, DB-03, DB-04, DB-07)
+
+**Wave 1** *(blocked on Wave 0 completion)*
+
+- [ ] 07-01-PLAN.md — SQLAlchemy engine + Listing model + Alembic baseline + Postgres container + entrypoint.sh (DB-01, DB-02, DB-03, DB-06)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 07-02-PLAN.md — Rewire data_store.py against SQLAlchemy; preserve public API; `_lock` becomes no-op shim; port existing tests to db_session fixture (DB-05, DB-07)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 07-03-PLAN.md — migrate_from_json.py one-shot idempotent loader + entrypoint invocation (DB-04)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 07-04-PLAN.md — Pitfall-5 conversions in brief_generator, ingest_handler, and 5 main.py daemon-thread endpoints (DB-08)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [ ] 07-05-PLAN.md — Hot-caller optimizations: settings recompute, backfill-costs, backfill-commutes, delete_all_listings, cost_override, cost_override_reset (DB-05)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
+- [ ] 07-06-PLAN.md — End-of-phase manual verification checkpoint (production deploy + workflow smoke tests) (all DB-01..DB-08)
