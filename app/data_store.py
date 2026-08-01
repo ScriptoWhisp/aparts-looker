@@ -96,9 +96,9 @@ def _get_listing_columns() -> set:
 # Constants (preserved — callers import these)
 # ---------------------------------------------------------------------------
 
-# DEFAULT_PROPERTIES removed in Wave 2 — legacy seed rows land via the Wave 3
-# migrate_from_json.py migration OR fresh installs start empty. Any caller that
-# imported DEFAULT_PROPERTIES for seeding should use the empty list or the DB.
+# DEFAULT_PROPERTIES removed in Wave 2 — fresh installs start empty and the
+# DB is the single source of truth. Any caller that used to import
+# DEFAULT_PROPERTIES for seeding should read from the DB instead.
 DEFAULT_APP_DATA = {
     "properties": [],
     "checklists": {},

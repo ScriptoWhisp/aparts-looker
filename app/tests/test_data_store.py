@@ -8,9 +8,8 @@ Phase 7 Wave 2 port notes:
 - JSON file seeding (_write_app_data) replaced by data_store.save_app_data() shim.
 - test_setdefault_status_legacy DELETED: the setdefault pattern was a JSON-file
   migration technique. In the DB world the Listing model has `default="approved"` for
-  the status field; default values are applied at INSERT time by the Alembic migration
-  / SQLAlchemy default. The Wave 3 migrate_from_json.py covers equivalent behaviour
-  for legacy JSON records. The DB model guarantees status is never NULL.
+  the status field, applied at INSERT time by SQLAlchemy / Alembic. The DB model
+  guarantees status is never NULL.
 """
 
 import pytest
