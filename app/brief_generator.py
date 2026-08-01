@@ -10,9 +10,13 @@ Output shape (structured JSON so numbers can be rendered separately):
     "suggested_offer_high_eur": int,
   }
 
-Pitfall 5: generate_and_save_brief NEVER holds data_store._lock across the
-Anthropic HTTP call. Load snapshot under lock, release, call API, re-acquire
-lock to save. See RESEARCH.md § Pitfall 5 for rationale.
+Phase 7 Wave 4 rewrite (DB-08):
+  generate_and_save_brief now uses SQLAlchemy session-scope discipline instead
+  of data_store._lock. The three-step pattern (RESEARCH § Pitfall 2):
+    1. Open session → snapshot fields → CLOSE session (connection returned to pool).
+    2. Call generate_negotiation_brief() OUTSIDE any session (Anthropic HTTP, 2-5s).
+    3. Reopen session → save brief → commit → close session.
+  data_store._lock wrappers are removed; Postgres provides per-row atomicity.
 
 Pitfall 4: _validate_no_hallucinated_numbers post-hoc check flags any 4-6
 digit number in brief_ru not present in the authoritative input facts. Sets
@@ -22,11 +26,14 @@ needs_review=True on the result so the frontend shows a warning badge.
 import json
 import logging
 import re
+from datetime import datetime, timezone
 from typing import Optional
 
 import requests
 
 import config
+from db import SessionLocal
+from models import Listing
 
 log = logging.getLogger("brief_generator")
 
@@ -233,63 +240,83 @@ def generate_negotiation_brief(
 def generate_and_save_brief(listing_id: str) -> None:
     """Daemon-thread target: generate a negotiation brief and persist it.
 
-    Follows the Pitfall 5 pattern EXACTLY — never holds data_store._lock across
-    the Anthropic HTTP call:
-      1. Acquire _lock → load data → snapshot needed fields → release.
-      2. Call generate_negotiation_brief() OUTSIDE the lock (may take 2-5 s).
-      3. Acquire _lock again → save_negotiation_brief() → release.
+    Phase 7 Wave 4 (DB-08) — session-scope discipline (RESEARCH § Pitfall 2):
+      1. Open session → load Listing row → snapshot to plain dict → CLOSE session.
+         (DB connection returned to pool before any HTTP call.)
+      2. Call generate_negotiation_brief() OUTSIDE any session (Anthropic HTTP, 2-5s).
+      3. Reopen session → set row.negotiation_brief → commit → close session.
+
+    data_store._lock wrappers removed: Postgres per-row atomicity replaces the
+    no-op nullcontext shim that Wave 2 left in place (Wave 4 removes the semantics).
 
     Never raises — any exception is logged and the thread exits silently.
     The entry remains unchanged if generation fails (error brief stored instead).
     """
-    # Imported here to avoid circular import at module scope (data_store → config;
-    # brief_generator → config + data_store is fine, but import at function scope
-    # keeps the dependency graph clean and aids testability).
-    import data_store  # noqa: PLC0415
-
     try:
-        # Step 1: load snapshot under lock, release immediately
-        with data_store._lock:
-            data = data_store.load_app_data()
-            entry = next(
-                (p for p in data.get("properties", []) if p.get("id") == listing_id),
-                None,
-            )
-            if entry is None:
+        # Step 1: session-scoped snapshot (session released when 'with' block exits)
+        with SessionLocal() as db_:
+            row = db_.get(Listing, listing_id)
+            if row is None:
                 log.warning("generate_and_save_brief: listing %s not found", listing_id)
                 return
-            # Snapshot all fields needed for the prompt — avoid holding the lock
-            # while building the facts block or making the HTTP call.
-            snapshot = dict(entry)
-            price_history = data.get("price_history", {}).get(listing_id, [])
-            # Compute district avg €/m² from all seen entries in the same district
-            # (properties[] + pending[]) — mirrors ingest_handler._build_context_prefix
-            # (D-04/D-05) but computed inline to avoid a circular import. Excludes the
-            # listing itself so the comparison is against peer listings.
+            # Snapshot all fields needed for the prompt — plain dict, no ORM refs.
+            # After the 'with' block the session is closed and the connection is
+            # returned to the pool BEFORE the Anthropic HTTP call starts.
+            snapshot = {
+                "id": row.id,
+                "url": row.url,
+                # Legacy aliases so facts_lines in generate_negotiation_brief picks up values
+                "name": row.name or row.title or "",
+                "title": row.title or "",
+                "price": row.price_eur,
+                "price_eur": row.price_eur,
+                "pricePerSqm": row.price_per_sqm,
+                "price_per_sqm": row.price_per_sqm,
+                "area": row.area_sqm,
+                "area_sqm": row.area_sqm,
+                "rooms": row.rooms,
+                "year": row.year_built,
+                "year_built": row.year_built,
+                "material": row.material,
+                "score": row.score,
+                "verdict": row.verdict,
+                "district": row.district or "",
+                "cost_of_ownership": row.cost_of_ownership or {},
+            }
+            price_history = list(row.price_history or [])
+            # Compute district avg €/m² via a peer query — scoped to THIS session,
+            # no HTTP inside. Excludes the listing itself so the comparison is against
+            # peer listings (mirrors ingest_handler._build_context_prefix, D-04/D-05).
             district = snapshot.get("district") or ""
             if district:
-                peer_sqm = [
-                    e.get("pricePerSqm") or e.get("price_per_sqm")
-                    for e in list(data.get("properties", [])) + list(data.get("pending", []))
-                    if (e.get("district") or "") == district
-                    and e.get("id") != listing_id
-                    and (e.get("pricePerSqm") or e.get("price_per_sqm"))
-                ]
-                district_avg = round(sum(peer_sqm) / len(peer_sqm)) if peer_sqm else None
+                peers = db_.query(Listing).filter(
+                    Listing.district == district,
+                    Listing.id != listing_id,
+                    Listing.price_per_sqm.isnot(None),
+                ).all()
+                district_avg = (
+                    round(sum(p.price_per_sqm for p in peers) / len(peers))
+                    if peers else None
+                )
             else:
                 district_avg = None
+        # Session closed here — connection returned to pool before HTTP call.
 
         coo_monthly_eur = None
         coo = snapshot.get("cost_of_ownership")
         if isinstance(coo, dict):
             coo_monthly_eur = coo.get("monthly_total_eur")
 
-        # Step 2: HTTP call OUTSIDE the lock (Pitfall 5)
+        # Step 2: HTTP call OUTSIDE any DB session (DB-08 — Pitfall 2 pattern)
         brief = generate_negotiation_brief(snapshot, price_history, district_avg, coo_monthly_eur)
 
-        # Step 3: re-acquire lock, save result
-        with data_store._lock:
-            data_store.save_negotiation_brief(listing_id, brief)
+        # Step 3: reopen session and save
+        with SessionLocal() as db_:
+            row = db_.get(Listing, listing_id)
+            if row is not None:
+                row.negotiation_brief = brief
+                row.negotiation_brief_generated_at = datetime.now(timezone.utc).isoformat()
+                db_.commit()
 
         log.info(
             "Brief generated for listing %s (needs_review=%s)",

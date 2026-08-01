@@ -382,6 +382,16 @@ def db_session(postgresql_db_fixture, monkeypatch):
     except ImportError:
         pass  # Module not yet present (Wave 0/1/2) — safe to skip
 
+    # Wave 4: brief_generator now does `from db import SessionLocal` at module load.
+    # Patch the module-local binding so brief_generator's session calls share the
+    # same rolled-back transaction (same pattern as data_store above).
+    try:
+        import brief_generator as _brief_gen_module  # noqa: PLC0415
+        if hasattr(_brief_gen_module, "SessionLocal"):
+            monkeypatch.setattr(_brief_gen_module, "SessionLocal", _make_session)
+    except ImportError:
+        pass  # Should always exist, but guard defensively
+
     yield session
 
     # Teardown — unconditional rollback; never-raise pattern.
