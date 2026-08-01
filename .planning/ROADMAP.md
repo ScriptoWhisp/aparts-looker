@@ -212,19 +212,19 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 4. Additional Scraper Sources | 0/3 | Not started | - |
 | 5. Map & Overview UI | 0/5 | Not started | - |
 | 6. Viewing Workflow & Extras | 5/5 | Complete   | 2026-07-10 |
-| 7. Database Migration | 0/7 | Not started | - |
+| 7. Database Migration | 1/7 | In Progress|  |
 
 ### Phase 7: Database Migration
 
 **Goal:** Replace JSON file persistence with Postgres + SQLAlchemy 2.x. Introduce Alembic for schema migrations. Model data as a single `listings` table with a `status` enum (pending/approved/rejected/viewing_scheduled/viewed) plus JSONB columns for nested structures (cost_of_ownership, viewing_history, negotiation_brief, ku). Keep the kv.ee id as VARCHAR primary key so existing routes and downstream code continue to work. Backups are explicitly deferred to a future phase.
 **Requirements**: DB-01, DB-02, DB-03, DB-04, DB-05, DB-06, DB-07, DB-08
 **Depends on:** Phase 6
-**Plans:** 7 plans
+**Plans:** 1/7 plans executed
 
 Plans:
 **Wave 0**
 
-- [ ] 07-00-PLAN.md — Deploy-prerequisite checkpoint + Wave 0 RED test scaffolds + pytest-postgresql fixture + requirements.txt (DB-01, DB-02, DB-03, DB-04, DB-07)
+- [x] 07-00-PLAN.md — Deploy-prerequisite checkpoint + Wave 0 RED test scaffolds + pytest-postgresql fixture + requirements.txt (DB-01, DB-02, DB-03, DB-04, DB-07)
 
 **Wave 1** *(blocked on Wave 0 completion)*
 
