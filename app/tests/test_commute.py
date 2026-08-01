@@ -26,8 +26,13 @@ import ingest_handler
 # ---------------------------------------------------------------------------
 
 def _mock_evaluate_fn():
-    """Return a lambda that mimics evaluate_listing with a fixed passing score."""
-    return lambda listing, context_prefix="": {
+    """Return a lambda that mimics evaluate_listing with a fixed passing score.
+
+    Phase 7 Wave 4 fix (Rule 1 — bug): **kwargs added to accept the extra keyword
+    arguments (commute_minutes, district, cost_of_ownership) that ingest_handler
+    passes to evaluate_listing (added in later phases; mock was never updated).
+    """
+    return lambda listing, context_prefix="", **kwargs: {
         "score": 80,
         "verdict": "OK",
         "checklist": {
@@ -75,7 +80,7 @@ _LISTING_WITHOUT_COORDS = {
 # process_ingest_batch commute_minutes tests
 # ---------------------------------------------------------------------------
 
-def test_process_ingest_batch_populates_commute_minutes(tmp_agent_state, mock_telegram, mock_send_pending_card, monkeypatch):
+def test_process_ingest_batch_populates_commute_minutes(db_session, tmp_agent_state, mock_telegram, mock_send_pending_card, monkeypatch):
     """Listing with lat/lng gets commute_minutes populated on the pending entry."""
     monkeypatch.setattr(config, "ORS_API_KEY", "test-key")
     monkeypatch.setattr(ingest_handler, "evaluate_listing", _mock_evaluate_fn())
@@ -95,7 +100,7 @@ def test_process_ingest_batch_populates_commute_minutes(tmp_agent_state, mock_te
     )
 
 
-def test_process_ingest_batch_no_coords_skips_ors(tmp_agent_state, mock_telegram, mock_send_pending_card, monkeypatch):
+def test_process_ingest_batch_no_coords_skips_ors(db_session, tmp_agent_state, mock_telegram, mock_send_pending_card, monkeypatch):
     """Listing without lat/lng skips ORS call and gets commute_minutes=None."""
     monkeypatch.setattr(config, "ORS_API_KEY", "test-key")
     monkeypatch.setattr(ingest_handler, "evaluate_listing", _mock_evaluate_fn())
@@ -118,7 +123,7 @@ def test_process_ingest_batch_no_coords_skips_ors(tmp_agent_state, mock_telegram
     )
 
 
-def test_process_ingest_batch_empty_ors_key(tmp_agent_state, mock_telegram, mock_send_pending_card, monkeypatch):
+def test_process_ingest_batch_empty_ors_key(db_session, tmp_agent_state, mock_telegram, mock_send_pending_card, monkeypatch):
     """Empty ORS_API_KEY results in commute_minutes=None on the pending entry (soft skip)."""
     monkeypatch.setattr(config, "ORS_API_KEY", "")
     monkeypatch.setattr(ingest_handler, "evaluate_listing", _mock_evaluate_fn())
@@ -176,8 +181,13 @@ def test_geocode_with_nominatim_empty_response(monkeypatch):
 # POST /api/geocode-backfill endpoint tests
 # ---------------------------------------------------------------------------
 
-def test_geocode_backfill_endpoint(client, tmp_agent_state, monkeypatch):
-    """POST /api/geocode-backfill?sync=1 geocodes entries missing coords and skips those with coords."""
+def test_geocode_backfill_endpoint(client, db_session, tmp_agent_state, monkeypatch):
+    """POST /api/geocode-backfill?sync=1 geocodes entries missing coords and skips those with coords.
+
+    Phase 7 Wave 4 fix (Rule 1 — bug): seeding now uses data_store.add_to_pending() +
+    update_listing_coords() (DB) instead of writing to app_data.json dict (obsolete
+    after Wave 2 migration). data_store._lock wrapper removed from test seeding code.
+    """
     monkeypatch.setattr(config, "ORS_API_KEY", "test-key")
 
     # Monkeypatch time.sleep in main.py to avoid 1.1s delay in tests
@@ -192,33 +202,23 @@ def test_geocode_backfill_endpoint(client, tmp_agent_state, monkeypatch):
     mock_commute = MagicMock(return_value=15)
     monkeypatch.setattr(ingest_handler, "_fetch_commute_minutes", mock_commute)
 
-    # Seed app_data with exactly two entries (clear default properties to control counts):
+    # Seed DB with exactly two entries:
     # - entry A: has coords already (should be skipped)
     # - entry B: no coords (should be geocoded)
-    with data_store._lock:
-        data = data_store.load_app_data()
-        data["properties"] = []  # clear defaults so only our 2 entries are iterated
-        data["pending"] = [
-            {
-                "id": "backfill-has-coords",
-                "title": "Already Has Coords",
-                "url": "https://www.kv.ee/backfill-has-coords.html",
-                "price_eur": 200000,
-                "lat": 59.4200,
-                "lng": 24.7100,
-                "commute_minutes": 10,
-            },
-            {
-                "id": "backfill-no-coords",
-                "title": "Liivalaia 7, Tallinn",
-                "url": "https://www.kv.ee/backfill-no-coords.html",
-                "price_eur": 180000,
-                "lat": None,
-                "lng": None,
-                "commute_minutes": None,
-            },
-        ]
-        data_store.save_app_data(data)
+    data_store.add_to_pending({
+        "id": "backfill-has-coords",
+        "title": "Already Has Coords",
+        "url": "https://www.kv.ee/backfill-has-coords.html",
+        "price_eur": 200000,
+    })
+    data_store.update_listing_coords("backfill-has-coords", 59.4200, 24.7100, 10)
+
+    data_store.add_to_pending({
+        "id": "backfill-no-coords",
+        "title": "Liivalaia 7, Tallinn",
+        "url": "https://www.kv.ee/backfill-no-coords.html",
+        "price_eur": 180000,
+    })
 
     resp = client.post("/api/geocode-backfill?sync=1")
 
@@ -228,13 +228,8 @@ def test_geocode_backfill_endpoint(client, tmp_agent_state, monkeypatch):
     assert body.get("geocoded") == 1, f"Expected geocoded=1, got {body.get('geocoded')}"
     assert body.get("skipped") == 1, f"Expected skipped=1, got {body.get('skipped')}"
 
-    # Verify app_data now has coords on the previously-empty entry
-    updated_data = data_store.load_app_data()
-    updated_entry = next(
-        (e for e in updated_data.get("pending", []) if e.get("id") == "backfill-no-coords"),
-        None,
-    )
-    assert updated_entry is not None, "backfill-no-coords not found in pending[]"
-    assert updated_entry.get("lat") == 59.42, (
-        f"Expected lat=59.42 after geocode, got {updated_entry.get('lat')}"
+    # Verify DB now has coords on the previously-empty entry
+    result = data_store.get_listing_coords("backfill-no-coords")
+    assert result.get("lat") == 59.42, (
+        f"Expected lat=59.42 after geocode, got {result.get('lat')}"
     )

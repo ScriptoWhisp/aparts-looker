@@ -168,7 +168,12 @@ def telegram_status() -> dict:
 
 @app.post("/api/telegram/silence")
 async def telegram_silence(request: Request) -> dict:
-    """POST {"hours": N}. N > 0 silences for N hours. N == 0 clears silence."""
+    """POST {"hours": N}. N > 0 silences for N hours. N == 0 clears silence.
+
+    Phase 7 Wave 4 (site #6, RESEARCH § Pitfall 2): lock wrapper removed.
+    agent_state.json is filesystem-backed (D-Discretion); save_agent_state uses
+    atomic os.replace — no session concerns; no HTTP calls in this function.
+    """
     from datetime import datetime, timezone as _tz, timedelta
     try:
         body = await request.json()
@@ -178,16 +183,15 @@ async def telegram_silence(request: Request) -> dict:
     if hours < 0 or hours > 24 * 30:
         raise HTTPException(status_code=422, detail="hours must be between 0 and 720")
 
-    with data_store._lock:
-        state = data_store.load_agent_state()
-        if hours == 0:
-            state["telegram_silenced_until"] = None
-            data_store.save_agent_state(state)
-            return {"ok": True, "silenced": False}
-        deadline = datetime.now(_tz.utc) + timedelta(hours=hours)
-        state["telegram_silenced_until"] = deadline.isoformat()
+    state = data_store.load_agent_state()
+    if hours == 0:
+        state["telegram_silenced_until"] = None
         data_store.save_agent_state(state)
-        return {"ok": True, "silenced": True, "silenced_until": state["telegram_silenced_until"]}
+        return {"ok": True, "silenced": False}
+    deadline = datetime.now(_tz.utc) + timedelta(hours=hours)
+    state["telegram_silenced_until"] = deadline.isoformat()
+    data_store.save_agent_state(state)
+    return {"ok": True, "silenced": True, "silenced_until": state["telegram_silenced_until"]}
 
 
 """Legacy stored entries used frontend-style field names (name/price/area/year/pricePerSqm/notes).
@@ -477,13 +481,11 @@ def approve_pending(listing_id: str):
     if not ok:
         raise HTTPException(status_code=404, detail="Not found in pending queue")
     # Fire-and-forget KÜ lookup (D-12: fires once on pending → approved transition)
-    # Pattern: load address under lock, release, then spawn thread — never hold _lock across HTTP.
-    address = ""
-    with data_store._lock:
-        data = data_store.load_app_data()
-        entry = next((p for p in data.get("properties", []) if p.get("id") == listing_id), None)
-        if entry is not None:
-            address = entry.get("address", "") or ""
+    # Phase 7 Wave 4 (site #3, RESEARCH § Pitfall 2): lock wrapper removed.
+    # get_approved_listing scopes its own session and returns a plain dict snapshot;
+    # the daemon thread is spawned with plain string args — no session is passed to it.
+    entry = data_store.get_approved_listing(listing_id)
+    address = (entry.get("address", "") or "") if entry is not None else ""
     if address:
         threading.Thread(
             target=ingest_handler._dispatch_ku_lookup,
@@ -559,13 +561,12 @@ async def regenerate_brief(listing_id: str) -> dict:
     to call brief_generator.generate_and_save_brief (D-06 regenerate semantics:
     overwrites entry.negotiation_brief). Returns 200 immediately (fire-and-forget).
     Returns 404 if the listing is not in properties[].
+
+    Phase 7 Wave 4 (site #5, RESEARCH § Pitfall 2): lock wrapper removed.
+    get_approved_listing scopes its own session; the daemon receives only the
+    listing_id string — no session is passed to the thread.
     """
-    with data_store._lock:
-        data = data_store.load_app_data()
-        entry = next(
-            (p for p in data.get("properties", []) if p.get("id") == listing_id),
-            None,
-        )
+    entry = data_store.get_approved_listing(listing_id)
     if entry is None:
         raise HTTPException(status_code=404, detail="Listing not found in properties")
     threading.Thread(
@@ -585,14 +586,13 @@ async def refresh_ku(listing_id: str) -> dict:
     Returns 200 immediately (fire-and-forget). Returns 404 if the listing is not in
     properties[]. Returns 400 if the listing has no address field (silent noop with
     informative error so the frontend can surface a helpful message to Daniel).
+
+    Phase 7 Wave 4 (site #4, RESEARCH § Pitfall 2): lock wrapper removed.
+    get_approved_listing scopes its own session (opens + closes before this function
+    spawns the KÜ daemon). The daemon receives only plain string args — no session passed.
     """
-    with data_store._lock:
-        data = data_store.load_app_data()
-        entry = next(
-            (p for p in data.get("properties", []) if p.get("id") == listing_id),
-            None,
-        )
-        address = entry.get("address", "") if entry is not None else None
+    entry = data_store.get_approved_listing(listing_id)
+    address = (entry.get("address", "") or "") if entry is not None else None
     if entry is None:
         raise HTTPException(status_code=404, detail="Listing not found in properties")
     if not address:
@@ -766,39 +766,44 @@ def refresh_isochrone() -> dict:
 def _run_geocode_backfill() -> dict:
     """Background function that geocodes all entries missing lat/lng via Nominatim.
 
-    Iterates properties[] + pending[], calls Nominatim for entries with lat/lng None,
-    sleeps 1.1s between calls (Nominatim usage policy), then saves updated app_data.
+    Phase 7 Wave 4 (RESEARCH § Pitfall 2, T-07-04-03):
+    Snapshot pattern — load_app_data() opens + closes its own session before the loop;
+    Nominatim and ORS HTTP calls run OUTSIDE any DB session; per-entry coordinate writes
+    use data_store.update_listing_coords() which scopes its own session.
+    The 60+-second geocode loop never holds a DB connection open.
+
     Returns {"geocoded": N, "skipped": M} for the sync path.
     Never raises — wraps body in try/except per never-raise convention.
     """
     geocoded = 0
     skipped = 0
     try:
-        with data_store._lock:
-            data = data_store.load_app_data()
-            all_entries = data.get("properties", []) + data.get("pending", [])
-            for entry in all_entries:
-                if entry.get("lat") is not None and entry.get("lng") is not None:
-                    skipped += 1
-                    continue
-                # Build query from entry name/title; append Tallinn if not present
-                query = entry.get("name") or entry.get("title") or ""
-                if not query:
-                    skipped += 1
-                    continue
-                if "tallinn" not in query.lower():
-                    query = query + ", Tallinn"
-                lat, lng = ingest_handler._geocode_with_nominatim(query)
-                if lat is not None and lng is not None:
-                    commute_mins = ingest_handler._fetch_commute_minutes(lat, lng)
-                    entry["lat"] = lat
-                    entry["lng"] = lng
-                    entry["commute_minutes"] = commute_mins
-                    geocoded += 1
-                else:
-                    skipped += 1
-                time.sleep(1.1)  # Nominatim usage policy: max 1 request/second
-            data_store.save_app_data(data)
+        # Snapshot: load_app_data() opens + closes its own session before returning the dict.
+        # No DB session is held across the Nominatim/ORS HTTP calls below.
+        data = data_store.load_app_data()
+        all_entries = data.get("properties", []) + data.get("pending", [])
+        for entry in all_entries:
+            if entry.get("lat") is not None and entry.get("lng") is not None:
+                skipped += 1
+                continue
+            # Build query from entry name/title; append Tallinn if not present
+            query = entry.get("name") or entry.get("title") or ""
+            if not query:
+                skipped += 1
+                continue
+            if "tallinn" not in query.lower():
+                query = query + ", Tallinn"
+            # Nominatim HTTP call — no DB session held (session-scope discipline, Wave 4)
+            lat, lng = ingest_handler._geocode_with_nominatim(query)
+            if lat is not None and lng is not None:
+                # ORS HTTP call — no DB session held
+                commute_mins = ingest_handler._fetch_commute_minutes(lat, lng)
+                # update_listing_coords scopes its own short-lived session internally
+                data_store.update_listing_coords(entry.get("id"), lat, lng, commute_mins)
+                geocoded += 1
+            else:
+                skipped += 1
+            time.sleep(1.1)  # Nominatim usage policy: max 1 request/second
     except Exception:
         log.exception("_run_geocode_backfill failed")
     return {"geocoded": geocoded, "skipped": skipped}

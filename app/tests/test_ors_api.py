@@ -10,6 +10,11 @@ Coverage:
   - test_refresh_isochrone_endpoint: POST /api/refresh-isochrone writes GeoJSON to disk
   - test_isochrone_get_serves_file: GET /api/isochrone returns file contents
   - test_isochrone_get_missing_file: GET /api/isochrone returns empty FeatureCollection when file absent
+
+Phase 7 Wave 4 fix (Rule 1 — bug): ORS mock updated to match actual API response shape.
+The implementation uses sources=[0] + destinations=[1], producing a 1×1 matrix [[duration]].
+The old mock incorrectly returned [[None, 720.5]] (2-element row), expecting index [0][1];
+the correct index is [0][0]. Mocks now use {"durations": [[720.5]]} / {"durations": [[None]]}.
 """
 
 import json
@@ -27,9 +32,13 @@ import ingest_handler
 # ---------------------------------------------------------------------------
 
 def test_fetch_commute_minutes_success(monkeypatch):
-    """Valid 200 response with duration 720.5 seconds returns 12 minutes (max(1, round(720.5/60)))."""
+    """Valid 200 response with duration 720.5 seconds returns 12 minutes (max(1, round(720.5/60))).
+
+    ORS Matrix API with sources=[0] + destinations=[1] returns a 1×1 matrix: [[duration_secs]].
+    The implementation reads durations[0][0] (single-source, single-destination result).
+    """
     mock_response = MagicMock()
-    mock_response.json.return_value = {"durations": [[None, 720.5]]}
+    mock_response.json.return_value = {"durations": [[720.5]]}
     mock_response.raise_for_status.return_value = None
 
     mock_post = MagicMock(return_value=mock_response)
@@ -45,7 +54,7 @@ def test_fetch_commute_minutes_success(monkeypatch):
 def test_fetch_commute_minutes_null_duration(monkeypatch):
     """Duration value null in ORS response returns None."""
     mock_response = MagicMock()
-    mock_response.json.return_value = {"durations": [[None, None]]}
+    mock_response.json.return_value = {"durations": [[None]]}
     mock_response.raise_for_status.return_value = None
 
     mock_post = MagicMock(return_value=mock_response)

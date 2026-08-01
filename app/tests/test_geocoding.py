@@ -2,17 +2,14 @@
 
 Tests cover:
 - Listing dataclass lat/lng fields
-- data_store per-entry migration (setdefault on load)
 - data_store.update_listing_coords / get_listing_coords helpers
 - data_store._pending_to_property coord carry-over
 - kv_listing_parser._extract_coords regex probe patterns (three fallback shapes)
 
-All tests were written BEFORE the implementation (TDD RED phase) and are
-expected to pass after Tasks 2, 3, 4 land their production code.
+Phase 7 Wave 4 fix (Rule 1 — bug): tests that previously wrote to app_data.json
+and expected load_app_data() to read from it are updated to use the DB via
+db_session fixture (Wave 2 replaced filesystem storage with Postgres).
 """
-
-import json
-from pathlib import Path
 
 import pytest
 
@@ -28,143 +25,105 @@ def test_listing_dataclass_has_lat_lng():
     assert listing.lng is None
 
 
-def test_load_app_data_migrates_missing_lat_lng(tmp_agent_state):
-    """Existing entries missing lat/lng/commute_minutes get None defaults on load."""
+def test_load_app_data_migrates_missing_lat_lng(db_session):
+    """Existing entries missing lat/lng/commute_minutes default to None on load.
+
+    Phase 7 Wave 4: seeds via data_store.add_to_pending() (DB) instead of
+    writing to app_data.json (obsolete after Wave 2 migration).
+    """
     import data_store  # noqa: PLC0415
 
-    app_data_file = Path(tmp_agent_state) / "app_data.json"
-    app_data_file.write_text(
-        json.dumps({
-            "properties": [],
-            "checklists": {},
-            "settings": {},
-            "pending": [{"id": "abc", "title": "T"}],
-            "rejected": [],
-            "price_history": {},
-        }),
-        encoding="utf-8",
-    )
+    data_store.add_to_pending({"id": "abc-geo", "title": "T", "status": "pending"})
 
     data = data_store.load_app_data()
-    assert len(data["pending"]) == 1
-    entry = data["pending"][0]
+    pending_by_id = {e["id"]: e for e in data["pending"]}
+    assert "abc-geo" in pending_by_id, f"abc-geo not found in pending: {list(pending_by_id)}"
+    entry = pending_by_id["abc-geo"]
     assert entry.get("lat") is None
     assert entry.get("lng") is None
     assert entry.get("commute_minutes") is None
 
 
-def test_load_app_data_preserves_existing_coords(tmp_agent_state):
-    """Existing coord values in pending[]/properties[] are preserved unchanged on load."""
+def test_load_app_data_preserves_existing_coords(db_session):
+    """Existing coord values in pending[]/properties[] are preserved unchanged on load.
+
+    Phase 7 Wave 4: seeds via data_store.add_to_pending() (DB) then
+    data_store.update_listing_coords() instead of writing to app_data.json.
+    """
     import data_store  # noqa: PLC0415
 
-    app_data_file = Path(tmp_agent_state) / "app_data.json"
-    app_data_file.write_text(
-        json.dumps({
-            "properties": [],
-            "checklists": {},
-            "settings": {},
-            "pending": [{"id": "abc", "lat": 59.4, "lng": 24.7, "commute_minutes": 15}],
-            "rejected": [],
-            "price_history": {},
-        }),
-        encoding="utf-8",
-    )
+    data_store.add_to_pending({"id": "abc-coords", "title": "T", "status": "pending"})
+    data_store.update_listing_coords("abc-coords", 59.4, 24.7, 15)
 
     data = data_store.load_app_data()
-    entry = data["pending"][0]
+    pending_by_id = {e["id"]: e for e in data["pending"]}
+    entry = pending_by_id["abc-coords"]
     assert entry["lat"] == 59.4
     assert entry["lng"] == 24.7
     assert entry["commute_minutes"] == 15
 
 
-def test_update_listing_coords_pending(tmp_agent_state):
+def test_update_listing_coords_pending(db_session):
     """update_listing_coords writes lat/lng/commute_minutes onto a pending entry."""
     import data_store  # noqa: PLC0415
 
-    app_data_file = Path(tmp_agent_state) / "app_data.json"
-    app_data_file.write_text(
-        json.dumps({
-            "properties": [],
-            "checklists": {},
-            "settings": {},
-            "pending": [{"id": "abc", "title": "T"}],
-            "rejected": [],
-            "price_history": {},
-        }),
-        encoding="utf-8",
-    )
+    data_store.add_to_pending({"id": "abc-upd", "title": "T", "status": "pending"})
 
-    result = data_store.update_listing_coords("abc", 59.42, 24.72, 18)
+    result = data_store.update_listing_coords("abc-upd", 59.42, 24.72, 18)
     assert result is True
 
     data = data_store.load_app_data()
-    entry = data["pending"][0]
+    pending_by_id = {e["id"]: e for e in data["pending"]}
+    entry = pending_by_id["abc-upd"]
     assert entry["lat"] == 59.42
     assert entry["lng"] == 24.72
     assert entry["commute_minutes"] == 18
 
 
-def test_update_listing_coords_properties(tmp_agent_state):
+def test_update_listing_coords_properties(db_session):
     """update_listing_coords writes coord fields onto a properties entry."""
+    from models import Listing  # noqa: PLC0415
     import data_store  # noqa: PLC0415
 
-    app_data_file = Path(tmp_agent_state) / "app_data.json"
-    app_data_file.write_text(
-        json.dumps({
-            "properties": [{"id": "prop1", "name": "Apt 1"}],
-            "checklists": {},
-            "settings": {},
-            "pending": [],
-            "rejected": [],
-            "price_history": {},
-        }),
-        encoding="utf-8",
-    )
+    row = Listing(id="prop1-geo", status="approved", title="Apt 1")
+    db_session.add(row)
+    db_session.commit()
 
-    result = data_store.update_listing_coords("prop1", 59.43, 24.73, 12)
+    result = data_store.update_listing_coords("prop1-geo", 59.43, 24.73, 12)
     assert result is True
 
     data = data_store.load_app_data()
-    entry = data["properties"][0]
+    props_by_id = {e["id"]: e for e in data["properties"]}
+    entry = props_by_id["prop1-geo"]
     assert entry["lat"] == 59.43
     assert entry["lng"] == 24.73
     assert entry["commute_minutes"] == 12
 
 
-def test_update_listing_coords_not_found(tmp_agent_state):
+def test_update_listing_coords_not_found(db_session):
     """update_listing_coords returns False when listing_id not found in pending or properties."""
     import data_store  # noqa: PLC0415
 
-    result = data_store.update_listing_coords("missing", 59.42, 24.72, 18)
+    result = data_store.update_listing_coords("missing-geo", 59.42, 24.72, 18)
     assert result is False
 
 
-def test_get_listing_coords_hit(tmp_agent_state):
+def test_get_listing_coords_hit(db_session):
     """get_listing_coords returns the stored coords dict for a known listing_id."""
     import data_store  # noqa: PLC0415
 
-    app_data_file = Path(tmp_agent_state) / "app_data.json"
-    app_data_file.write_text(
-        json.dumps({
-            "properties": [],
-            "checklists": {},
-            "settings": {},
-            "pending": [{"id": "abc", "lat": 59.42, "lng": 24.72, "commute_minutes": 18}],
-            "rejected": [],
-            "price_history": {},
-        }),
-        encoding="utf-8",
-    )
+    data_store.add_to_pending({"id": "abc-hit", "title": "T", "status": "pending"})
+    data_store.update_listing_coords("abc-hit", 59.42, 24.72, 18)
 
-    result = data_store.get_listing_coords("abc")
+    result = data_store.get_listing_coords("abc-hit")
     assert result == {"lat": 59.42, "lng": 24.72, "commute_minutes": 18}
 
 
-def test_get_listing_coords_miss(tmp_agent_state):
+def test_get_listing_coords_miss(db_session):
     """get_listing_coords returns all-None dict for an unknown listing_id."""
     import data_store  # noqa: PLC0415
 
-    result = data_store.get_listing_coords("unknown-id")
+    result = data_store.get_listing_coords("unknown-id-geo")
     assert result == {"lat": None, "lng": None, "commute_minutes": None}
 
 
