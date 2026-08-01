@@ -287,60 +287,80 @@ def _diagnose_listing(entry: dict, normalized: dict) -> dict:
 
 @app.delete("/api/listings/all")
 def delete_all_listings() -> dict:
-    """Wipe every listing (properties, pending, rejected), all checklists,
-    all price history, and the seen-ID set so the next scrape can re-add them.
+    """Wipe every listing (properties, pending, rejected) and reset seen-ID set.
+
+    Row-scoped (Phase 7 Wave 5): single db.query(Listing).delete() instead of
+    load whole-dict → clear lists → save whole-dict. Agent state (seen_listing_ids)
+    still lives in agent_state.json (filesystem per D-Discretion).
 
     Intentionally unauthenticated for local single-user use — the whole backend
     already sits behind Caddy Basic Auth in production. Never raises.
     """
-    with data_store._lock:
-        app_data = data_store.load_app_data()
-        counts = {
-            "properties": len(app_data.get("properties", [])),
-            "pending": len(app_data.get("pending", [])),
-            "rejected": len(app_data.get("rejected", [])),
-            "checklists": len(app_data.get("checklists", {})),
-            "price_history": len(app_data.get("price_history", {})),
-        }
-        app_data["properties"] = []
-        app_data["pending"] = []
-        app_data["rejected"] = []
-        app_data["checklists"] = {}
-        app_data["price_history"] = {}
-        data_store.save_app_data(app_data)
-
+    from sqlalchemy.exc import SQLAlchemyError
+    from sqlalchemy import func as sa_func
+    try:
+        from db import SessionLocal
+        from models import Listing
+        with SessionLocal() as db_:
+            # Count by status BEFORE delete so the response accurately reports what was removed
+            status_counts = dict(
+                db_.query(Listing.status, sa_func.count(Listing.id))
+                .group_by(Listing.status)
+                .all()
+            )
+            deleted = db_.query(Listing).delete()
+            db_.commit()
+        # Agent state (agent_state.json — still filesystem per D-Discretion)
         state = data_store.load_agent_state()
         state["seen_listing_ids"] = []
         data_store.save_agent_state(state)
-
-    return {"ok": True, "removed": counts}
+        approved_count = (
+            status_counts.get("approved", 0)
+            + status_counts.get("viewing_scheduled", 0)
+            + status_counts.get("viewed", 0)
+        )
+        return {"ok": True, "removed": {
+            "properties": approved_count,
+            "pending": status_counts.get("pending", 0),
+            "rejected": status_counts.get("rejected", 0),
+            "checklists": deleted,
+            "price_history": deleted,
+        }}
+    except SQLAlchemyError:
+        log.exception("delete_all_listings failed")
+        return {"ok": False, "error": "DB error"}
 
 
 @app.delete("/api/listings/{listing_id}")
 def delete_listing(listing_id: str) -> dict:
-    """Remove a listing from properties[] or pending[]. Also drops its checklist entry.
+    """Remove a listing from the DB by its id.
 
-    Useful for pruning old placeholder entries that have no real data. Never raises —
-    returns {"ok": False, ...} if nothing was found.
+    Row-scoped (Phase 7 Wave 5): db.get(Listing, id) → delete → commit, instead of
+    load whole-dict → pop from list → save whole-dict. Never raises — returns
+    {"ok": False, ...} if nothing was found.
     """
-    with data_store._lock:
-        app_data = data_store.load_app_data()
-        removed_from = None
-        for list_name in ("properties", "pending", "rejected"):
-            entries = app_data.get(list_name, [])
-            for i, e in enumerate(entries):
-                if e.get("id") == listing_id:
-                    entries.pop(i)
-                    removed_from = list_name
-                    break
-            if removed_from:
-                break
-        if not removed_from:
-            return {"ok": False, "error": "Listing not found"}
-        # Drop checklist entry too
-        app_data.get("checklists", {}).pop(listing_id, None)
-        data_store.save_app_data(app_data)
-    return {"ok": True, "removed_from": removed_from}
+    from sqlalchemy.exc import SQLAlchemyError
+    try:
+        from db import SessionLocal
+        from models import Listing
+        with SessionLocal() as db_:
+            row = db_.get(Listing, listing_id)
+            if row is None:
+                return {"ok": False, "error": "Listing not found"}
+            removed_from_status = row.status
+            db_.delete(row)
+            db_.commit()
+        # Translate status → legacy list-name for response parity with pre-Phase-7 shape
+        if removed_from_status in ("approved", "viewing_scheduled", "viewed"):
+            removed_from_bucket = "properties"
+        elif removed_from_status == "rejected":
+            removed_from_bucket = "rejected"
+        else:
+            removed_from_bucket = "pending"
+        return {"ok": True, "removed_from": removed_from_bucket}
+    except SQLAlchemyError:
+        log.exception("delete_listing failed for %s", listing_id)
+        return {"ok": False, "error": "DB error"}
 
 
 @app.get("/api/listings/{listing_id}/debug")
@@ -404,57 +424,56 @@ def reevaluate_listing(listing_id: str) -> dict:
     """
     if not config.ANTHROPIC_API_KEY:
         return {"ok": False, "error": "ANTHROPIC_API_KEY not configured"}
-    with data_store._lock:
-        app_data = data_store.load_app_data()
-        entry = _find_entry(app_data, listing_id)
-        if entry is None:
-            raise HTTPException(status_code=404, detail="Listing not found")
-        normalized = _normalize_entry_for_listing(entry)
-        try:
-            listing = ingest_handler._deserialize_listing(normalized)
-        except Exception:
-            log.exception("reevaluate: failed to deserialize %s", listing_id)
-            return {"ok": False, "error": "Cannot deserialize listing"}
-        try:
-            import cost_calculator
-            coo = cost_calculator.compute_cost_of_ownership(
-                listing.price_eur, listing.area_sqm, listing.year_built,
-            )
-            context_prefix = ingest_handler._build_context_prefix(listing, app_data)
-            evaluation = ai_evaluator.evaluate_listing(
-                listing,
-                context_prefix,
-                commute_minutes=entry.get("commute_minutes"),
-                district=entry.get("district") or getattr(listing, "district", ""),
-                cost_of_ownership=coo,
-            )
-        except Exception:
-            log.exception("reevaluate: evaluation failed for %s", listing_id)
-            return {"ok": False, "error": "Evaluation call failed"}
+    app_data = data_store.load_app_data()
+    entry = _find_entry(app_data, listing_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Listing not found")
+    normalized = _normalize_entry_for_listing(entry)
+    try:
+        listing = ingest_handler._deserialize_listing(normalized)
+    except Exception:
+        log.exception("reevaluate: failed to deserialize %s", listing_id)
+        return {"ok": False, "error": "Cannot deserialize listing"}
+    try:
+        import cost_calculator
+        coo = cost_calculator.compute_cost_of_ownership(
+            listing.price_eur, listing.area_sqm, listing.year_built,
+        )
+        context_prefix = ingest_handler._build_context_prefix(listing, app_data)
+        evaluation = ai_evaluator.evaluate_listing(
+            listing,
+            context_prefix,
+            commute_minutes=entry.get("commute_minutes"),
+            district=entry.get("district") or getattr(listing, "district", ""),
+            cost_of_ownership=coo,
+        )
+    except Exception:
+        log.exception("reevaluate: evaluation failed for %s", listing_id)
+        return {"ok": False, "error": "Evaluation call failed"}
 
-        entry["score"] = evaluation.get("score", 0)
-        entry["verdict"] = evaluation.get("verdict", "")
-        entry["score_breakdown"] = evaluation.get("score_breakdown", {})
-        entry["risks"] = evaluation.get("risks", [])
-        entry["strengths"] = evaluation.get("strengths", [])
-        entry["concerns"] = evaluation.get("concerns", [])  # legacy carry-over
-        entry["ai_checklist_fills"] = evaluation.get("checklist_fills", {})
-        entry["cost_of_ownership"] = coo
-        entry["draft_subject"] = evaluation.get("draft_subject") or f"Inquiry about {listing.title}"
-        entry["draft_body"] = evaluation.get("draft_body") or ""
+    entry["score"] = evaluation.get("score", 0)
+    entry["verdict"] = evaluation.get("verdict", "")
+    entry["score_breakdown"] = evaluation.get("score_breakdown", {})
+    entry["risks"] = evaluation.get("risks", [])
+    entry["strengths"] = evaluation.get("strengths", [])
+    entry["concerns"] = evaluation.get("concerns", [])  # legacy carry-over
+    entry["ai_checklist_fills"] = evaluation.get("checklist_fills", {})
+    entry["cost_of_ownership"] = coo
+    entry["draft_subject"] = evaluation.get("draft_subject") or f"Inquiry about {listing.title}"
+    entry["draft_body"] = evaluation.get("draft_body") or ""
 
-        # Refresh commute_minutes if we now have ORS + coords but the entry lacks a value.
-        if (
-            entry.get("commute_minutes") is None
-            and entry.get("lat") is not None
-            and entry.get("lng") is not None
-            and config.ORS_API_KEY
-        ):
-            entry["commute_minutes"] = ingest_handler._fetch_commute_minutes(
-                entry["lat"], entry["lng"]
-            )
+    # Refresh commute_minutes if we now have ORS + coords but the entry lacks a value.
+    if (
+        entry.get("commute_minutes") is None
+        and entry.get("lat") is not None
+        and entry.get("lng") is not None
+        and config.ORS_API_KEY
+    ):
+        entry["commute_minutes"] = ingest_handler._fetch_commute_minutes(
+            entry["lat"], entry["lng"]
+        )
 
-        data_store.save_app_data(app_data)
+    data_store.save_app_data(app_data)
 
     # AI checklist writes retired — the new schema uses score_breakdown + risks
     # instead of a 7-item pass/fail list. See AI depth rework.
@@ -653,15 +672,14 @@ def create_draft_endpoint(listing_id: str) -> dict:
 
     ok = gmail_client.create_draft(contact_email, subject, body)
     if ok:
-        with data_store._lock:
-            state = data_store.load_agent_state()
-            state["pending_drafts"][listing_id] = {
-                "to_email": contact_email,
-                "subject": subject,
-                "body": body,
-                "url": entry.get("url", ""),
-            }
-            data_store.save_agent_state(state)
+        state = data_store.load_agent_state()
+        state["pending_drafts"][listing_id] = {
+            "to_email": contact_email,
+            "subject": subject,
+            "body": body,
+            "url": entry.get("url", ""),
+        }
+        data_store.save_agent_state(state)
 
     return {"ok": ok}
 
@@ -693,11 +711,10 @@ async def patch_checklist(listing_id: str, request: Request) -> dict:
         if not key_valid or value not in allowed_values:
             raise HTTPException(status_code=422, detail="Invalid key or value")
 
-    with data_store._lock:
-        app_data = data_store.load_app_data()
-        cl = app_data.setdefault("checklists", {}).setdefault(listing_id, {})
-        cl.setdefault("manual_checklist", {})[key] = value
-        data_store.save_app_data(app_data)
+    app_data = data_store.load_app_data()
+    cl = app_data.setdefault("checklists", {}).setdefault(listing_id, {})
+    cl.setdefault("manual_checklist", {})[key] = value
+    data_store.save_app_data(app_data)
 
     return {"ok": True}
 
@@ -857,99 +874,131 @@ async def cost_override(listing_id: str, request: Request) -> dict:
     Monthly total and €/m² are recomputed from the merged breakdown so the card
     stays consistent. Also stamps entry.cost_of_ownership.overridden=true so the
     UI can flag it.
+
+    Row-scoped (Phase 7 Wave 5): opens one session, mutates the single row,
+    commits once — was previously load whole-dict → mutate entry → save whole-dict.
     """
     body = await request.json()
     if not isinstance(body, dict):
         raise HTTPException(status_code=400, detail="Body must be a JSON object")
 
     keys = ("mortgage", "ku_fee", "heating", "utilities")
-    with data_store._lock:
-        app_data = data_store.load_app_data()
-        entry = _find_entry_any(app_data, listing_id)
-        if entry is None:
-            raise HTTPException(status_code=404, detail="Listing not found")
+    import cost_calculator
+    from sqlalchemy.exc import SQLAlchemyError
+    try:
+        from db import SessionLocal
+        from models import Listing
+        with SessionLocal() as db_:
+            row = db_.get(Listing, listing_id)
+            if row is None:
+                raise HTTPException(status_code=404, detail="Listing not found")
 
-        # Ensure there is something to override — recompute a base from current
-        # config first if the entry has no cost_of_ownership yet (e.g. legacy row).
-        coo = entry.get("cost_of_ownership")
-        if not coo:
-            import cost_calculator
-            coo = cost_calculator.compute_cost_of_ownership(
-                entry.get("price_eur"), entry.get("area_sqm"), entry.get("year_built"),
-            )
-            if coo is None:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Cannot override cost for a listing without price + area",
+            # Ensure there is something to override — recompute a base from current
+            # config first if the entry has no cost_of_ownership yet (e.g. legacy row).
+            coo = dict(row.cost_of_ownership or {})
+            if not coo:
+                coo = cost_calculator.compute_cost_of_ownership(
+                    row.price_eur, row.area_sqm, row.year_built,
                 )
+                if coo is None:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Cannot override cost for a listing without price + area",
+                    )
+                coo = dict(coo)
 
-        breakdown = dict(coo.get("breakdown") or {})
-        for k in keys:
-            if k in body and body[k] is not None and body[k] != "":
-                try:
-                    breakdown[k] = round(float(body[k]))
-                except (TypeError, ValueError):
-                    continue
+            breakdown = dict(coo.get("breakdown") or {})
+            for k in keys:
+                if k in body and body[k] is not None and body[k] != "":
+                    try:
+                        breakdown[k] = round(float(body[k]))
+                    except (TypeError, ValueError):
+                        continue
 
-        total = sum(breakdown.get(k, 0) for k in keys)
-        coo["breakdown"] = breakdown
-        coo["monthly_total_eur"] = round(total)
-        area = entry.get("area_sqm") or 0
-        coo["cost_per_sqm_eur"] = round(total / area, 1) if area else None
-        coo["overridden"] = True
-        entry["cost_of_ownership"] = coo
-        data_store.save_app_data(app_data)
+            total = sum(breakdown.get(k, 0) for k in keys)
+            area = row.area_sqm or 0
+            new_coo = {
+                **coo,
+                "breakdown": breakdown,
+                "monthly_total_eur": round(total),
+                "cost_per_sqm_eur": round(total / area, 1) if area else None,
+                "overridden": True,
+            }
+            row.cost_of_ownership = new_coo  # JSONB reassignment (Pitfall 1)
+            db_.commit()
 
-    return {"ok": True, "cost_of_ownership": coo}
+        return {"ok": True, "cost_of_ownership": new_coo}
+    except HTTPException:
+        raise
+    except SQLAlchemyError:
+        log.exception("cost_override failed for %s", listing_id)
+        return {"ok": False, "error": "DB error"}
 
 
 @app.delete("/api/entry/{listing_id}/cost-override")
 def cost_override_reset(listing_id: str) -> dict:
-    """Discard overrides and recompute cost_of_ownership from current settings."""
+    """Discard overrides and recompute cost_of_ownership from current settings.
+
+    Row-scoped (Phase 7 Wave 5): opens one session, mutates the single row,
+    commits once — was previously load whole-dict → mutate entry → save whole-dict.
+    """
     import cost_calculator
-    with data_store._lock:
-        app_data = data_store.load_app_data()
-        entry = _find_entry_any(app_data, listing_id)
-        if entry is None:
-            raise HTTPException(status_code=404, detail="Listing not found")
-        coo = cost_calculator.compute_cost_of_ownership(
-            entry.get("price_eur"), entry.get("area_sqm"), entry.get("year_built"),
-        )
-        entry["cost_of_ownership"] = coo
-        data_store.save_app_data(app_data)
-    return {"ok": True, "cost_of_ownership": coo}
+    from sqlalchemy.exc import SQLAlchemyError
+    try:
+        from db import SessionLocal
+        from models import Listing
+        with SessionLocal() as db_:
+            row = db_.get(Listing, listing_id)
+            if row is None:
+                raise HTTPException(status_code=404, detail="Listing not found")
+            coo = cost_calculator.compute_cost_of_ownership(
+                row.price_eur, row.area_sqm, row.year_built,
+            )
+            row.cost_of_ownership = coo or {}  # JSONB reassignment (Pitfall 1)
+            db_.commit()
+        return {"ok": True, "cost_of_ownership": coo}
+    except HTTPException:
+        raise
+    except SQLAlchemyError:
+        log.exception("cost_override_reset failed for %s", listing_id)
+        return {"ok": False, "error": "DB error"}
 
 
 @app.post("/api/backfill-costs")
 def backfill_costs() -> dict:
     """Recompute cost_of_ownership for every stored entry with price + area.
 
+    Row-scoped (Phase 7 Wave 5): one session, iterate rows, skip overridden,
+    commit once — was previously load whole-dict → per-entry mutate → save whole-dict.
     Cheap (pure Python, no external calls) so we can call it on every settings
     change or model tweak without worrying about rate limits.
     """
     import cost_calculator
+    from sqlalchemy.exc import SQLAlchemyError
     updated = 0
     skipped = 0
     try:
-        with data_store._lock:
-            app_data = data_store.load_app_data()
-            for list_name in ("properties", "pending", "rejected"):
-                for entry in app_data.get(list_name, []):
-                    if (entry.get("cost_of_ownership") or {}).get("overridden"):
-                        skipped += 1
-                        continue
-                    coo = cost_calculator.compute_cost_of_ownership(
-                        entry.get("price_eur"),
-                        entry.get("area_sqm"),
-                        entry.get("year_built"),
-                    )
-                    if coo is not None:
-                        entry["cost_of_ownership"] = coo
-                        updated += 1
-                    else:
-                        skipped += 1
-            data_store.save_app_data(app_data)
-    except Exception:
+        from db import SessionLocal
+        from models import Listing
+        with SessionLocal() as db_:
+            rows = db_.query(Listing).all()
+            for row in rows:
+                coo_existing = row.cost_of_ownership or {}
+                if coo_existing.get("overridden"):
+                    skipped += 1
+                    continue
+                coo = cost_calculator.compute_cost_of_ownership(
+                    row.price_eur,
+                    row.area_sqm,
+                    row.year_built,
+                )
+                if coo is not None:
+                    row.cost_of_ownership = coo  # JSONB reassignment (Pitfall 1)
+                    updated += 1
+                else:
+                    skipped += 1
+            db_.commit()
+    except SQLAlchemyError:
         log.exception("backfill-costs failed")
     return {"ok": True, "updated": updated, "skipped": skipped}
 
@@ -958,45 +1007,62 @@ def backfill_costs() -> dict:
 def backfill_commutes() -> dict:
     """Recompute commute_minutes for every entry that has lat/lng but no commute.
 
+    Row-scoped with session/HTTP split (Phase 7 Wave 5, per RESEARCH § Pitfall 2):
+    1. Open session → snapshot candidate IDs + coords → close session
+    2. Make ORS HTTP calls OUTSIDE any session (no pool exhaustion)
+    3. Reopen session → write results → commit
+
     Ingest normally sets commute only for new listings; deduped/legacy entries
     stay stuck at None. This endpoint re-runs ORS for all of them.
     Never raises.
     """
     if not config.ORS_API_KEY:
         return {"ok": False, "error": "ORS_API_KEY not configured"}
-    updated = 0
-    skipped_no_coords = 0
-    skipped_had_value = 0
-    failed = 0
+    from sqlalchemy.exc import SQLAlchemyError
     try:
-        with data_store._lock:
-            app_data = data_store.load_app_data()
-            for list_name in ("properties", "pending", "rejected"):
-                for entry in app_data.get(list_name, []):
-                    lat = entry.get("lat")
-                    lng = entry.get("lng")
-                    if lat is None or lng is None:
-                        skipped_no_coords += 1
-                        continue
-                    if entry.get("commute_minutes") is not None:
-                        skipped_had_value += 1
-                        continue
-                    mins = ingest_handler._fetch_commute_minutes(lat, lng)
-                    if mins is not None:
-                        entry["commute_minutes"] = mins
-                        updated += 1
-                    else:
-                        failed += 1
-            data_store.save_app_data(app_data)
-    except Exception:
-        log.exception("backfill-commutes failed mid-flight")
-    return {
-        "ok": True,
-        "updated": updated,
-        "skipped_no_coords": skipped_no_coords,
-        "skipped_had_value": skipped_had_value,
-        "failed": failed,
-    }
+        from db import SessionLocal
+        from models import Listing
+        # Step 1: snapshot IDs + coords under one session, release before HTTP
+        with SessionLocal() as db_:
+            candidates = db_.query(Listing.id, Listing.lat, Listing.lng).filter(
+                Listing.lat.isnot(None),
+                Listing.lng.isnot(None),
+                Listing.commute_minutes.is_(None),
+            ).all()
+            skipped_no_coords = db_.query(Listing).filter(
+                (Listing.lat.is_(None)) | (Listing.lng.is_(None))
+            ).count()
+            skipped_had_value = db_.query(Listing).filter(
+                Listing.commute_minutes.isnot(None)
+            ).count()
+        # Step 2: HTTP calls OUTSIDE any session
+        updates: list[tuple[str, int]] = []
+        failed = 0
+        for lid, lat, lng in candidates:
+            mins = ingest_handler._fetch_commute_minutes(lat, lng)  # HTTP — no session held
+            if mins is not None:
+                updates.append((lid, mins))
+            else:
+                failed += 1
+        # Step 3: reopen session and commit results
+        updated = 0
+        with SessionLocal() as db_:
+            for lid, mins in updates:
+                row = db_.get(Listing, lid)
+                if row is not None:
+                    row.commute_minutes = mins
+                    updated += 1
+            db_.commit()
+        return {
+            "ok": True,
+            "updated": updated,
+            "skipped_no_coords": skipped_no_coords,
+            "skipped_had_value": skipped_had_value,
+            "failed": failed,
+        }
+    except SQLAlchemyError:
+        log.exception("backfill-commutes failed")
+        return {"ok": False, "error": "DB error"}
 
 
 @app.post("/api/geocode-backfill")

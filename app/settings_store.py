@@ -157,35 +157,42 @@ def save(updates: dict) -> dict:
 
 
 def _recompute_all_costs() -> int:
-    """Rebuild cost_of_ownership on every stored entry using the current config.
+    """Rebuild cost_of_ownership on every stored Listing row using the current config.
 
-    Returns the number of entries whose cost was updated (skips entries missing
-    price or area). Pure calculation — never touches the AI, never hits ORS.
+    Row-scoped (Phase 7 Wave 5, per RESEARCH § Pitfall 6): one session, iterate rows,
+    commit once — was previously load_app_data → per-entry mutate → save_app_data,
+    which triggered O(N) upserts per settings change.
+
+    Returns the number of rows whose cost was updated (skips rows missing price or
+    area, and skips rows with cost_of_ownership.overridden=True).
+    Pure calculation — never touches the AI, never hits ORS.
     """
+    from sqlalchemy.exc import SQLAlchemyError
     try:
-        import data_store
         import cost_calculator
+        from db import SessionLocal
+        from models import Listing
         updated = 0
-        with data_store._lock:
-            app_data = data_store.load_app_data()
-            for list_name in ("properties", "pending", "rejected"):
-                for entry in app_data.get(list_name, []):
-                    # Respect per-listing manual overrides — the user's intent
-                    # trumps a global settings recompute (they set it for a reason).
-                    if (entry.get("cost_of_ownership") or {}).get("overridden"):
-                        continue
-                    coo = cost_calculator.compute_cost_of_ownership(
-                        entry.get("price_eur"),
-                        entry.get("area_sqm"),
-                        entry.get("year_built"),
-                    )
-                    if coo is not None:
-                        entry["cost_of_ownership"] = coo
-                        updated += 1
-            data_store.save_app_data(app_data)
+        with SessionLocal() as db_:
+            rows = db_.query(Listing).all()
+            for row in rows:
+                # Respect per-listing manual overrides (D-Discretion) — user intent
+                # trumps a global settings recompute.
+                coo_existing = row.cost_of_ownership or {}
+                if coo_existing.get("overridden"):
+                    continue
+                coo = cost_calculator.compute_cost_of_ownership(
+                    row.price_eur,
+                    row.area_sqm,
+                    row.year_built,
+                )
+                if coo is not None:
+                    row.cost_of_ownership = coo  # JSONB reassignment (Pitfall 1)
+                    updated += 1
+            db_.commit()
         log.info("Cost recompute after settings change: %d entries updated", updated)
         return updated
-    except Exception:
+    except SQLAlchemyError:
         log.exception("Cost auto-recompute failed")
         return 0
 
