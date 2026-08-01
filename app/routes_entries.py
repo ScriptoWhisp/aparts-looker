@@ -17,10 +17,10 @@ from fastapi import APIRouter, HTTPException
 from fastapi.requests import Request
 from sqlalchemy.exc import SQLAlchemyError
 
+import db
 import brief_generator
 import data_store
 import ingest_handler
-from db import SessionLocal
 from models import Listing
 
 log = logging.getLogger("app")
@@ -97,7 +97,9 @@ async def regenerate_brief(listing_id: str) -> dict:
     entry = data_store.get_approved_listing(listing_id)
     if entry is None:
         raise HTTPException(status_code=404, detail="Listing not found in properties")
-    threading.Thread(
+    # Lazy import so tests can monkeypatch main.threading (avoids circular import at load time)
+    import main as _main  # noqa: PLC0415
+    _main.threading.Thread(
         target=brief_generator.generate_and_save_brief,
         args=(listing_id,),
         daemon=True,
@@ -125,7 +127,9 @@ async def refresh_ku(listing_id: str) -> dict:
         raise HTTPException(status_code=404, detail="Listing not found in properties")
     if not address:
         raise HTTPException(status_code=400, detail="Listing has no address to look up")
-    threading.Thread(
+    # Lazy import so tests can monkeypatch main.threading (avoids circular import at load time)
+    import main as _main  # noqa: PLC0415
+    _main.threading.Thread(
         target=ingest_handler._dispatch_ku_lookup,
         args=(listing_id, address),
         daemon=True,
@@ -152,7 +156,7 @@ async def cost_override(listing_id: str, request: Request) -> dict:
 
     keys = ("mortgage", "ku_fee", "heating", "utilities")
     try:
-        with SessionLocal() as db_:
+        with db.SessionLocal() as db_:
             row = db_.get(Listing, listing_id)
             if row is None:
                 raise HTTPException(status_code=404, detail="Listing not found")
@@ -207,7 +211,7 @@ def cost_override_reset(listing_id: str) -> dict:
     commits once — was previously load whole-dict → mutate entry → save whole-dict.
     """
     try:
-        with SessionLocal() as db_:
+        with db.SessionLocal() as db_:
             row = db_.get(Listing, listing_id)
             if row is None:
                 raise HTTPException(status_code=404, detail="Listing not found")
