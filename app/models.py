@@ -50,7 +50,7 @@ class Listing(Base):
     # ---- Human-readable / display ----
     title: Mapped[str] = mapped_column(String(512), default="")
     # `name` is a legacy alias of `title` kept for display parity with the
-    # existing frontend (_LEGACY_ALIASES in main.py:197). Both flat columns
+    # existing frontend (see legacy_aliases.py). Both flat columns
     # are cheaper than doing runtime aliasing.
     name: Mapped[str] = mapped_column(String(512), default="")
     district: Mapped[str] = mapped_column(String(64), default="", index=True)

@@ -76,16 +76,9 @@ _lock = contextlib.nullcontext()
 # Legacy field aliases — MUST be applied on every write path so callers using
 # old dict keys (name/price/area/year/pricePerSqm/notes) correctly map to
 # Listing columns (title/price_eur/area_sqm/year_built/price_per_sqm/description).
-# Same mapping as main.py:197 (_LEGACY_ALIASES) — keep in sync.
+# Single source of truth lives in app/legacy_aliases.py.
 # ---------------------------------------------------------------------------
-_LEGACY_ALIASES = {
-    "name": "title",
-    "price": "price_eur",
-    "pricePerSqm": "price_per_sqm",
-    "area": "area_sqm",
-    "year": "year_built",
-    "notes": "description",
-}
+from legacy_aliases import LEGACY_ALIASES as _LEGACY_ALIASES
 
 # Known column names for filtering unknown keys into extras JSONB.
 _LISTING_COLUMNS: Optional[set] = None

@@ -31,6 +31,7 @@ import ai_evaluator
 import settings_store
 import dataclasses
 import brief_generator
+from legacy_aliases import LEGACY_ALIASES
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("app")
@@ -194,24 +195,10 @@ async def telegram_silence(request: Request) -> dict:
     return {"ok": True, "silenced": True, "silenced_until": state["telegram_silenced_until"]}
 
 
-"""Legacy stored entries used frontend-style field names (name/price/area/year/pricePerSqm/notes).
-The Listing dataclass expects title/price_eur/area_sqm/year_built/price_per_sqm/description.
-_normalize_entry maps the legacy names so _deserialize_listing can rebuild a full Listing.
-"""
-_LEGACY_ALIASES = {
-    "name": "title",
-    "price": "price_eur",
-    "pricePerSqm": "price_per_sqm",
-    "area": "area_sqm",
-    "year": "year_built",
-    "notes": "description",
-}
-
-
 def _normalize_entry_for_listing(entry: dict) -> dict:
     """Return a copy of entry with legacy field names mapped to Listing field names."""
     out = dict(entry)
-    for old_key, new_key in _LEGACY_ALIASES.items():
+    for old_key, new_key in LEGACY_ALIASES.items():
         if old_key in out and (new_key not in out or not out.get(new_key)):
             out[new_key] = out.pop(old_key)
     return out

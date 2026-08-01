@@ -52,18 +52,11 @@ log = logging.getLogger("migrate_from_json")
 # that test monkeypatches to config.APP_DATA_FILE take effect after module import.
 # (Module-level capture would bind the value at import time, defeating monkeypatch.)
 
-# Legacy field aliases — same mapping as main.py:197 and data_store._LEGACY_ALIASES.
+# Legacy field aliases — single source of truth in app/legacy_aliases.py.
 # Applied on the read path so old dict keys (name/price/area/year/pricePerSqm/notes)
 # land in the correct Listing columns (title/price_eur/area_sqm/year_built/
 # price_per_sqm/description) instead of spilling to extras JSONB.
-_LEGACY_ALIASES: dict[str, str] = {
-    "name": "title",
-    "price": "price_eur",
-    "pricePerSqm": "price_per_sqm",
-    "area": "area_sqm",
-    "year": "year_built",
-    "notes": "description",
-}
+from legacy_aliases import LEGACY_ALIASES as _LEGACY_ALIASES
 
 # Lazily-cached column name set from the ORM model.
 _LISTING_COLUMNS: Optional[set] = None

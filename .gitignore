@@ -1,2 +1,39 @@
+# Secrets — never commit
 .env
+.env.*
+!.env.example
+
+# IDE
 .idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Runtime data (per-deployment state, not source; lives in Docker volume on prod)
+app/data/*.json
+app/data/*.json.pre-pg7
+app/data/*.db
+app/data/*.sqlite*
+
+# GSD tooling infrastructure (managed by npm; not project code)
+.claude/.gsd-profile
+.claude/gsd-core/
+.claude/gsd-install-state.json
+.claude/gsd-file-manifest.json
+.claude/worktrees/
+.claude/package.json
+.claude/package-lock.json
+.claude/node_modules/
+.claude/scripts/
+.claude/hooks/
