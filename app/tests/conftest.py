@@ -370,6 +370,17 @@ def db_session(postgresql_db_fixture, monkeypatch):
     import data_store as _data_store_module  # noqa: PLC0415
     if hasattr(_data_store_module, "SessionLocal"):
         monkeypatch.setattr(_data_store_module, "SessionLocal", _make_session)
+    # Also patch migrate_from_json.SessionLocal if the module is already imported.
+    # migrate_from_json does `from db import SessionLocal` at module load, creating a
+    # module-local binding that is separate from db.SessionLocal — same issue as
+    # data_store above (Wave 2 bug #2). Patch lazily to avoid importing the module
+    # before it exists (it only exists from Wave 3 onward).
+    try:
+        import migrate_from_json as _migrate_module  # noqa: PLC0415
+        if hasattr(_migrate_module, "SessionLocal"):
+            monkeypatch.setattr(_migrate_module, "SessionLocal", _make_session)
+    except ImportError:
+        pass  # Module not yet present (Wave 0/1/2) — safe to skip
 
     yield session
 

@@ -48,8 +48,9 @@ logging.basicConfig(
 )
 log = logging.getLogger("migrate_from_json")
 
-SOURCE: str = config.APP_DATA_FILE
-BACKUP: str = SOURCE + ".pre-pg7"
+# SOURCE and BACKUP are read dynamically in main() via config.APP_DATA_FILE so
+# that test monkeypatches to config.APP_DATA_FILE take effect after module import.
+# (Module-level capture would bind the value at import time, defeating monkeypatch.)
 
 # Legacy field aliases — same mapping as main.py:197 and data_store._LEGACY_ALIASES.
 # Applied on the read path so old dict keys (name/price/area/year/pricePerSqm/notes)
@@ -144,7 +145,24 @@ def _entry_to_row(entry: dict, forced_status: str) -> Listing:
         if ts_col in fields and fields[ts_col] is None:
             del fields[ts_col]
 
-    return Listing(**fields)
+    obj = Listing(**fields)
+
+    # 8. del_attribute on every column NOT in fields (except id PK).
+    #    MappedAsDataclass sets ALL columns to Python defaults in __init__. Without
+    #    this step, db_.merge() would issue UPDATE SET created_at=NULL, status='pending',
+    #    price_history=[] etc. for columns that weren't in the entry dict — overwriting
+    #    DB values on a second migration run. del_attribute removes those attributes from
+    #    the transient object's instance state so merge only updates what was explicitly
+    #    provided. Same pattern used in data_store.save_app_data (Wave 2 bug fix).
+    known = _get_listing_columns()
+    for _col in known - {"id"}:
+        if _col not in fields:
+            try:
+                _sa_attributes.del_attribute(obj, _col)
+            except Exception:
+                pass
+
+    return obj
 
 
 def main() -> int:
@@ -153,19 +171,27 @@ def main() -> int:
     Exit codes are consumed by entrypoint.sh's `set -e`:
       0 — success or already migrated; container boot continues.
       1 — DB error or JSON parse failure; container exits and Docker restarts it.
+
+    SOURCE and BACKUP are resolved from config.APP_DATA_FILE at call time (not
+    at module import time) so test monkeypatches to config.APP_DATA_FILE are
+    visible here regardless of when this module was first imported.
     """
+    # Resolve source/backup paths from config at call time (test-patchable).
+    source: str = config.APP_DATA_FILE
+    backup: str = source + ".pre-pg7"
+
     # Guard 1 — file existence check (fast-exit on subsequent runs)
-    if not os.path.exists(SOURCE):
-        log.info("No %s — nothing to migrate (already ran, or fresh install)", SOURCE)
+    if not os.path.exists(source):
+        log.info("No %s — nothing to migrate (already ran, or fresh install)", source)
         return 0
 
     # Read and parse the legacy JSON file
     try:
-        with open(SOURCE, "r", encoding="utf-8") as f:
+        with open(source, "r", encoding="utf-8") as f:
             data: dict = json.load(f)
     except (json.JSONDecodeError, OSError) as exc:
         # Log but do NOT rename — source may still be recoverable after the fix.
-        log.exception("migrate_from_json: failed to read/parse %s: %s", SOURCE, exc)
+        log.exception("migrate_from_json: failed to read/parse %s: %s", source, exc)
         return 1
 
     # Extract the five buckets; default to empty so a partial file is handled gracefully.
@@ -216,8 +242,8 @@ def main() -> int:
         # Fail-loud: log + exit 1 so entrypoint.sh's `set -e` restarts the container.
         log.exception(
             "migrate_from_json: DB error during migration — rolling back. "
-            "SOURCE file NOT renamed (still at %s). Container will restart.",
-            SOURCE,
+            "Source file NOT renamed (still at %s). Container will restart.",
+            source,
         )
         return 1
     finally:
@@ -226,18 +252,18 @@ def main() -> int:
     log.info("migrate_from_json: committed %d rows to listings table", total)
 
     # Guard 1 finale — rename source to .pre-pg7 (POSIX-atomic via os.replace).
-    # On success, subsequent runs find no SOURCE and exit 0 immediately.
+    # On success, subsequent runs find no source and exit 0 immediately.
     # On failure (permissions, cross-device): log + return 0 anyway — guard 2
     # (db.merge) means re-running is still safe.
     try:
-        os.replace(SOURCE, BACKUP)
-        log.info("Migrated OK. Renamed %s → %s", SOURCE, BACKUP)
+        os.replace(source, backup)
+        log.info("Migrated OK. Renamed %s → %s", source, backup)
     except OSError:
         log.exception(
             "migrate_from_json: rename %s → %s failed — "
             "migration data is in DB but source file was not renamed. "
             "Re-running is safe (db.merge upserts by PK).",
-            SOURCE, BACKUP,
+            source, backup,
         )
         # Non-fatal — return 0 so the container continues to boot.
 
