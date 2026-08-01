@@ -10,7 +10,6 @@ import json
 import logging
 import os
 import threading
-import time
 
 import requests
 from fastapi import APIRouter
@@ -166,7 +165,10 @@ def _run_geocode_backfill() -> dict:
                 geocoded += 1
             else:
                 skipped += 1
-            time.sleep(1.1)  # Nominatim usage policy: max 1 request/second
+            # Lazy import so tests can monkeypatch main.time.sleep (avoids circular
+            # import at load time; same pattern as regenerate_brief/refresh_ku).
+            import main as _main  # noqa: PLC0415
+            _main.time.sleep(1.1)  # Nominatim usage policy: max 1 request/second
     except Exception:
         log.exception("_run_geocode_backfill failed")
     return {"geocoded": geocoded, "skipped": skipped}
