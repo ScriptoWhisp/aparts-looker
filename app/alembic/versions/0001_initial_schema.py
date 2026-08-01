@@ -23,6 +23,11 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 # ENUM values must match LISTING_STATUS_VALUES in models.py exactly.
+# create_type=False: we call listing_status_enum.create(checkfirst=True)
+# explicitly before create_table so we control the creation order and
+# idempotency. Without create_type=False, SQLAlchemy's _on_table_create hook
+# fires and emits a second CREATE TYPE, causing DuplicateObject on fresh DBs
+# (the explicit .create() already ran in the same transaction).
 listing_status_enum = postgresql.ENUM(
     "pending",
     "approved",
@@ -30,12 +35,17 @@ listing_status_enum = postgresql.ENUM(
     "viewing_scheduled",
     "viewed",
     name="listing_status",
+    create_type=False,
 )
 
 
 def upgrade() -> None:
     # Create the ENUM type before the table that references it.
-    listing_status_enum.create(op.get_bind(), checkfirst=True)
+    # listing_status_enum has create_type=False so we own the CREATE TYPE call;
+    # the explicit create(checkfirst=True) ensures idempotency if this revision
+    # ever runs on a DB that already has the type (e.g. partial rollback).
+    bind = op.get_bind()
+    listing_status_enum.create(bind, checkfirst=True)
 
     op.create_table(
         "listings",
@@ -75,16 +85,12 @@ def upgrade() -> None:
         sa.Column("commute_minutes", sa.Integer(), nullable=True),
 
         # ---- Lifecycle ----
+        # Use the module-level listing_status_enum (which has create_type=False)
+        # so op.create_table references the already-created type without
+        # triggering another CREATE TYPE DDL statement.
         sa.Column(
             "status",
-            sa.Enum(
-                "pending",
-                "approved",
-                "rejected",
-                "viewing_scheduled",
-                "viewed",
-                name="listing_status",
-            ),
+            listing_status_enum,
             nullable=False,
             server_default="pending",
         ),
@@ -124,8 +130,11 @@ def upgrade() -> None:
         sa.Column("extras", postgresql.JSONB(astext_type=sa.Text()), nullable=False, server_default=sa.text("'{}'")),
 
         # ---- Timestamps ----
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
+        # nullable=False: Mapped[datetime] is non-optional in models.py,
+        # so the DB column must also be NOT NULL. server_default ensures every
+        # INSERT gets a timestamp without Python involvement.
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
 
         sa.PrimaryKeyConstraint("id"),
     )

@@ -40,11 +40,22 @@ def test_alembic_head_matches_metadata(postgresql_db_fixture):
     from db import Base  # noqa: PLC0415 — lazy: Wave 1 creates this module
     from sqlalchemy import create_engine  # noqa: PLC0415
 
-    info = postgresql_db_fixture.info
-    db_url = (
-        f"postgresql+psycopg://{info.user}"
-        f":@{info.host}:{info.port}/{info.dbname}"
-    )
+    # Build the DB URL — use the compose service URL in Docker mode so we
+    # test against the same DB that the app uses; use the pytest-postgresql
+    # fixture URL in local dev mode (throwaway subprocess DB).
+    import sys as _sys  # noqa: PLC0415
+    _in_docker = bool(os.environ.get("POSTGRES_USER"))
+    if _in_docker:
+        import config as _cfg  # noqa: PLC0415
+        db_url = _cfg.DATABASE_URL
+    else:
+        info = postgresql_db_fixture.info
+        _pw = getattr(info, "password", "") or ""
+        _pw_part = f":{_pw}" if _pw else ""
+        db_url = (
+            f"postgresql+psycopg://{info.user}{_pw_part}"
+            f"@{info.host}:{info.port}/{info.dbname}"
+        )
 
     alembic_cfg = Config()
     alembic_cfg.set_main_option("script_location", os.path.join(APP_DIR, "alembic"))

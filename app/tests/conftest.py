@@ -183,17 +183,50 @@ def mock_gmail(monkeypatch):
 # time), which is the expected RED state for Wave 0. No other tests are affected.
 # ---------------------------------------------------------------------------
 
-# Session-scoped Postgres subprocess — one pg process for the whole test run.
-# port=None lets pytest-postgresql choose a free port so parallel runs never
-# collide (Pitfall 8 — T-07-00-03 accepted: subprocess torn down by fixture).
+# Postgres fixture strategy — two modes:
 #
-# Guards: factories are only registered when pytest-postgresql is installed
-# (Docker env). In a local env without the package, tests that request
-# db_session or postgresql_db_fixture will error at SETUP time with a clear
-# ImportError / skip — existing non-DB tests are unaffected.
-if _PYTEST_POSTGRESQL_AVAILABLE:
+# A) Running inside Docker compose (POSTGRES_HOST env var is set):
+#    Use `postgresql_noproc` to connect to the already-running postgres service.
+#    No subprocess spawn needed — pg_ctl / pg_config not required.
+#
+# B) Running locally (no POSTGRES_HOST, no pytest-postgresql):
+#    Provide skip stubs so collection succeeds and non-DB tests are unaffected.
+#
+# Guards: factories are only registered when pytest-postgresql is installed.
+# Detect Docker compose environment: POSTGRES_USER is injected via env_file
+# in docker-compose.yml. When running locally without Docker, POSTGRES_USER
+# is typically not set (tests fall back to subprocess Postgres spawning).
+# POSTGRES_HOST defaults to "postgres" (Docker compose service name); fall back
+# to checking POSTGRES_USER as the primary signal so no extra env var is needed.
+_IN_DOCKER = bool(os.environ.get("POSTGRES_USER"))
+
+if _PYTEST_POSTGRESQL_AVAILABLE and _IN_DOCKER:
+    # Connect to the compose postgres service directly.
+    _pg_host = os.environ.get("POSTGRES_HOST", "postgres")
+    _pg_port = int(os.environ.get("POSTGRES_PORT", "5432"))
+    _pg_user = os.environ.get("POSTGRES_USER", "aparts")
+    _pg_pass = os.environ.get("POSTGRES_PASSWORD", "")
+    _pg_db   = os.environ.get("POSTGRES_DB", "aparts_looker")
+
+    # Use a dedicated test database ("tests") separate from production
+    # ("aparts_looker") so the janitor can create/drop it freely.
+    # DatabaseJanitor creates the test DB, runs tests, then drops it.
+    postgresql_proc_fixture = _pp_factories.postgresql_noproc(
+        host=_pg_host,
+        port=_pg_port,
+        user=_pg_user,
+        password=_pg_pass,
+        dbname="tests",
+    )
+    postgresql_db_fixture = _pp_factories.postgresql("postgresql_proc_fixture")
+
+elif _PYTEST_POSTGRESQL_AVAILABLE:
+    # Local dev with a Postgres subprocess managed by pytest-postgresql.
+    # port=None lets pytest-postgresql choose a free port so parallel runs never
+    # collide (Pitfall 8 — T-07-00-03 accepted: subprocess torn down by fixture).
     postgresql_proc_fixture = _pp_factories.postgresql_proc(port=None)
     postgresql_db_fixture = _pp_factories.postgresql("postgresql_proc_fixture")
+
 else:
     # Provide stub fixtures so pytest can collect the test files without aborting.
     # They raise ImportError at runtime so the failure message is clear.
@@ -210,10 +243,14 @@ else:
 def db_session(postgresql_db_fixture, monkeypatch):
     """SQLAlchemy Session with per-test BEGIN + SAVEPOINT + ROLLBACK isolation.
 
-    Wires a real Postgres database (from pytest-postgresql) to a SQLAlchemy
-    engine, creates the schema via Base.metadata.create_all (skipping Alembic
-    in tests per RESEARCH § Testing strategy), then yields a Session bound to
-    a connection that is always rolled back on teardown.
+    Two modes:
+      Docker (POSTGRES_USER set): uses the compose postgres service via
+        config.DATABASE_URL. Schema already exists (created by Alembic in
+        entrypoint.sh). Each test wraps its work in a SAVEPOINT that rolls
+        back on teardown so the production schema stays intact.
+      Local dev (pytest-postgresql subprocess): builds DSN from
+        postgresql_db_fixture.info, creates schema via create_all, wraps each
+        test in a transaction that rolls back.
 
     Monkeypatches db.SessionLocal so any data_store.* call executed under this
     fixture operates on the same connection / transaction.
@@ -228,17 +265,29 @@ def db_session(postgresql_db_fixture, monkeypatch):
     import db as db_module  # noqa: PLC0415  — Wave 1 creates this module
     from db import Base  # noqa: PLC0415
 
-    info = postgresql_db_fixture.info
-    # psycopg3 DSN per D-02 — matches production driver scheme so a query
-    # passing under test is guaranteed to parse under production (no password
-    # needed for the local pytest-postgresql socket connection).
-    conn_str = (
-        f"postgresql+psycopg://{info.user}"
-        f":@{info.host}:{info.port}/{info.dbname}"
-    )
-    engine = create_engine(conn_str)
-    # Create schema from models directly (no Alembic in tests — throwaway DB).
-    Base.metadata.create_all(engine)
+    if _IN_DOCKER:
+        # Docker mode: connect to the already-migrated compose service DB.
+        import config as _cfg  # noqa: PLC0415
+        conn_str = _cfg.DATABASE_URL
+        engine = create_engine(conn_str, pool_pre_ping=True)
+        # Schema already exists from Alembic; create_all is a no-op here
+        # but ensures tests pass even on first boot before Alembic runs.
+        with engine.begin() as ddl_conn:
+            Base.metadata.create_all(ddl_conn)
+    else:
+        # Local dev mode: connect to the subprocess Postgres from the fixture.
+        info = postgresql_db_fixture.info
+        # psycopg3 DSN — include password if present.
+        _pw = getattr(info, "password", "") or ""
+        _pw_part = f":{_pw}" if _pw else ""
+        conn_str = (
+            f"postgresql+psycopg://{info.user}{_pw_part}"
+            f"@{info.host}:{info.port}/{info.dbname}"
+        )
+        engine = create_engine(conn_str)
+        # Create schema from models (no Alembic in tests — throwaway DB).
+        with engine.begin() as ddl_conn:
+            Base.metadata.create_all(ddl_conn)
 
     connection = engine.connect()
     trans = connection.begin()
