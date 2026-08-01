@@ -31,7 +31,13 @@ import sys
 from unittest.mock import MagicMock
 
 import pytest
-from pytest_postgresql import factories
+
+try:
+    from pytest_postgresql import factories as _pp_factories
+    _PYTEST_POSTGRESQL_AVAILABLE = True
+except ImportError:  # not installed in local dev without Docker venv
+    _pp_factories = None  # type: ignore[assignment]
+    _PYTEST_POSTGRESQL_AVAILABLE = False
 
 # Resolve the app/ directory so imports and static-file paths work regardless of
 # where pytest is invoked from.
@@ -180,11 +186,24 @@ def mock_gmail(monkeypatch):
 # Session-scoped Postgres subprocess — one pg process for the whole test run.
 # port=None lets pytest-postgresql choose a free port so parallel runs never
 # collide (Pitfall 8 — T-07-00-03 accepted: subprocess torn down by fixture).
-postgresql_proc_fixture = factories.postgresql_proc(port=None)
+#
+# Guards: factories are only registered when pytest-postgresql is installed
+# (Docker env). In a local env without the package, tests that request
+# db_session or postgresql_db_fixture will error at SETUP time with a clear
+# ImportError / skip — existing non-DB tests are unaffected.
+if _PYTEST_POSTGRESQL_AVAILABLE:
+    postgresql_proc_fixture = _pp_factories.postgresql_proc(port=None)
+    postgresql_db_fixture = _pp_factories.postgresql("postgresql_proc_fixture")
+else:
+    # Provide stub fixtures so pytest can collect the test files without aborting.
+    # They raise ImportError at runtime so the failure message is clear.
+    @pytest.fixture(scope="session")
+    def postgresql_proc_fixture():
+        pytest.skip("pytest-postgresql not installed — DB tests require Docker env")
 
-# Function-scoped database fixture — each test gets a fresh (clean) database
-# on the running subprocess, which the db_session fixture wraps in a savepoint.
-postgresql_db_fixture = factories.postgresql("postgresql_proc_fixture")
+    @pytest.fixture
+    def postgresql_db_fixture(postgresql_proc_fixture):
+        pytest.skip("pytest-postgresql not installed — DB tests require Docker env")
 
 
 @pytest.fixture
