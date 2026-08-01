@@ -24,10 +24,8 @@ echo "Postgres ready."
 echo "Applying Alembic migrations..."
 alembic upgrade head
 
-# Wave 3 will replace this echo with:
-#   python migrate_from_json.py
-# For Wave 1 the placeholder only logs and exits 0 so the stack boots cleanly.
 echo "Migrating legacy JSON if present (idempotent)..."
+python migrate_from_json.py
 
 echo "Starting uvicorn..."
 exec uvicorn main:app --host 0.0.0.0 --port 8000
