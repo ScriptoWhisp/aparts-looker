@@ -325,6 +325,21 @@ def _dict_to_listing_fields(entry: dict) -> dict:
         merged_extras = extras
     fields["extras"] = merged_extras
 
+    # 4.5. Coerce empty strings to None for numeric columns. Scraped / legacy
+    #      dicts sometimes carry "" for missing numerics (e.g., year_built=""),
+    #      which Postgres INTEGER/FLOAT rejects with
+    #      "invalid input syntax for type integer: ''". Mirrors
+    #      migrate_from_json._entry_to_row.
+    _numeric_cols = (
+        "price_eur", "price_per_sqm", "rooms", "year_built",
+        "floor", "floor_total", "image_count", "commute_minutes",
+        "score", "tg_message_id", "tg_chat_id",
+        "area_sqm", "lat", "lng",
+    )
+    for col in _numeric_cols:
+        if col in fields and fields[col] == "":
+            fields[col] = None
+
     # 5. Coerce None → [] / {} for JSONB list/dict columns (Postgres NOT NULL).
     #    Only coerce if the key is PRESENT in the entry dict (explicitly set to None).
     #    If the key is ABSENT, do NOT add it — so db_.merge() leaves the existing

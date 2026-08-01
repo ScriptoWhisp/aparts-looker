@@ -116,6 +116,20 @@ def _entry_to_row(entry: dict, forced_status: str) -> Listing:
     if not fields.get("id"):
         fields["id"] = entry.get("id") or "unknown"
 
+    # 3.5. Coerce empty strings to None for numeric columns. Legacy JSON stores
+    #      missing numeric fields as "" (e.g., year_built=""), but Postgres INTEGER
+    #      / FLOAT columns reject that value ("invalid input syntax for type
+    #      integer: ''"). Mirrors data_store._dict_to_listing_fields.
+    _NUMERIC_COLS = (
+        "price_eur", "price_per_sqm", "rooms", "year_built",
+        "floor", "floor_total", "image_count", "commute_minutes",
+        "score", "tg_message_id", "tg_chat_id",
+        "area_sqm", "lat", "lng",
+    )
+    for col in _NUMERIC_COLS:
+        if col in fields and fields[col] == "":
+            fields[col] = None
+
     # 4. Force status from the bucket (Pitfall 5: prevents status reset on re-run)
     fields["status"] = forced_status
 
