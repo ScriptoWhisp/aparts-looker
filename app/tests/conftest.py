@@ -2,12 +2,18 @@
 Shared pytest fixtures for app/tests/.
 
 Fixtures:
-  client         — FastAPI TestClient with INGEST_TOKEN monkeypatched to "test-token-abc".
-  tmp_agent_state — Redirects config.AGENT_STATE_FILE and config.APP_DATA_FILE to temp paths
-                    so tests cannot corrupt real state.
-  mock_telegram  — Monkeypatches telegram_client.send_message and telegram_client.send_photo
-                   with MagicMocks; also patches the in-module references in agent_job and
-                   ingest_handler so tests can assert on calls.
+  client              — FastAPI TestClient with INGEST_TOKEN monkeypatched to "test-token-abc".
+  tmp_agent_state     — Redirects config.AGENT_STATE_FILE and config.APP_DATA_FILE to temp paths
+                        so tests cannot corrupt real state.
+  mock_telegram       — Monkeypatches telegram_client.send_message and telegram_client.send_photo
+                        with MagicMocks; also patches the in-module references in agent_job and
+                        ingest_handler so tests can assert on calls.
+  db_session          — Yields a SQLAlchemy Session bound to a per-test savepoint that ALWAYS
+                        rolls back on teardown. Backed by a per-session Postgres subprocess via
+                        pytest-postgresql. Also monkeypatches db.SessionLocal so any code calling
+                        data_store.* shares the same rolled-back transaction. Wave 0: importing
+                        db / models fails (ModuleNotFoundError) — tests that request db_session
+                        will error at collection with a clear ImportError until Wave 1 lands.
 
 Design notes:
   - main.py mounts StaticFiles(directory="static") using a relative path, which resolves
@@ -16,6 +22,8 @@ Design notes:
     app/ directory before the FastAPI app is created/imported.
   - data_store.load_agent_state() re-reads config.AGENT_STATE_FILE on every call, so
     monkeypatching config.AGENT_STATE_FILE before the call redirects I/O to the temp file.
+  - db_session imports db and models lazily (inside the fixture body) so Wave 0 tests fail
+    with a clean ImportError rather than breaking the entire conftest at import time.
 """
 
 import os
@@ -23,6 +31,7 @@ import sys
 from unittest.mock import MagicMock
 
 import pytest
+from pytest_postgresql import factories
 
 # Resolve the app/ directory so imports and static-file paths work regardless of
 # where pytest is invoked from.
@@ -156,3 +165,86 @@ def mock_gmail(monkeypatch):
         pass  # main.py may not import gmail_client yet — safe to skip
 
     yield mock
+
+
+# ---------------------------------------------------------------------------
+# pytest-postgresql fixtures — per-session Postgres subprocess, per-test
+# rollback isolation (Pitfall 8 in 07-RESEARCH.md).
+#
+# Wave 0 note: the `db_session` fixture body imports `db` and `Base` lazily.
+# Those modules do not exist until Wave 1. Any test that requests `db_session`
+# will therefore fail with a clean ImportError at SETUP time (not at collection
+# time), which is the expected RED state for Wave 0. No other tests are affected.
+# ---------------------------------------------------------------------------
+
+# Session-scoped Postgres subprocess — one pg process for the whole test run.
+# port=None lets pytest-postgresql choose a free port so parallel runs never
+# collide (Pitfall 8 — T-07-00-03 accepted: subprocess torn down by fixture).
+postgresql_proc_fixture = factories.postgresql_proc(port=None)
+
+# Function-scoped database fixture — each test gets a fresh (clean) database
+# on the running subprocess, which the db_session fixture wraps in a savepoint.
+postgresql_db_fixture = factories.postgresql("postgresql_proc_fixture")
+
+
+@pytest.fixture
+def db_session(postgresql_db_fixture, monkeypatch):
+    """SQLAlchemy Session with per-test BEGIN + SAVEPOINT + ROLLBACK isolation.
+
+    Wires a real Postgres database (from pytest-postgresql) to a SQLAlchemy
+    engine, creates the schema via Base.metadata.create_all (skipping Alembic
+    in tests per RESEARCH § Testing strategy), then yields a Session bound to
+    a connection that is always rolled back on teardown.
+
+    Monkeypatches db.SessionLocal so any data_store.* call executed under this
+    fixture operates on the same connection / transaction.
+
+    Teardown order: session.close() → trans.rollback() → connection.close() →
+    engine.dispose() — never raises (never-raise pattern).
+    """
+    # Lazy imports so Wave 0 module-missing produces an ImportError at SETUP
+    # time (clear RED signal) rather than a conftest-wide collection failure.
+    from sqlalchemy import create_engine  # noqa: PLC0415
+    from sqlalchemy.orm import sessionmaker  # noqa: PLC0415
+    import db as db_module  # noqa: PLC0415  — Wave 1 creates this module
+    from db import Base  # noqa: PLC0415
+
+    info = postgresql_db_fixture.info
+    # psycopg3 DSN per D-02 — matches production driver scheme so a query
+    # passing under test is guaranteed to parse under production (no password
+    # needed for the local pytest-postgresql socket connection).
+    conn_str = (
+        f"postgresql+psycopg://{info.user}"
+        f":@{info.host}:{info.port}/{info.dbname}"
+    )
+    engine = create_engine(conn_str)
+    # Create schema from models directly (no Alembic in tests — throwaway DB).
+    Base.metadata.create_all(engine)
+
+    connection = engine.connect()
+    trans = connection.begin()
+    TestSession = sessionmaker(bind=connection, expire_on_commit=False)
+    session = TestSession()
+
+    # Monkeypatch SessionLocal so data_store.* shares this transaction.
+    monkeypatch.setattr(db_module, "SessionLocal", TestSession)
+
+    yield session
+
+    # Teardown — unconditional rollback; never-raise pattern.
+    try:
+        session.close()
+    except Exception:
+        pass
+    try:
+        trans.rollback()
+    except Exception:
+        pass
+    try:
+        connection.close()
+    except Exception:
+        pass
+    try:
+        engine.dispose()
+    except Exception:
+        pass
