@@ -69,6 +69,20 @@ DATA_DIR = os.environ.get("DATA_DIR", os.path.join(os.path.dirname(__file__), "d
 APP_DATA_FILE = os.path.join(DATA_DIR, "app_data.json")
 AGENT_STATE_FILE = os.path.join(DATA_DIR, "agent_state.json")
 
+# ---- Database (Phase 7) ----
+# NEVER log DATABASE_URL — it contains POSTGRES_PASSWORD.
+# Log POSTGRES_HOST / POSTGRES_DB / POSTGRES_USER only.
+POSTGRES_USER     = os.environ.get("POSTGRES_USER", "aparts")
+POSTGRES_PASSWORD = os.environ.get("POSTGRES_PASSWORD", "")
+POSTGRES_DB       = os.environ.get("POSTGRES_DB", "aparts_looker")
+POSTGRES_HOST     = os.environ.get("POSTGRES_HOST", "postgres")
+POSTGRES_PORT     = os.environ.get("POSTGRES_PORT", "5432")
+# Accepts a full DATABASE_URL env var for explicit overrides (dev/staging).
+DATABASE_URL      = os.environ.get(
+    "DATABASE_URL",
+    f"postgresql+psycopg://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}",
+)
+
 BUYER_PROFILE = """
 Buyer: Daniel, 22, software engineer at Bolt (Tallinn), stable income, top performer.
 
