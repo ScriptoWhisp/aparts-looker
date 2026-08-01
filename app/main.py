@@ -33,6 +33,7 @@ import dataclasses
 import brief_generator
 from legacy_aliases import LEGACY_ALIASES
 import routes_data
+import routes_entries
 import routes_pending_flow
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -97,6 +98,7 @@ def on_startup():
 
 
 app.include_router(routes_data.router)
+app.include_router(routes_entries.router)
 app.include_router(routes_pending_flow.router)
 
 
@@ -461,102 +463,6 @@ def reevaluate_listing(listing_id: str) -> dict:
         "score": entry["score"],
         "verdict": entry["verdict"],
     }
-
-
-@app.post("/api/entry/{listing_id}/schedule-viewing")
-async def schedule_viewing(listing_id: str, request: Request) -> dict:
-    """Schedule a viewing for an approved listing.
-
-    Body: {"scheduled_at": "<UTC ISO 8601 string>"}
-    The browser must convert datetime-local to UTC ISO via new Date(input.value).toISOString()
-    before POST (06-RESEARCH Pitfall 1). Backend validates via datetime.fromisoformat.
-    Returns 400 for malformed ISO strings; 404 if listing not found in properties[].
-    Spawns a daemon thread to generate the negotiation brief in background (D-06, VIEW-03).
-    """
-    body = await request.json()
-    if not isinstance(body, dict):
-        raise HTTPException(status_code=400, detail="Body must be a JSON object")
-    scheduled_at = body.get("scheduled_at", "")
-    try:
-        datetime.fromisoformat(scheduled_at.replace("Z", "+00:00"))
-    except (ValueError, AttributeError):
-        raise HTTPException(status_code=400, detail="Invalid scheduled_at ISO string")
-    ok = data_store.set_viewing_scheduled(listing_id, scheduled_at)
-    if not ok:
-        raise HTTPException(status_code=404, detail="Listing not found in properties")
-    # Fire-and-forget brief generation (mirrors main.py check-now daemon-thread pattern)
-    threading.Thread(
-        target=brief_generator.generate_and_save_brief,
-        args=(listing_id,),
-        daemon=True,
-    ).start()
-    return {"ok": True, "message": "Scheduled; negotiation brief generating in background"}
-
-
-@app.post("/api/entry/{listing_id}/mark-viewed")
-async def mark_viewed_endpoint(listing_id: str) -> dict:
-    """Mark a viewing_scheduled listing as viewed.
-
-    Calls data_store.mark_viewed which guards against invalid transitions per D-03:
-    returns False if the listing is not in 'viewing_scheduled' state or is not found.
-    Returns 400 in both error cases (consistent with the helper's boolean contract).
-    """
-    ok = data_store.mark_viewed(listing_id)
-    if not ok:
-        raise HTTPException(status_code=400, detail="Listing not found or not in viewing_scheduled state")
-    return {"ok": True, "message": "Marked as viewed"}
-
-
-@app.post("/api/entry/{listing_id}/regenerate-brief")
-async def regenerate_brief(listing_id: str) -> dict:
-    """Trigger on-demand regeneration of the negotiation brief for an existing entry.
-
-    No body required. Verifies the listing exists, then spawns a daemon thread
-    to call brief_generator.generate_and_save_brief (D-06 regenerate semantics:
-    overwrites entry.negotiation_brief). Returns 200 immediately (fire-and-forget).
-    Returns 404 if the listing is not in properties[].
-
-    Phase 7 Wave 4 (site #5, RESEARCH § Pitfall 2): lock wrapper removed.
-    get_approved_listing scopes its own session; the daemon receives only the
-    listing_id string — no session is passed to the thread.
-    """
-    entry = data_store.get_approved_listing(listing_id)
-    if entry is None:
-        raise HTTPException(status_code=404, detail="Listing not found in properties")
-    threading.Thread(
-        target=brief_generator.generate_and_save_brief,
-        args=(listing_id,),
-        daemon=True,
-    ).start()
-    return {"ok": True, "message": "Brief regenerating in background"}
-
-
-@app.post("/api/entry/{listing_id}/refresh-ku")
-async def refresh_ku(listing_id: str) -> dict:
-    """Trigger on-demand KÜ re-fetch for an existing properties[] entry.
-
-    No body required. Verifies the listing exists and has an address, then spawns a
-    daemon thread to call ingest_handler._dispatch_ku_lookup (D-12 Refresh KÜ button).
-    Returns 200 immediately (fire-and-forget). Returns 404 if the listing is not in
-    properties[]. Returns 400 if the listing has no address field (silent noop with
-    informative error so the frontend can surface a helpful message to Daniel).
-
-    Phase 7 Wave 4 (site #4, RESEARCH § Pitfall 2): lock wrapper removed.
-    get_approved_listing scopes its own session (opens + closes before this function
-    spawns the KÜ daemon). The daemon receives only plain string args — no session passed.
-    """
-    entry = data_store.get_approved_listing(listing_id)
-    address = (entry.get("address", "") or "") if entry is not None else None
-    if entry is None:
-        raise HTTPException(status_code=404, detail="Listing not found in properties")
-    if not address:
-        raise HTTPException(status_code=400, detail="Listing has no address to look up")
-    threading.Thread(
-        target=ingest_handler._dispatch_ku_lookup,
-        args=(listing_id, address),
-        daemon=True,
-    ).start()
-    return {"ok": True, "message": "KÜ lookup running in background"}
 
 
 @app.post("/api/ingest", dependencies=[Depends(_verify_ingest_token)])
