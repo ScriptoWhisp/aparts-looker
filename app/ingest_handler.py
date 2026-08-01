@@ -394,9 +394,10 @@ def _mark_removed_listings(app_data: dict, batch_dicts: list[dict]) -> None:
 def _dispatch_ku_lookup(listing_id: str, address: str) -> None:
     """Daemon-thread target: look up KÜ for the given address and persist the result.
 
-    Follows the Pitfall 5 pattern — this function runs OUTSIDE data_store._lock.
-    HTTP call to ariregister is made first; then save_ku_enrichment acquires the lock
-    to save (same pattern as brief_generator.generate_and_save_brief).
+    Session-scope discipline (Wave 4 audit — site #2, RESEARCH § Pitfall 2):
+    HTTP call to ariregister runs OUTSIDE any DB session; save_ku_enrichment
+    scopes its own session internally. No data_store._lock needed (no-op in Wave 2;
+    removed in Wave 4 by audit: this function never held _lock directly).
 
     On no match: logs and returns without writing anything to data_store (D-13 hide-when-empty).
     On any error: logs and returns (never-raise, mirrors _mark_removed_listings).
@@ -404,10 +405,12 @@ def _dispatch_ku_lookup(listing_id: str, address: str) -> None:
     import ku_lookup  # noqa: PLC0415 — imported here to avoid circular dependency at module scope
 
     try:
+        # HTTP call to ariregister — OUTSIDE any DB session (session-scope discipline, Wave 4)
         ku_data = ku_lookup.lookup_ku_for_address(address)
         if ku_data is None:
             log.info("No KÜ found for %s (%s) — noop", listing_id, address)
             return
+        # save_ku_enrichment scopes its own session (opens + commits + closes internally)
         data_store.save_ku_enrichment(listing_id, ku_data)
         log.info("KÜ enrichment saved for %s: %s (reg_code=%s)", listing_id, ku_data.get("name"), ku_data.get("reg_code"))
     except Exception:
@@ -417,9 +420,15 @@ def _dispatch_ku_lookup(listing_id: str, address: str) -> None:
 def process_ingest_batch(listing_dicts: list[dict]) -> dict:
     """Filter, dedup, evaluate, and notify for a batch of Listing dicts POSTed by the mini PC.
 
-    Acquires data_store._lock for the full load → process → save sequence so that
-    concurrent API requests (e.g. /api/check-now) cannot interleave state writes.
-    Per RESEARCH Pitfall 5. Never raises — per-listing failures are logged and skipped.
+    Phase 7 Wave 4 (RESEARCH § Pitfall 2, site #7):
+    The outer lock wrapper is REMOVED. Per-listing HTTP calls
+    (Anthropic evaluate_listing, Nominatim geocode, ORS commute, Telegram send_pending_card)
+    run OUTSIDE any DB session. Per-listing data_store.* writes (add_to_pending,
+    write_checklist_ai) each scope their own short-lived session internally.
+    The batch-end save_app_data / save_agent_state calls use the compat shim
+    (Wave 5 will optimize these hot callers to row-scoped writes).
+
+    Never raises — per-listing failures are logged and skipped.
     Returns {"ok": True, "processed": <batch size>}.
 
     Phase 3 (D-11, D-12): records price for every listing on every scrape run — both
@@ -430,150 +439,158 @@ def process_ingest_batch(listing_dicts: list[dict]) -> dict:
     """
     log.info("Ingest batch received: %d listings", len(listing_dicts))
 
-    with data_store._lock:
-        state = data_store.load_agent_state()
-        # Load app_data once before the loop; reload after sub-helpers that self-save
-        # (add_to_pending, write_checklist_ai) so price_history mutations see their writes.
-        app_data = data_store.load_app_data()
-        # Single date snapshot for the entire batch (D-12, RESEARCH Pattern 5)
-        today_str = _date.today().isoformat()
+    state = data_store.load_agent_state()
+    # Load app_data once before the loop; reload after sub-helpers that self-save
+    # (add_to_pending, write_checklist_ai) so price_history mutations see their writes.
+    # load_app_data() opens + closes its own session before returning the dict — no
+    # session is held across the HTTP calls below (RESEARCH § Pitfall 2).
+    app_data = data_store.load_app_data()
+    # Single date snapshot for the entire batch (D-12, RESEARCH Pattern 5)
+    today_str = _date.today().isoformat()
 
-        for raw_dict in listing_dicts:
+    for raw_dict in listing_dicts:
+        try:
+            listing = _deserialize_listing(raw_dict)
+        except (TypeError, KeyError) as exc:
+            log.warning("Malformed listing dict in ingest batch: %s", exc)
+            continue
+
+        # Dedup: compute the canonical object ID for the seen-set check.
+        dedup_key = extract_object_id(listing.url) or listing.url
+        if dedup_key in set(state["seen_listing_ids"]):
+            # Known listing — record price and check for drop (D-12, D-14, RESEARCH Pattern 5)
+            _record_and_check_price_drop(app_data, listing, today_str)
+            continue
+
+        # Mark as seen by appending the object ID (mirrors the original agent_job behaviour).
+        state["seen_listing_ids"].append(listing.id)
+
+        # Apply VPS-side filters (D-02 — config stays on VPS).
+        if listing.price_eur and listing.price_eur > config.MAX_PRICE_EUR:
+            log.info(
+                "Skipping %s — price %s > max %s",
+                listing.id, listing.price_eur, config.MAX_PRICE_EUR,
+            )
+            continue
+        if listing.rooms and listing.rooms < config.MIN_ROOMS:
+            log.info(
+                "Skipping %s — rooms %s < min %s",
+                listing.id, listing.rooms, config.MIN_ROOMS,
+            )
+            continue
+        if listing.image_count < config.MIN_IMAGES:
+            log.info(
+                "Skipping %s — only %d images (min %d), likely inactive",
+                listing.id, listing.image_count, config.MIN_IMAGES,
+            )
+            continue
+
+        try:
+            log.info("Evaluating listing %s: %s", listing.id, listing.title)
+            # Compute commute + cost-of-ownership BEFORE the AI call so the
+            # model has the real values and can factor them into the score.
+            # These HTTP calls (_fetch_commute_minutes via ORS, cost_calculator)
+            # run OUTSIDE any DB session — no session is held at this point.
+            pre_commute_mins = None
+            if listing.lat is not None and listing.lng is not None:
+                pre_commute_mins = _fetch_commute_minutes(listing.lat, listing.lng)
+            import cost_calculator
+            coo = cost_calculator.compute_cost_of_ownership(
+                listing.price_eur, listing.area_sqm, listing.year_built,
+            )
+            context_prefix = _build_context_prefix(listing, app_data)
+            # Anthropic HTTP call — OUTSIDE any DB session (session-scope discipline, Wave 4)
+            evaluation = evaluate_listing(
+                listing,
+                context_prefix,
+                commute_minutes=pre_commute_mins,
+                district=getattr(listing, "district", "") or "",
+                cost_of_ownership=coo,
+            )
+            log.info("Score: %s/100 — %s", evaluation.get("score"), evaluation.get("verdict"))
+
+            # Build the pending entry: full Listing fields + evaluation + metadata.
+            # New AI schema fields (score_breakdown, risks) are carried through so
+            # the frontend can render the structured breakdown. The old vague
+            # ai_checklist is no longer written — deleted from the writing path
+            # entirely (existing on-disk entries still readable, just not updated).
+            pending_entry = {
+                **dataclasses.asdict(listing),
+                "score": evaluation.get("score", 0),
+                "verdict": evaluation.get("verdict", ""),
+                "score_breakdown": evaluation.get("score_breakdown", {}),
+                "risks": evaluation.get("risks", []),
+                "strengths": evaluation.get("strengths", []),
+                "concerns": evaluation.get("concerns", []),  # legacy, kept for old-frontend fallback
+                "ai_checklist_fills": evaluation.get("checklist_fills", {}),
+                "cost_of_ownership": coo,
+                "draft_subject": (
+                    evaluation.get("draft_subject") or f"Inquiry about {listing.title}"
+                ),
+                "draft_body": evaluation.get("draft_body") or "",
+                "queued_at": datetime.now(timezone.utc).isoformat(),
+                "tg_message_id": None,
+                "tg_chat_id": None,
+            }
+            # add_to_pending scopes its own session (opens + commits + closes internally)
+            data_store.add_to_pending(pending_entry)
+
+            # send_pending_card is provided by Plan 02-02. Until then, the lazy
+            # getattr fallback returns (None, None) so this module ships before
+            # telegram_client grows the new function (never-raise contract).
+            # Telegram HTTP call — OUTSIDE any DB session (session-scope discipline, Wave 4)
+            _send_card = getattr(telegram_client, "send_pending_card", lambda l, e: (None, None))
             try:
-                listing = _deserialize_listing(raw_dict)
-            except (TypeError, KeyError) as exc:
-                log.warning("Malformed listing dict in ingest batch: %s", exc)
-                continue
-
-            # Dedup: compute the canonical object ID for the seen-set check.
-            dedup_key = extract_object_id(listing.url) or listing.url
-            if dedup_key in set(state["seen_listing_ids"]):
-                # Known listing — record price and check for drop (D-12, D-14, RESEARCH Pattern 5)
-                _record_and_check_price_drop(app_data, listing, today_str)
-                continue
-
-            # Mark as seen by appending the object ID (mirrors the original agent_job behaviour).
-            state["seen_listing_ids"].append(listing.id)
-
-            # Apply VPS-side filters (D-02 — config stays on VPS).
-            if listing.price_eur and listing.price_eur > config.MAX_PRICE_EUR:
+                tg_message_id, tg_chat_id = _send_card(listing, evaluation)
                 log.info(
-                    "Skipping %s — price %s > max %s",
-                    listing.id, listing.price_eur, config.MAX_PRICE_EUR,
+                    "Telegram send_pending_card for %s → message_id=%s chat_id=%s",
+                    listing.id, tg_message_id, tg_chat_id,
                 )
-                continue
-            if listing.rooms and listing.rooms < config.MIN_ROOMS:
-                log.info(
-                    "Skipping %s — rooms %s < min %s",
-                    listing.id, listing.rooms, config.MIN_ROOMS,
-                )
-                continue
-            if listing.image_count < config.MIN_IMAGES:
-                log.info(
-                    "Skipping %s — only %d images (min %d), likely inactive",
-                    listing.id, listing.image_count, config.MIN_IMAGES,
-                )
-                continue
-
-            try:
-                log.info("Evaluating listing %s: %s", listing.id, listing.title)
-                # Compute commute + cost-of-ownership BEFORE the AI call so the
-                # model has the real values and can factor them into the score.
-                pre_commute_mins = None
-                if listing.lat is not None and listing.lng is not None:
-                    pre_commute_mins = _fetch_commute_minutes(listing.lat, listing.lng)
-                import cost_calculator
-                coo = cost_calculator.compute_cost_of_ownership(
-                    listing.price_eur, listing.area_sqm, listing.year_built,
-                )
-                context_prefix = _build_context_prefix(listing, app_data)
-                evaluation = evaluate_listing(
-                    listing,
-                    context_prefix,
-                    commute_minutes=pre_commute_mins,
-                    district=getattr(listing, "district", "") or "",
-                    cost_of_ownership=coo,
-                )
-                log.info("Score: %s/100 — %s", evaluation.get("score"), evaluation.get("verdict"))
-
-                # Build the pending entry: full Listing fields + evaluation + metadata.
-                # New AI schema fields (score_breakdown, risks) are carried through so
-                # the frontend can render the structured breakdown. The old vague
-                # ai_checklist is no longer written — deleted from the writing path
-                # entirely (existing on-disk entries still readable, just not updated).
-                pending_entry = {
-                    **dataclasses.asdict(listing),
-                    "score": evaluation.get("score", 0),
-                    "verdict": evaluation.get("verdict", ""),
-                    "score_breakdown": evaluation.get("score_breakdown", {}),
-                    "risks": evaluation.get("risks", []),
-                    "strengths": evaluation.get("strengths", []),
-                    "concerns": evaluation.get("concerns", []),  # legacy, kept for old-frontend fallback
-                    "ai_checklist_fills": evaluation.get("checklist_fills", {}),
-                    "cost_of_ownership": coo,
-                    "draft_subject": (
-                        evaluation.get("draft_subject") or f"Inquiry about {listing.title}"
-                    ),
-                    "draft_body": evaluation.get("draft_body") or "",
-                    "queued_at": datetime.now(timezone.utc).isoformat(),
-                    "tg_message_id": None,
-                    "tg_chat_id": None,
-                }
-                data_store.add_to_pending(pending_entry)
-
-                # send_pending_card is provided by Plan 02-02. Until then, the lazy
-                # getattr fallback returns (None, None) so this module ships before
-                # telegram_client grows the new function (never-raise contract).
-                _send_card = getattr(telegram_client, "send_pending_card", lambda l, e: (None, None))
-                try:
-                    tg_message_id, tg_chat_id = _send_card(listing, evaluation)
-                    log.info(
-                        "Telegram send_pending_card for %s → message_id=%s chat_id=%s",
-                        listing.id, tg_message_id, tg_chat_id,
-                    )
-                except Exception:
-                    log.exception("Telegram send_pending_card failed for %s", listing.id)
-                    tg_message_id, tg_chat_id = None, None
-
-                # Reload app_data to pick up add_to_pending / write_checklist_ai writes.
-                # Also apply the Telegram message_id patch in the same reload so we have a
-                # single consistent state to mutate price_history into (D-12).
-                app_data = data_store.load_app_data()
-                if tg_message_id is not None:
-                    # Patch the stored pending entry with the Telegram message reference
-                    # so edit_card_resolved can update it after approve/reject.
-                    for entry in app_data["pending"]:
-                        if entry.get("id") == listing.id:
-                            entry["tg_message_id"] = tg_message_id
-                            entry["tg_chat_id"] = tg_chat_id
-                            break
-
-                # Persist coords + commute (already computed pre-evaluation above).
-                # In-place mutation of app_data['pending'] entry mirrors _handle_price_drop pattern
-                # (RESEARCH section 10) — do NOT call update_listing_coords here (would re-enter _lock).
-                if listing.lat is not None and listing.lng is not None:
-                    for entry in app_data.get("pending", []):
-                        if entry.get("id") == listing.id:
-                            entry["lat"] = listing.lat
-                            entry["lng"] = listing.lng
-                            entry["commute_minutes"] = pre_commute_mins
-                            break
-
-                # Record initial price for newly-seen listing AFTER the reload so the
-                # mutation lands on the same app_data dict that will be saved at loop end
-                # (D-11, D-12, D-14, RESEARCH Pattern 5).
-                _record_and_check_price_drop(app_data, listing, today_str)
-
             except Exception:
-                log.exception("Failed to process listing %s — skipping", listing.id)
+                log.exception("Telegram send_pending_card failed for %s", listing.id)
+                tg_message_id, tg_chat_id = None, None
 
-        # Post-loop: mark listings with raw_ok=False as removed (D-18, INTEL-03).
-        # Pass the original raw batch dicts so raw_ok signals are available.
-        _mark_removed_listings(app_data, listing_dicts)
+            # Reload app_data to pick up add_to_pending / write_checklist_ai writes.
+            # load_app_data() opens + closes its own session — no session held here.
+            # Also apply the Telegram message_id patch in the same reload so we have a
+            # single consistent state to mutate price_history into (D-12).
+            app_data = data_store.load_app_data()
+            if tg_message_id is not None:
+                # Patch the stored pending entry with the Telegram message reference
+                # so edit_card_resolved can update it after approve/reject.
+                for entry in app_data["pending"]:
+                    if entry.get("id") == listing.id:
+                        entry["tg_message_id"] = tg_message_id
+                        entry["tg_chat_id"] = tg_chat_id
+                        break
 
-        data_store.save_agent_state(state)
-        # Persist accumulated price_history mutations from this batch (D-11, D-12)
-        data_store.save_app_data(app_data)
+            # Persist coords + commute (already computed pre-evaluation above).
+            # In-place mutation of app_data['pending'] entry mirrors _handle_price_drop pattern
+            # (RESEARCH section 10).
+            if listing.lat is not None and listing.lng is not None:
+                for entry in app_data.get("pending", []):
+                    if entry.get("id") == listing.id:
+                        entry["lat"] = listing.lat
+                        entry["lng"] = listing.lng
+                        entry["commute_minutes"] = pre_commute_mins
+                        break
+
+            # Record initial price for newly-seen listing AFTER the reload so the
+            # mutation lands on the same app_data dict that will be saved at loop end
+            # (D-11, D-12, D-14, RESEARCH Pattern 5).
+            _record_and_check_price_drop(app_data, listing, today_str)
+
+        except Exception:
+            log.exception("Failed to process listing %s — skipping", listing.id)
+
+    # Post-loop: mark listings with raw_ok=False as removed (D-18, INTEL-03).
+    # Pass the original raw batch dicts so raw_ok signals are available.
+    _mark_removed_listings(app_data, listing_dicts)
+
+    data_store.save_agent_state(state)
+    # Persist accumulated price_history mutations from this batch (D-11, D-12)
+    # save_app_data uses the compat shim (Wave 5 will optimize to per-row writes)
+    data_store.save_app_data(app_data)
 
     return {"ok": True, "processed": len(listing_dicts)}
 
@@ -586,23 +603,26 @@ def handle_heartbeat(payload: dict) -> dict:
     (explicit reset required — per RESEARCH Pitfall 3).
     NEVER logs INGEST_TOKEN or the presented Bearer credential (per RESEARCH Security Domain).
     Returns {"ok": True}.
+
+    Phase 7 Wave 4 (site #4): lock wrapper removed. agent_state.json
+    is filesystem-backed (D-Discretion); load_agent_state / save_agent_state use atomic
+    os.replace writes — no session concerns here. No HTTP calls in this function.
     """
-    with data_store._lock:
-        state = data_store.load_agent_state()
+    state = data_store.load_agent_state()
 
-        ts = payload.get("timestamp") or datetime.now(timezone.utc).isoformat()
-        listing_count = int(payload.get("listing_count", 0))
-        source = payload.get("source", "unknown")
+    ts = payload.get("timestamp") or datetime.now(timezone.utc).isoformat()
+    listing_count = int(payload.get("listing_count", 0))
+    source = payload.get("source", "unknown")
 
-        state["last_heartbeat_ts"] = ts
-        state["last_heartbeat_listing_count"] = listing_count
+    state["last_heartbeat_ts"] = ts
+    state["last_heartbeat_listing_count"] = listing_count
 
-        if listing_count == 0:
-            state["consecutive_zero_count"] = state.get("consecutive_zero_count", 0) + 1
-        else:
-            state["consecutive_zero_count"] = 0
+    if listing_count == 0:
+        state["consecutive_zero_count"] = state.get("consecutive_zero_count", 0) + 1
+    else:
+        state["consecutive_zero_count"] = 0
 
-        data_store.save_agent_state(state)
+    data_store.save_agent_state(state)
 
     log.info(
         "Heartbeat from %s: listing_count=%d, consecutive_zeros=%d",

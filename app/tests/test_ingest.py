@@ -22,19 +22,24 @@ def test_wrong_token(client):
     assert resp.status_code == 403
 
 
-def test_ingest_batch(client, tmp_agent_state, monkeypatch):
+def test_ingest_batch(client, db_session, tmp_agent_state, monkeypatch):
     """POST /api/ingest processes a single valid Listing dict (ARCH-03, VALIDATION 1-02-03).
 
     evaluate_listing is mocked so this test does not make real Anthropic API calls.
-    Phase 2: confirms the listing lands in app_data pending[] (not properties[]).
+    Phase 2: confirms the listing lands in pending[] (not properties[]).
+
+    Phase 7 Wave 4 fix (Rule 1 — bug): mock lambda updated to accept **kwargs matching
+    the production call signature (commute_minutes, district, cost_of_ownership). The
+    assertion now reads from the DB via data_store.load_pending() since app_data.json
+    is no longer the source of truth after Wave 2 (DB migration).
     """
-    import json  # noqa: PLC0415
+    import data_store as ds  # noqa: PLC0415
     import ingest_handler  # noqa: PLC0415
 
     monkeypatch.setattr(
         ingest_handler,
         "evaluate_listing",
-        lambda listing, context_prefix="": {
+        lambda listing, context_prefix="", **kwargs: {
             "score": 80,
             "verdict": "Good listing",
             "strengths": ["Good price"],
@@ -67,10 +72,11 @@ def test_ingest_batch(client, tmp_agent_state, monkeypatch):
     assert body.get("ok") is True
 
     # Phase 2 (QUEUE-01): listing lands in pending[], NOT in properties[].
-    app_data_file = tmp_agent_state / "app_data.json"
-    app_data = json.loads(app_data_file.read_text()) if app_data_file.exists() else {}
-    pending_ids = [e.get("id") for e in app_data.get("pending", [])]
+    # Phase 7 Wave 4: read from DB via data_store.load_pending() (no longer a JSON file).
+    pending = ds.load_pending()
+    pending_ids = [e.get("id") for e in pending]
     assert "test-1" in pending_ids, f"Listing not in pending[]: {pending_ids}"
+    app_data = ds.load_app_data()
     assert "test-1" not in [e.get("id") for e in app_data.get("properties", [])]
 
 
