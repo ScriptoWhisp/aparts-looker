@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # app/entrypoint.sh — runs at container start.
-# Order matters: pg readiness → schema migration → data migration → uvicorn.
+# Order matters: pg readiness → schema migration → uvicorn.
 #
 # set -e: if any step fails, the container exits immediately and Docker
 # restarts it (restart: unless-stopped), making the failure visible in logs.
@@ -23,9 +23,6 @@ echo "Postgres ready."
 
 echo "Applying Alembic migrations..."
 alembic upgrade head
-
-echo "Migrating legacy JSON if present (idempotent)..."
-python migrate_from_json.py
 
 echo "Starting uvicorn..."
 exec uvicorn main:app --host 0.0.0.0 --port 8000

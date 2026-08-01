@@ -75,10 +75,10 @@ _lock = contextlib.nullcontext()
 # ---------------------------------------------------------------------------
 # Legacy field aliases — MUST be applied on every write path so callers using
 # old dict keys (name/price/area/year/pricePerSqm/notes) correctly map to
-# Listing columns (title/price_eur/area_sqm/year_built/price_per_sqm/description).
-# Single source of truth lives in app/legacy_aliases.py.
+# All ingest paths (scraper → /api/ingest → _deserialize_listing) use the
+# canonical Listing dataclass field names, so no runtime alias translation
+# is needed here.
 # ---------------------------------------------------------------------------
-from legacy_aliases import LEGACY_ALIASES as _LEGACY_ALIASES
 
 # Known column names for filtering unknown keys into extras JSONB.
 _LISTING_COLUMNS: Optional[set] = None
@@ -277,30 +277,18 @@ def _row_to_rejected_dict(row: Listing) -> dict:
 
 
 def _dict_to_listing_fields(entry: dict) -> dict:
-    """Map a legacy-or-modern entry dict to Listing column names.
+    """Map a Listing-shaped dict to columns + extras JSONB.
 
-    Applies _LEGACY_ALIASES on every invocation so callers using old dict keys
-    (name/price/area/year/pricePerSqm/notes) correctly write to the right columns
-    instead of spilling into extras JSONB.
-
-    Unknown keys (after alias resolution) that have no matching column are
-    collected into extras JSONB so no data is lost.
+    Unknown keys with no matching column are collected into extras JSONB so
+    ad-hoc metadata is never silently dropped.
 
     JSONB list/dict fields are coerced from None to [] / {} to satisfy the
     NOT-NULL Postgres constraints.
     """
-    # 1. Deep copy to avoid mutating the caller's dict
+    # 1. Shallow copy to avoid mutating the caller's dict
     out = dict(entry)
 
-    # 2. Apply legacy aliases — only if the canonical field is absent or empty
-    for old_key, new_key in _LEGACY_ALIASES.items():
-        if old_key in out:
-            if new_key not in out or not out.get(new_key):
-                out[new_key] = out[old_key]
-            # Remove the legacy key so it doesn't spill to extras
-            del out[old_key]
-
-    # 3. Split into known columns vs extras
+    # 2. Split into known columns vs extras
     known = _get_listing_columns()
     fields: dict = {}
     extras: dict = {}
@@ -310,7 +298,7 @@ def _dict_to_listing_fields(entry: dict) -> dict:
         else:
             extras[k] = v
 
-    # 4. Merge extras from the entry's existing extras + new unknowns
+    # 3. Merge extras from the entry's existing extras + new unknowns
     existing_extras = fields.get("extras") or {}
     if isinstance(existing_extras, dict):
         merged_extras = {**existing_extras, **extras}
@@ -318,11 +306,9 @@ def _dict_to_listing_fields(entry: dict) -> dict:
         merged_extras = extras
     fields["extras"] = merged_extras
 
-    # 4.5. Coerce empty strings to None for numeric columns. Scraped / legacy
-    #      dicts sometimes carry "" for missing numerics (e.g., year_built=""),
-    #      which Postgres INTEGER/FLOAT rejects with
-    #      "invalid input syntax for type integer: ''". Mirrors
-    #      migrate_from_json._entry_to_row.
+    # 4. Coerce empty strings to None for numeric columns. Scraped dicts can
+    #    carry "" for missing numerics (e.g. year_built=""), which Postgres
+    #    INTEGER/FLOAT rejects with "invalid input syntax for type integer: ''".
     _numeric_cols = (
         "price_eur", "price_per_sqm", "rooms", "year_built",
         "floor", "floor_total", "image_count", "commute_minutes",

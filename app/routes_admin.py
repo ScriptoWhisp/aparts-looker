@@ -26,7 +26,6 @@ import db
 import ingest_handler
 import settings_store
 import scheduler
-from legacy_aliases import LEGACY_ALIASES
 from models import Listing
 
 log = logging.getLogger("app")
@@ -37,15 +36,6 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 # Helpers (used only within this module)
 # ---------------------------------------------------------------------------
-
-def _normalize_entry_for_listing(entry: dict) -> dict:
-    """Return a copy of entry with legacy field names mapped to Listing field names."""
-    out = dict(entry)
-    for old_key, new_key in LEGACY_ALIASES.items():
-        if old_key in out and (new_key not in out or not out.get(new_key)):
-            out[new_key] = out.pop(old_key)
-    return out
-
 
 def _find_entry(app_data: dict, listing_id: str) -> Optional[dict]:
     for list_name in ("properties", "pending"):
@@ -293,15 +283,14 @@ def debug_listing(listing_id: str) -> dict:
     entry = _find_entry(data, listing_id)
     if entry is None:
         raise HTTPException(status_code=404, detail="Listing not found")
-    normalized = _normalize_entry_for_listing(entry)
     try:
-        listing = ingest_handler._deserialize_listing(normalized)
+        listing = ingest_handler._deserialize_listing(entry)
         listing_dict = dataclasses.asdict(listing)
     except Exception as exc:
         listing_dict = {"__error__": str(exc)}
     try:
         context_prefix = ingest_handler._build_context_prefix(
-            ingest_handler._deserialize_listing(normalized), data
+            ingest_handler._deserialize_listing(entry), data
         )
     except Exception as exc:
         context_prefix = f"<context build failed: {exc}>"
@@ -337,8 +326,6 @@ def debug_listing(listing_id: str) -> dict:
 def reevaluate_listing(listing_id: str) -> dict:
     """Re-run AI evaluation on a listing already stored in properties[] or pending[].
 
-    Normalizes legacy field names (name→title, price→price_eur, area→area_sqm, etc.)
-    before rebuilding the Listing so entries seeded before the current schema still work.
     Requires ANTHROPIC_API_KEY. Never raises — returns error dict on failure.
     """
     if not config.ANTHROPIC_API_KEY:
@@ -347,9 +334,8 @@ def reevaluate_listing(listing_id: str) -> dict:
     entry = _find_entry(app_data, listing_id)
     if entry is None:
         raise HTTPException(status_code=404, detail="Listing not found")
-    normalized = _normalize_entry_for_listing(entry)
     try:
-        listing = ingest_handler._deserialize_listing(normalized)
+        listing = ingest_handler._deserialize_listing(entry)
     except Exception:
         log.exception("reevaluate: failed to deserialize %s", listing_id)
         return {"ok": False, "error": "Cannot deserialize listing"}
