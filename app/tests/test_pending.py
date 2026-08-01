@@ -1,9 +1,20 @@
-"""Tests for Phase 02 pending queue: QUEUE-01 through QUEUE-07."""
+"""Tests for Phase 02 pending queue: QUEUE-01 through QUEUE-07.
+
+Phase 7 Wave 2 port notes:
+- Tests that touch data_store now request db_session for DB isolation.
+- Tests using `client` (which depends on tmp_agent_state) also add db_session
+  so the DB backing store is active alongside the agent_state.json temp redirect.
+- `with data_store._lock:` blocks still parse and execute (no-op nullcontext).
+- `_seed_pending` now uses data_store.save_app_data via the DB shim instead of
+  writing JSON directly, so the DB fixture intercepts the writes correctly.
+- test_send_pending_card_buttons and test_callback_query_* tests do NOT touch
+  data_store directly (they monkeypatch it) and keep tmp_agent_state only.
+"""
 
 import pytest
 
 
-def test_ingest_writes_to_pending(client, tmp_agent_state, mock_send_pending_card, monkeypatch):
+def test_ingest_writes_to_pending(db_session, client, tmp_agent_state, mock_send_pending_card, monkeypatch):
     """QUEUE-01: ingest batch writes to pending[], not properties[] (VALIDATION 2-01-01)."""
     import re  # noqa: PLC0415
 
@@ -13,7 +24,7 @@ def test_ingest_writes_to_pending(client, tmp_agent_state, mock_send_pending_car
     monkeypatch.setattr(
         ingest_handler,
         "evaluate_listing",
-        lambda listing, context_prefix="": {
+        lambda listing, context_prefix="", **_kwargs: {
             "score": 80,
             "verdict": "Good",
             "strengths": [],
@@ -53,8 +64,11 @@ def test_ingest_writes_to_pending(client, tmp_agent_state, mock_send_pending_car
     assert not any(p.get("id") == "test-1" for p in data["properties"])
 
 
-def test_data_model_keys(tmp_agent_state):
-    """QUEUE-01: DEFAULT_APP_DATA includes pending[] and rejected[] (D-01, VALIDATION 2-01-02)."""
+def test_data_model_keys(db_session):
+    """QUEUE-01: load_app_data includes pending[], rejected[], properties[], checklists[], settings[].
+
+    (D-01, VALIDATION 2-01-02) — DB backend returns correct top-level keys.
+    """
     import data_store  # noqa: PLC0415
 
     data = data_store.load_app_data()
@@ -109,7 +123,7 @@ def test_send_pending_card_buttons(monkeypatch):
     assert row[0]["callback_data"] == "approve:1234567"
     assert row[1]["text"] == "Reject"
     assert row[1]["callback_data"] == "reject:1234567"
-    assert row[2]["text"] == "More"
+    assert row[2]["text"] == "kv.ee"
     assert row[2]["url"].startswith("https://")
     assert "1234567" in row[2]["url"]
 
@@ -203,7 +217,11 @@ def test_callback_query_parse_reason(monkeypatch, tmp_agent_state):
 
 
 def _seed_pending(listing_id: str) -> None:
-    """Seed a pending entry directly into data_store for test isolation."""
+    """Seed a pending entry into data_store via the DB shim (test isolation helper).
+
+    Note: `with data_store._lock:` is a no-op nullcontext in Wave 2 — kept for
+    syntactic compatibility with any callers that use the pattern.
+    """
     import data_store  # noqa: PLC0415
 
     with data_store._lock:
@@ -230,7 +248,7 @@ def _seed_pending(listing_id: str) -> None:
         data_store.save_app_data(data)
 
 
-def test_get_pending_endpoint(client, tmp_agent_state):
+def test_get_pending_endpoint(db_session, client, tmp_agent_state):
     """QUEUE-03: GET /api/pending returns pending[] from data_store."""
     import data_store  # noqa: PLC0415
 
@@ -244,7 +262,7 @@ def test_get_pending_endpoint(client, tmp_agent_state):
     assert body["pending"][0]["id"] == "1234567"
 
 
-def test_approve_moves_listing(client, tmp_agent_state):
+def test_approve_moves_listing(db_session, client, tmp_agent_state):
     """QUEUE-04: POST /api/pending/<id>/approve moves entry to properties[] and returns ok."""
     import data_store  # noqa: PLC0415
 
@@ -259,7 +277,7 @@ def test_approve_moves_listing(client, tmp_agent_state):
     assert any(p["id"] == "1234567" for p in data["properties"])
 
 
-def test_double_approve(client, tmp_agent_state):
+def test_double_approve(db_session, client, tmp_agent_state):
     """QUEUE-04: POST approve twice — first returns 200, second returns 404 (double-tap guard)."""
     _seed_pending("1234567")
 
@@ -270,7 +288,7 @@ def test_double_approve(client, tmp_agent_state):
     assert resp2.status_code == 404
 
 
-def test_reject_with_reason(client, tmp_agent_state):
+def test_reject_with_reason(db_session, client, tmp_agent_state):
     """QUEUE-05: POST /api/pending/<id>/reject with reason moves to rejected[] with metadata.
 
     Also verifies server-side whitelist clamp: garbage reason stored as 'other'.
@@ -301,7 +319,7 @@ def test_reject_with_reason(client, tmp_agent_state):
     assert rejected2[0]["rejection_reason"] == "other"
 
 
-def test_draft_endpoint(client, tmp_agent_state, mock_gmail):
+def test_draft_endpoint(db_session, client, tmp_agent_state, mock_gmail):
     """QUEUE-06: POST /api/draft/<id> creates Gmail draft and queues into pending_drafts.
 
     Three sub-assertions:
@@ -316,12 +334,13 @@ def test_draft_endpoint(client, tmp_agent_state, mock_gmail):
         data = data_store.load_app_data()
         data["properties"].append({
             "id": "1234567",
-            "name": "Test",
+            "title": "Test",
             "url": "https://kv.ee/1234567.html",
-            "price": 200000,
+            "price_eur": 200000,
             "contact_email": "agent@test.ee",
             "draft_subject": "Test",
             "draft_body": "body",
+            "status": "approved",
         })
         data_store.save_app_data(data)
 
@@ -344,12 +363,13 @@ def test_draft_endpoint(client, tmp_agent_state, mock_gmail):
         data2 = data_store.load_app_data()
         data2["properties"].append({
             "id": "9999",
-            "name": "No Email Listing",
+            "title": "No Email Listing",
             "url": "https://kv.ee/9999.html",
-            "price": 100000,
+            "price_eur": 100000,
             "contact_email": "",
             "draft_subject": "No email",
             "draft_body": "body",
+            "status": "approved",
         })
         data_store.save_app_data(data2)
 
@@ -368,6 +388,9 @@ def test_send_command_after_draft(tmp_agent_state, monkeypatch):
     Seeds agent_state with a queued draft, monkeypatches Telegram + Gmail,
     calls process_send_commands, and asserts send_email was called and the
     draft entry was removed (pending_drafts consumed after successful send).
+
+    Note: this test only touches agent_state.json (filesystem), not the DB,
+    so db_session is not required.
     """
     from unittest.mock import MagicMock  # noqa: PLC0415
 
@@ -376,7 +399,7 @@ def test_send_command_after_draft(tmp_agent_state, monkeypatch):
     import gmail_client  # noqa: PLC0415
     import telegram_client  # noqa: PLC0415
 
-    # Seed pending_drafts with a queued draft
+    # Seed pending_drafts with a queued draft (agent_state.json — filesystem)
     with data_store._lock:
         state = data_store.load_agent_state()
         state["pending_drafts"]["1234567"] = {

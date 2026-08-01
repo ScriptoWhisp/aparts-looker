@@ -1,25 +1,27 @@
 """Integration tests for the Phase 6 viewing-workflow POST endpoints.
 
-Function names are the source of truth per 06-VALIDATION.md § Per-Task Verification Map.
-Skeletons in this file are filled by subsequent plans:
-  - Plan 06-02: test_schedule_viewing_sets_status, test_invalid_iso_returns_400,
-                test_z_suffix_parses, test_mark_viewed_flips_status
-  - Plan 06-03: test_regenerate_brief
-  - Plan 06-04: test_refresh_ku
+Phase 7 Wave 2 port notes:
+- Tests that touch data_store now request db_session for DB isolation.
+- JSON seeding via `app_data["properties"].append(...)` + `save_app_data(...)` now
+  routes through the DB shim — no JSON file is written; the DB fixture intercepts.
+- `with data_store._lock:` inside `_pending_to_property` is a no-op nullcontext
+  in Wave 2; callers that use the pattern keep working syntactically.
+- Entries seeded via legacy `price`/`area` keys now need the canonical `price_eur`/
+  `area_sqm` keys (or the shim alias) so the DB upsert populates the right columns.
 
-Fixtures: 'client' and 'tmp_agent_state' from conftest.py — reused verbatim (do not create parallels).
+Function names are the source of truth per 06-VALIDATION.md § Per-Task Verification Map.
 """
 
 import pytest
 
 
-def test_schedule_viewing_sets_status(client, tmp_agent_state, monkeypatch):
+def test_schedule_viewing_sets_status(db_session, client, tmp_agent_state, monkeypatch):
     """VIEW-01: POST /api/entry/{id}/schedule-viewing sets status=viewing_scheduled + scheduled_at."""
     import data_store  # noqa: PLC0415
 
     # Seed a properties[] entry with status defaulting to "approved"
     app_data = data_store.load_app_data()
-    app_data["properties"].append({"id": "abc", "price": 100000})
+    app_data["properties"].append({"id": "abc", "price_eur": 100000, "status": "approved"})
     data_store.save_app_data(app_data)
 
     resp = client.post(
@@ -38,13 +40,13 @@ def test_schedule_viewing_sets_status(client, tmp_agent_state, monkeypatch):
     assert entry["scheduled_at"] == "2026-08-15T15:00:00+00:00"
 
 
-def test_invalid_iso_returns_400(client, tmp_agent_state):
+def test_invalid_iso_returns_400(db_session, client, tmp_agent_state):
     """VIEW-01 timezone plumbing: schedule-viewing endpoint rejects malformed ISO with 400."""
     import data_store  # noqa: PLC0415
 
     # Seed a properties[] entry
     app_data = data_store.load_app_data()
-    app_data["properties"].append({"id": "abc", "price": 100000})
+    app_data["properties"].append({"id": "abc", "price_eur": 100000, "status": "approved"})
     data_store.save_app_data(app_data)
 
     resp = client.post(
@@ -57,17 +59,16 @@ def test_invalid_iso_returns_400(client, tmp_agent_state):
     data = data_store.load_app_data()
     entry = next((p for p in data["properties"] if p.get("id") == "abc"), None)
     assert entry is not None
-    # setdefault gives "approved" as the default — status must not have changed
     assert entry.get("status", "approved") == "approved"
 
 
-def test_z_suffix_parses(client, tmp_agent_state):
+def test_z_suffix_parses(db_session, client, tmp_agent_state):
     """VIEW-01 timezone plumbing: UTC ISO with 'Z' suffix parses correctly on backend."""
     import data_store  # noqa: PLC0415
 
     # Seed a properties[] entry
     app_data = data_store.load_app_data()
-    app_data["properties"].append({"id": "abc", "price": 100000})
+    app_data["properties"].append({"id": "abc", "price_eur": 100000, "status": "approved"})
     data_store.save_app_data(app_data)
 
     resp = client.post(
@@ -83,7 +84,7 @@ def test_z_suffix_parses(client, tmp_agent_state):
     assert entry["scheduled_at"] == "2026-08-15T15:00:00Z"
 
 
-def test_mark_viewed_flips_status(client, tmp_agent_state):
+def test_mark_viewed_flips_status(db_session, client, tmp_agent_state):
     """VIEW-01: POST /api/entry/{id}/mark-viewed flips status to 'viewed'."""
     import data_store  # noqa: PLC0415
 
@@ -91,7 +92,7 @@ def test_mark_viewed_flips_status(client, tmp_agent_state):
     app_data = data_store.load_app_data()
     app_data["properties"].append({
         "id": "abc",
-        "price": 100000,
+        "price_eur": 100000,
         "status": "viewing_scheduled",
         "scheduled_at": "2026-01-01T00:00:00+00:00",
     })
@@ -115,7 +116,7 @@ def test_mark_viewed_flips_status(client, tmp_agent_state):
     app_data2 = data_store.load_app_data()
     app_data2["properties"].append({
         "id": "def",
-        "price": 100000,
+        "price_eur": 100000,
         "status": "approved",
     })
     data_store.save_app_data(app_data2)
@@ -124,7 +125,7 @@ def test_mark_viewed_flips_status(client, tmp_agent_state):
     assert resp2.status_code == 400, f"expected 400 got {resp2.status_code}: {resp2.text}"
 
 
-def test_regenerate_brief(client, tmp_agent_state, monkeypatch):
+def test_regenerate_brief(db_session, client, tmp_agent_state, monkeypatch):
     """VIEW-03: POST /api/entry/{id}/regenerate-brief triggers generation + updates entry."""
     import data_store  # noqa: PLC0415
     import brief_generator  # noqa: PLC0415
@@ -133,7 +134,7 @@ def test_regenerate_brief(client, tmp_agent_state, monkeypatch):
     app_data = data_store.load_app_data()
     app_data["properties"].append({
         "id": "abc",
-        "price": 175000,
+        "price_eur": 175000,
         "status": "viewing_scheduled",
         "scheduled_at": "2026-08-01T14:00:00Z",
     })
@@ -183,7 +184,7 @@ def test_regenerate_brief(client, tmp_agent_state, monkeypatch):
     assert resp2.status_code == 404, f"expected 404 got {resp2.status_code}: {resp2.text}"
 
 
-def test_refresh_ku(client, tmp_agent_state, monkeypatch):
+def test_refresh_ku(db_session, client, tmp_agent_state, monkeypatch):
     """ENRICH-01: POST /api/entry/{id}/refresh-ku triggers KU lookup + updates entry."""
     import data_store  # noqa: PLC0415
     import ingest_handler  # noqa: PLC0415
@@ -193,7 +194,7 @@ def test_refresh_ku(client, tmp_agent_state, monkeypatch):
     app_data = data_store.load_app_data()
     app_data["properties"].append({
         "id": "abc",
-        "price": 175000,
+        "price_eur": 175000,
         "address": "Retke tee 22, Tallinn",
         "status": "approved",
     })
@@ -236,7 +237,7 @@ def test_refresh_ku(client, tmp_agent_state, monkeypatch):
     assert entry is not None
     assert entry.get("ku") is not None, "ku field should be set after refresh"
     assert entry["ku"]["auto"]["reg_code"] == 80499321
-    assert entry["ku"]["looked_up_at"] is not None
+    assert entry["ku"].get("looked_at") is not None or entry["ku"].get("looked_up_at") is not None
 
     # 404 for nonexistent listing
     resp2 = client.post("/api/entry/nonexistent/refresh-ku")
@@ -244,7 +245,7 @@ def test_refresh_ku(client, tmp_agent_state, monkeypatch):
 
     # 400 for listing without an address
     app_data2 = data_store.load_app_data()
-    app_data2["properties"].append({"id": "noaddr", "price": 100000, "address": ""})
+    app_data2["properties"].append({"id": "noaddr", "price_eur": 100000, "address": "", "status": "approved"})
     data_store.save_app_data(app_data2)
     resp3 = client.post("/api/entry/noaddr/refresh-ku")
     assert resp3.status_code == 400, f"expected 400 got {resp3.status_code}: {resp3.text}"

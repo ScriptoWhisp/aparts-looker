@@ -267,17 +267,15 @@ def db_session(postgresql_db_fixture, monkeypatch):
 
     if _IN_DOCKER:
         # Docker mode: connect to the already-migrated compose service DB.
+        # Schema already exists from Alembic migrations in entrypoint.sh.
         import config as _cfg  # noqa: PLC0415
         conn_str = _cfg.DATABASE_URL
         engine = create_engine(conn_str, pool_pre_ping=True)
-        # Schema already exists from Alembic; create_all is a no-op here
-        # but ensures tests pass even on first boot before Alembic runs.
         with engine.begin() as ddl_conn:
-            Base.metadata.create_all(ddl_conn)
+            Base.metadata.create_all(ddl_conn)  # no-op if schema already exists
     else:
         # Local dev mode: connect to the subprocess Postgres from the fixture.
         info = postgresql_db_fixture.info
-        # psycopg3 DSN — include password if present.
         _pw = getattr(info, "password", "") or ""
         _pw_part = f":{_pw}" if _pw else ""
         conn_str = (
@@ -285,17 +283,93 @@ def db_session(postgresql_db_fixture, monkeypatch):
             f"@{info.host}:{info.port}/{info.dbname}"
         )
         engine = create_engine(conn_str)
-        # Create schema from models (no Alembic in tests — throwaway DB).
         with engine.begin() as ddl_conn:
             Base.metadata.create_all(ddl_conn)
 
     connection = engine.connect()
     trans = connection.begin()
-    TestSession = sessionmaker(bind=connection, expire_on_commit=False)
-    session = TestSession()
+
+    # Per-test isolation: TRUNCATE the listings table at the START of each test
+    # (inside the outer transaction that gets rolled back on teardown). This ensures
+    # tests see a clean slate even if a prior test left committed rows in the DB
+    # (e.g. from a test that doesn't use db_session, or from a debug session).
+    # TRUNCATE … RESTART IDENTITY resets serial sequences too.
+    # The TRUNCATE itself is part of `trans` and is rolled back at teardown,
+    # restoring any pre-test rows that were present before the test started.
+    try:
+        from sqlalchemy import text as _sa_text  # noqa: PLC0415
+        connection.execute(_sa_text("TRUNCATE TABLE listings RESTART IDENTITY CASCADE"))
+    except Exception:
+        pass  # Table may not exist yet (pre-migration) — safe to skip
+
+    # Wave 2 note: data_store.* functions call db_.commit() after every write.
+    # To prevent that commit from ending `trans` (which would invalidate the
+    # connection for subsequent data_store calls in the same test), we patch
+    # SessionLocal to return sessions that run INSIDE a SAVEPOINT. Each
+    # session's commit() flushes to the savepoint rather than the outer
+    # transaction, so `trans.rollback()` at teardown still reverts everything.
+    #
+    # Pattern: each TestSession() call joins the existing connection and
+    # immediately begins a nested transaction (SAVEPOINT) whose commit() is
+    # a no-op to the outer transaction. A new nested transaction is started
+    # after each commit so the session remains usable for the rest of the test.
+    #
+    # Reference: https://docs.sqlalchemy.org/en/20/orm/session_transaction.html
+    #   #joining-a-session-into-an-external-transaction-the-test-teardown-use-case
+
+    from sqlalchemy.orm import Session  # noqa: PLC0415
+
+    class NestedSession(Session):
+        """Session that stays inside `trans` (the outer fixture transaction).
+
+        - On init: calls begin_nested() to open a SAVEPOINT on the shared connection.
+        - On commit(): commits the SAVEPOINT and immediately opens a new one so
+          the session is still usable for subsequent calls in the same test.
+        - On close(): expunges ORM objects WITHOUT releasing the shared connection.
+          data_store calls db_.close() in every finally block; without this override,
+          close() would call _close_impl(invalidate=False) which releases the
+          connection back to the pool, making the next make_session() call fail with
+          ResourceClosedError because `trans` is still "active" but the conn is gone.
+        """
+
+        def commit(self):  # type: ignore[override]
+            # Flush to SAVEPOINT (not the outer transaction).
+            super().commit()
+            # Reopen a SAVEPOINT so the session is usable for the next operation.
+            if self.is_active:
+                self.begin_nested()
+
+        def rollback(self):  # type: ignore[override]
+            # Roll back only to our SAVEPOINT.
+            super().rollback()
+            if self.is_active:
+                self.begin_nested()
+
+        def close(self):  # type: ignore[override]
+            # Expunge ORM objects but do NOT release the shared connection.
+            # Calling super().close() would invoke _close_impl(invalidate=False)
+            # which disconnects the session from the bound connection, causing
+            # ResourceClosedError on the next SessionLocal() call in the same test.
+            self.expunge_all()
+
+    def _make_session() -> NestedSession:
+        """Factory: create a NestedSession bound to the shared connection."""
+        sess = NestedSession(bind=connection, expire_on_commit=False)
+        sess.begin_nested()
+        return sess
+
+    session = _make_session()
 
     # Monkeypatch SessionLocal so data_store.* shares this transaction.
-    monkeypatch.setattr(db_module, "SessionLocal", TestSession)
+    # IMPORTANT: data_store.py does `from db import SessionLocal` at import time,
+    # which binds the name `SessionLocal` directly in the data_store module namespace.
+    # Patching db_module.SessionLocal only affects NEW callers that do `db.SessionLocal()`.
+    # We must ALSO patch `data_store.SessionLocal` (the module-local binding) so that
+    # every `db_ = SessionLocal()` inside data_store functions uses the test factory.
+    monkeypatch.setattr(db_module, "SessionLocal", _make_session)
+    import data_store as _data_store_module  # noqa: PLC0415
+    if hasattr(_data_store_module, "SessionLocal"):
+        monkeypatch.setattr(_data_store_module, "SessionLocal", _make_session)
 
     yield session
 

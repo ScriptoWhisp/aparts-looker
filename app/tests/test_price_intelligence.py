@@ -1,7 +1,16 @@
-"""Tests for Phase 03 price intelligence: EVAL-04, INTEL-01, INTEL-02, INTEL-03."""
+"""Tests for Phase 03 price intelligence: EVAL-04, INTEL-01, INTEL-02, INTEL-03.
 
-import json
-import re
+Phase 7 Wave 2 port notes:
+- Tests that touch data_store now request db_session for DB isolation.
+- `with data_store._lock:` blocks kept (nullcontext no-op — syntactically valid).
+- test_ingest_records_price_for_known: previously read price_history from the
+  app_data JSON file directly. Now uses data_store.get_price_history() which
+  queries Postgres instead. The assertion semantics are identical.
+- _seed_pending_entry uses data_store.save_app_data via the DB shim.
+- Legacy field names (name/price/area/pricePerSqm/year/notes) in seeded entries
+  are translated by _dict_to_listing_fields on save — assertions that check those
+  fields post-save use the canonical column names or the compatibility shim aliases.
+"""
 
 import pytest
 
@@ -12,7 +21,7 @@ import pytest
 
 def _mock_evaluate(score=85):
     """Return a lambda mimicking evaluate_listing with a fixed score."""
-    return lambda l, context_prefix="": {
+    return lambda l, context_prefix="", **_kwargs: {
         "score": score,
         "verdict": "Better now",
         "strengths": [],
@@ -31,7 +40,7 @@ def _mock_evaluate(score=85):
 
 
 def _seed_pending_entry(listing_id: str, score: int = 75) -> None:
-    """Seed a pending entry directly into data_store (test isolation helper)."""
+    """Seed a pending entry into data_store via the DB shim (test isolation helper)."""
     import data_store  # noqa: PLC0415
 
     with data_store._lock:
@@ -62,7 +71,7 @@ def _seed_pending_entry(listing_id: str, score: int = 75) -> None:
 # INTEL-01: price history recording
 # ---------------------------------------------------------------------------
 
-def test_record_price_new(tmp_agent_state):
+def test_record_price_new(db_session, tmp_agent_state):
     """INTEL-01: record_price_in_data appends a new price entry for a listing not yet in price_history."""
     import data_store  # noqa: PLC0415
 
@@ -75,7 +84,7 @@ def test_record_price_new(tmp_agent_state):
     assert history == [{"date": "2026-07-01", "price": 200000}]
 
 
-def test_record_price_idempotent(tmp_agent_state):
+def test_record_price_idempotent(db_session, tmp_agent_state):
     """INTEL-01: record_price_in_data overwrites (not appends) when called twice for the same date."""
     import data_store  # noqa: PLC0415
 
@@ -90,15 +99,16 @@ def test_record_price_idempotent(tmp_agent_state):
     assert history[0]["price"] == 195000, f"Expected 195000, got {history[0]['price']}"
 
 
-def test_ingest_records_price_for_known(client, tmp_agent_state, mock_send_pending_card, monkeypatch):
+def test_ingest_records_price_for_known(db_session, client, tmp_agent_state, mock_send_pending_card, monkeypatch):
     """INTEL-01: ingest batch records price into price_history for a known (already-seen) listing."""
     import ingest_handler  # noqa: PLC0415
+    import data_store  # noqa: PLC0415
 
     # Monkeypatch evaluate_listing to avoid real API call (accepts context_prefix="" per plan)
     monkeypatch.setattr(
         ingest_handler,
         "evaluate_listing",
-        lambda listing, context_prefix="": {
+        lambda listing, context_prefix="", **_kwargs: {
             "score": 80,
             "verdict": "Good",
             "strengths": [],
@@ -137,14 +147,13 @@ def test_ingest_records_price_for_known(client, tmp_agent_state, mock_send_pendi
     resp2 = client.post("/api/ingest", json=payload, headers=headers)
     assert resp2.status_code == 200
 
-    # Read the app_data file directly to verify price_history was written
-    app_data_file = tmp_agent_state / "app_data.json"
-    app_data = json.loads(app_data_file.read_text())
-    assert "test-1" in app_data.get("price_history", {}), (
-        f"price_history missing 'test-1'. Keys: {list(app_data.get('price_history', {}).keys())}"
+    # Read price_history from DB via data_store.get_price_history (replaces JSON file read)
+    history = data_store.get_price_history("test-1")
+    assert "test-1" or len(history) >= 1, (
+        f"price_history missing for 'test-1' — history: {history}"
     )
-    assert len(app_data["price_history"]["test-1"]) >= 1, (
-        f"Expected at least 1 price entry, got: {app_data['price_history']['test-1']}"
+    assert len(history) >= 1, (
+        f"Expected at least 1 price entry, got: {history}"
     )
 
 
@@ -152,7 +161,7 @@ def test_ingest_records_price_for_known(client, tmp_agent_state, mock_send_pendi
 # EVAL-04: price-drop re-evaluation
 # ---------------------------------------------------------------------------
 
-def test_price_drop_reeval_pending(client, tmp_agent_state, mock_send_pending_card, monkeypatch):
+def test_price_drop_reeval_pending(db_session, client, tmp_agent_state, mock_send_pending_card, monkeypatch):
     """EVAL-04: a >= 5% price drop on a pending listing triggers re-evaluation and score update."""
     import data_store  # noqa: PLC0415
     import ingest_handler  # noqa: PLC0415
@@ -206,7 +215,7 @@ def test_price_drop_reeval_pending(client, tmp_agent_state, mock_send_pending_ca
     assert data["price_history"]["test-1"][-1]["price"] == 188000
 
 
-def test_price_drop_below_threshold_no_reeval(client, tmp_agent_state, mock_send_pending_card, monkeypatch):
+def test_price_drop_below_threshold_no_reeval(db_session, client, tmp_agent_state, mock_send_pending_card, monkeypatch):
     """EVAL-04: a < 5% price drop does NOT trigger re-evaluation."""
     import data_store  # noqa: PLC0415
     import ingest_handler  # noqa: PLC0415
@@ -257,7 +266,7 @@ def test_price_drop_below_threshold_no_reeval(client, tmp_agent_state, mock_send
     )
 
 
-def test_price_rejected_requeued(client, tmp_agent_state, mock_send_pending_card, monkeypatch):
+def test_price_rejected_requeued(db_session, client, tmp_agent_state, mock_send_pending_card, monkeypatch):
     """EVAL-04: a listing rejected for reason='price' is re-queued to pending on >= 5% drop (D-17)."""
     import data_store  # noqa: PLC0415
     import ingest_handler  # noqa: PLC0415
@@ -319,7 +328,7 @@ def test_price_rejected_requeued(client, tmp_agent_state, mock_send_pending_card
     )
 
 
-def test_location_rejected_not_requeued(client, tmp_agent_state, mock_send_pending_card, monkeypatch):
+def test_location_rejected_not_requeued(db_session, client, tmp_agent_state, mock_send_pending_card, monkeypatch):
     """EVAL-04: a listing rejected for reason='location' is NOT re-queued on price drop (D-17)."""
     import data_store  # noqa: PLC0415
     import ingest_handler  # noqa: PLC0415
@@ -383,29 +392,31 @@ def test_location_rejected_not_requeued(client, tmp_agent_state, mock_send_pendi
 # INTEL-03: removed listing marking
 # ---------------------------------------------------------------------------
 
-def test_removed_listing_marked(client, tmp_agent_state, mock_send_pending_card, monkeypatch):
+def test_removed_listing_marked(db_session, client, tmp_agent_state, mock_send_pending_card, monkeypatch):
     """INTEL-03: a listing in properties[] with raw_ok=False is marked removed=True with removed_at date."""
+    import re  # noqa: PLC0415
     import data_store  # noqa: PLC0415
     import ingest_handler  # noqa: PLC0415
 
     monkeypatch.setattr(ingest_handler, "evaluate_listing", _mock_evaluate())
     monkeypatch.setattr(ingest_handler.telegram_client, "send_message", lambda t: None)
 
-    # Seed a property entry (already-approved listing)
+    # Seed a property entry (already-approved listing) using canonical + legacy field names
     with data_store._lock:
         data = data_store.load_app_data()
         data["properties"].append({
             "id": "test-1",
-            "name": "Test Apartment",
+            "name": "Test Apartment",        # legacy alias — _dict_to_listing_fields maps to title
             "url": "https://www.kv.ee/test-1.html",
-            "price": 200000,
-            "area": 60,
+            "price": 200000,                 # legacy alias → price_eur
+            "area": 60,                      # legacy alias → area_sqm
             "rooms": 3,
-            "pricePerSqm": 3333,
+            "pricePerSqm": 3333,             # legacy alias → price_per_sqm
             "district": "",
             "material": "panel",
-            "year": "2010",
-            "notes": "Some notes",
+            "year": "2010",                  # legacy alias → year_built
+            "notes": "Some notes",           # legacy alias → description
+            "status": "approved",
         })
         data_store.save_app_data(data)
 
@@ -435,8 +446,9 @@ def test_removed_listing_marked(client, tmp_agent_state, mock_send_pending_card,
     )
 
 
-def test_removed_listing_marked_pending(client, tmp_agent_state, mock_send_pending_card, monkeypatch):
+def test_removed_listing_marked_pending(db_session, client, tmp_agent_state, mock_send_pending_card, monkeypatch):
     """INTEL-03: a listing in pending[] with raw_ok=False is marked removed=True with removed_at date."""
+    import re  # noqa: PLC0415
     import data_store  # noqa: PLC0415
     import ingest_handler  # noqa: PLC0415
 
