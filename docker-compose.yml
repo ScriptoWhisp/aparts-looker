@@ -1,8 +1,28 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    # No ports: exposed — only reachable inside the compose network.
+
   app:
     build: ./app
     restart: unless-stopped
     env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
     volumes:
       - apartment_data:/app/data
     expose:
@@ -25,5 +45,6 @@ services:
 
 volumes:
   apartment_data:
+  postgres_data:
   caddy_data:
   caddy_config:
