@@ -107,3 +107,126 @@ def test_number_validation():
     assert brief_generator._validate_no_hallucinated_numbers(
         "Хорошая квартира в Таллине.", facts,
     ) is True, "expected True when no numbers in brief"
+
+
+# ---------------------------------------------------------------------------
+# Wave 4 — DB-08 regression guards: session must be released before Anthropic
+# HTTP call (Pitfall 2 — session-across-HTTP conversion for brief_generator).
+# ---------------------------------------------------------------------------
+
+def test_no_session_during_http(db_session, monkeypatch):
+    """Regression guard for DB-08 — session must be released before Anthropic HTTP call (sync path)."""
+    import brief_generator
+    import db
+    from models import Listing
+
+    row = Listing(
+        id="brief-1",
+        status="approved",
+        district="Mustamäe",
+        price_eur=200000,
+        area_sqm=60.0,
+        rooms=3,
+        price_per_sqm=3333,
+    )
+    db_session.add(row)
+    db_session.flush()
+    db_session.commit()
+
+    checkout_snapshots = []  # thread-safe: list.append is atomic under GIL
+
+    def fake_brief(snapshot, price_history, district_avg, coo_monthly_eur):
+        # Capture pool checkout count at the moment the HTTP call would fire.
+        checkout_snapshots.append(db.engine.pool.checkedout())
+        return {
+            "brief_ru": "test",
+            "suggested_offer_low_eur": 180000,
+            "suggested_offer_high_eur": 195000,
+        }
+
+    monkeypatch.setattr(brief_generator, "generate_negotiation_brief", fake_brief)
+
+    # Also patch brief_generator.SessionLocal so it uses the test's shared connection
+    import db as db_module
+    monkeypatch.setattr(brief_generator, "SessionLocal", db_module.SessionLocal)
+
+    brief_generator.generate_and_save_brief("brief-1")
+
+    # The main assertion — no session was held during the HTTP call
+    assert checkout_snapshots, "generate_negotiation_brief was never invoked"
+    session_held_entries = [n for n in checkout_snapshots if n > 0]
+    assert session_held_entries == [], (
+        f"session was checked out during HTTP call: {checkout_snapshots}"
+    )
+    # Confirm brief was saved
+    fresh_row = db_session.get(Listing, "brief-1")
+    db_session.refresh(fresh_row)
+    assert fresh_row.negotiation_brief == {
+        "brief_ru": "test",
+        "suggested_offer_low_eur": 180000,
+        "suggested_offer_high_eur": 195000,
+    }
+
+
+def test_brief_generator_daemon_thread_no_session(db_session, monkeypatch):
+    """Regression guard for DB-08 — session must be released before HTTP call, even
+    when invoked from a daemon thread (production call sites main.py:532 and :571)."""
+    import threading
+    import brief_generator
+    import db
+    from models import Listing
+
+    row = Listing(
+        id="brief-2",
+        status="approved",
+        district="Mustamäe",
+        price_eur=200000,
+        area_sqm=60.0,
+        rooms=3,
+        price_per_sqm=3333,
+    )
+    db_session.add(row)
+    db_session.flush()
+    db_session.commit()
+
+    checkout_snapshots = []  # thread-safe: list.append is atomic under GIL
+
+    def fake_brief(snapshot, price_history, district_avg, coo_monthly_eur):
+        checkout_snapshots.append(db.engine.pool.checkedout())
+        return {
+            "brief_ru": "daemon-test",
+            "suggested_offer_low_eur": 180000,
+            "suggested_offer_high_eur": 195000,
+        }
+
+    monkeypatch.setattr(brief_generator, "generate_negotiation_brief", fake_brief)
+
+    # Also patch brief_generator.SessionLocal so it uses the test's shared connection
+    import db as db_module
+    monkeypatch.setattr(brief_generator, "SessionLocal", db_module.SessionLocal)
+
+    # Spawn as daemon exactly like main.py:532 / main.py:571
+    t = threading.Thread(
+        target=brief_generator.generate_and_save_brief,
+        args=("brief-2",),
+        daemon=True,
+    )
+    t.start()
+    t.join(timeout=10)  # bounded — if the daemon hangs on a leaked session, this test fails fast
+
+    assert not t.is_alive(), (
+        "daemon thread did not finish within 10s — likely session leak / deadlock"
+    )
+    assert checkout_snapshots, "generate_negotiation_brief was never invoked in the daemon"
+    session_held_entries = [n for n in checkout_snapshots if n > 0]
+    assert session_held_entries == [], (
+        f"session was checked out during HTTP call in daemon thread: {checkout_snapshots}"
+    )
+    # Confirm brief was saved by the daemon
+    fresh_row = db_session.get(Listing, "brief-2")
+    db_session.refresh(fresh_row)
+    assert fresh_row.negotiation_brief == {
+        "brief_ru": "daemon-test",
+        "suggested_offer_low_eur": 180000,
+        "suggested_offer_high_eur": 195000,
+    }
