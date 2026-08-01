@@ -32,6 +32,7 @@ import settings_store
 import dataclasses
 import brief_generator
 from legacy_aliases import LEGACY_ALIASES
+import routes_data
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("app")
@@ -94,6 +95,9 @@ def on_startup():
     scheduler.start()
 
 
+app.include_router(routes_data.router)
+
+
 @app.get("/api/settings")
 def get_settings() -> dict:
     """Return every editable setting with its current value + metadata (label/hint/bounds)."""
@@ -117,20 +121,6 @@ async def post_settings(request: Request) -> dict:
         "costs_recomputed": result["costs_recomputed"],
         "values": settings_store.get_all(),
     }
-
-
-@app.get("/api/data")
-def get_data():
-    return data_store.load_app_data()
-
-
-@app.put("/api/data")
-async def put_data(request: Request):
-    payload = await request.json()
-    if not isinstance(payload, dict) or "properties" not in payload:
-        return JSONResponse({"error": "expected an object with a 'properties' field"}, status_code=400)
-    data_store.save_app_data(payload)
-    return {"ok": True}
 
 
 @app.post("/api/check-now")
@@ -469,16 +459,6 @@ def reevaluate_listing(listing_id: str) -> dict:
         "score": entry["score"],
         "verdict": entry["verdict"],
     }
-
-
-@app.get("/api/health")
-def health():
-    return {"ok": True}
-
-
-@app.get("/api/pending")
-def get_pending():
-    return {"pending": data_store.load_pending()}
 
 
 @app.post("/api/pending/{listing_id}/approve")
