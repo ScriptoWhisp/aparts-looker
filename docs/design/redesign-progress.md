@@ -399,3 +399,118 @@ Wave 5B should:
 
 Wave 5C (if separate): visual polish — badge states for thinking/offer_drafted/dropped
 in the sidebar and listing cards.
+
+---
+
+## Wave 5B — Inbox Tab (COMPLETE)
+
+### Objective
+
+Rename Pending → Inbox and rebuild its copy per design brief v2 mockup 2a.
+Wave 5A (backend) is complete — status enum has 8 values, `POST /api/entry/{id}/viewing-decision` exists.
+This wave is FRONTEND-ONLY.
+
+### Tab-nav restructure
+
+| Before (Wave 4)       | After (Wave 5B)        |
+|-----------------------|------------------------|
+| Overview              | Overview               |
+| Detail                | Inbox (+ badge)        |
+| Pending (+ badge)     | Shortlist              |
+| Rejected              | Settings               |
+| Compare               | —                      |
+| Settings              | —                      |
+
+Removed tabs: Rejected (absorbed into Shortlist sidebar in Wave 5C), Compare (gone).
+
+### Hash-routing backward compat
+
+Old hashes are silently remapped so any bookmarked or external URLs keep working:
+
+| Old hash    | Maps to    |
+|-------------|------------|
+| `#pending`  | `#inbox`   |
+| `#detail`   | `#shortlist` |
+| `#rejected` | `#shortlist` |
+| `#compare`  | `#overview` |
+
+Implemented via `_HASH_COMPAT` map in `_tabFromHash()`.
+
+### Inbox tab content (mockup 2a)
+
+- Title: "Inbox"
+- Dynamic subhead: "N new listings since <Day, D Mon>" (count from pending entries sorted by score desc)
+- Keyboard hint line: `L look closer · S skip · ↑↓ move`
+- 3-column `.pq-grid` card layout sorted by score desc
+- Best card highlighted with purple accent `box-shadow: 0 0 0 1px rgba(145,132,217,.4)` (was green in Wave 4)
+
+### Card redesign
+
+| Before (Wave 4)  | After (Wave 5B)     |
+|------------------|---------------------|
+| Approve (primary) | Look closer (primary) |
+| Reject (secondary) | Skip (secondary) |
+
+### Look closer behavior
+
+1. Dims card (`opacity: 0.5`, `pointer-events: none`)
+2. POSTs to `POST /api/pending/{id}/approve`
+3. On success: navigates `window.location.hash = "shortlist"`, calls `window.loadData()`, then after 350ms calls `window.openDetailPanel(entry.id)`
+
+### Skip overlay (`.pq-skip-overlay`)
+
+- Slides up from below the 132px photo (`top: 132px`, absolute positioned inside card)
+- Title: "Skipped — what put you off?"
+- Explainer: "Optional. It only tunes future scoring."
+- Reason chips: Price / Location / Condition / Other (toggle-select)
+- Undo button: cancels the countdown, removes overlay
+- Shrinking progress bar: CSS `width` transition from 100% → 0 over 8 seconds via `requestAnimationFrame`
+- Countdown text: "auto-closes 8s" … "auto-closes 1s" (updated each second by `setInterval`)
+- After 8s: fires `POST /api/pending/{id}/reject` with `{reason: selectedReason || null}`, fades card out, removes it from DOM
+
+### Keyboard shortcuts
+
+| Key       | Action                          |
+|-----------|---------------------------------|
+| `↓` / `j` | Move selection to next card     |
+| `↑` / `k` | Move selection to previous card |
+| `l` / `L` | Look closer on selected card    |
+| `s` / `S` | Skip selected card              |
+
+Selected card shows `outline: 2px solid var(--color-accent)`. Keyboard handler auto-wired on each `renderInboxGrid()` call and detached on re-render to prevent accumulation.
+
+### Empty state
+
+Copy changed from "Queue is empty" (Wave 4) to "Inbox is empty" (Wave 5B).
+
+### Files modified
+
+| File | Changes |
+|------|---------|
+| `frontend/index.html` | Tab-nav restructured (4 buttons). `section#tab-pending` → `section#tab-inbox` with `#inbox-grid-root`. `section#tab-detail` → `section#tab-shortlist`. `section#tab-rejected` and `section#tab-compare` removed. New CSS: `.inbox-header`, `.inbox-header-row`, `.inbox-header-left`, `.inbox-title`, `.inbox-subhead`, `.inbox-kbd-hint`, `.pq-skip-overlay`, `.pq-skip-countdown`, `.pq-skip-progress`, `.pq-skip-progress-fill`. Updated: `body.tab-shortlist .listings-view`, `#tab-inbox.active`. New JS: `renderInboxGrid()`, `_buildInboxCard()`, `_inboxLookCloser()`, `_showInboxSkipOverlay()`, `_wireInboxKeyboard()`, `_buildInboxEmptyState()`. Hash compat: `_HASH_COMPAT` map, `_tabFromHash()` updated. `renderPendingGrid()` aliased to `renderInboxGrid()`. `renderRejectedGrid()` and `_buildRejectedCard()` become no-op stubs. |
+| `frontend/js/ui.js` | `data-tab="detail"` → `data-tab="shortlist"` (2 places). `window.location.hash = "detail"` → `"shortlist"` (3 places). |
+
+### Preserved public APIs
+
+- `window.renderPendingGrid()` — alias to `renderInboxGrid()` (backward compat)
+- `window.renderRejectedGrid()` — no-op stub (backward compat)
+- `window.openDetailPanel(id)` — called by `_inboxLookCloser` post-approve
+- All Wave 1–4 public APIs unchanged
+
+### Deviations from brief
+
+**Deviation 1: Keyboard shortcuts fully implemented**
+
+Wave 4 handoff notes listed keyboard shortcuts as "aspirational". Wave 5B implements them fully: `↑↓` (and `j`/`k`) for navigation, `L` for Look closer, `S` for Skip. The keyboard hint line in the header is now accurate.
+
+**Deviation 2: renderRejectedGrid kept as no-op stub**
+
+The Wave 4 `renderRejectedGrid()` and `_buildRejectedCard()` functions are replaced with no-op stubs rather than deleted, ensuring any external callers or test code that references them does not throw ReferenceError.
+
+**Deviation 3: Best card accent colour changed from green to purple**
+
+Wave 4 used `rgba(var(--color-approved-rgb), 0.4)` (green). The mockup 2a calls for the Nocturne accent purple `rgba(145,132,217,.4)` to match the overall palette. Updated in `.pq-card.pq-card-best`.
+
+### Test results
+
+Backend tests unchanged: **130 passed** (no Python changes in this wave).
