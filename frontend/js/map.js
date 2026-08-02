@@ -85,6 +85,36 @@
   };
 
   /* ================================================================
+     window.getDistrictLayerVisible — return current district layer
+     visibility so Wave 2/3 overlay pills can sync their initial state.
+     ================================================================ */
+  window.getDistrictLayerVisible = function () {
+    return districtsVisible;
+  };
+
+  /* ================================================================
+     window.toggleCommuteLayer — show/hide the isochrone (commute) layer.
+     Mirrors toggleDistrictLayer for the commute overlay pill in Overview.
+     Returns the new visibility state (boolean).
+     ================================================================ */
+  var commuteVisible = true; // default: visible when loaded
+  window.toggleCommuteLayer = function () {
+    commuteVisible = !commuteVisible;
+    if (isochroneLayer && map) {
+      if (commuteVisible) {
+        isochroneLayer.addTo(map);
+      } else {
+        map.removeLayer(isochroneLayer);
+      }
+    }
+    return commuteVisible;
+  };
+
+  window.getCommuteLayerVisible = function () {
+    return commuteVisible;
+  };
+
+  /* ================================================================
      window.refreshMapPins — clear and re-draw all pins
      ================================================================ */
   window.refreshMapPins = function () {
