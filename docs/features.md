@@ -173,6 +173,7 @@
 - ✅ Phase 6: viewing workflow, negotiation brief, KÜ
 - ✅ Phase 7: Postgres migration
 - ⏭ Phase 8 candidate: nightly `pg_dump` → Backblaze B2 (~$0.005/GB/mo). Closes the data-loss risk from Phase 7.
+- ⏭ Phase 8 candidate: **push hard filters (price ceiling, min rooms, min images) from backend into the scraper**. Today the mini PC fetches every listing on the kv.ee search URL and the VPS filters after AI eval, wasting AI cost + DB inserts on obviously-not-a-fit listings. Correct layering: scraper polls `GET /api/settings` (or a dedicated `/api/scraper-config`) at startup + on interval, rebuilds its kv.ee search URL with `price_max`, `rooms_min`, etc. query params (kv.ee natively supports these), and only POSTs what matches. Backend keeps the same filters as belt-and-suspenders. Feedback loop after a filter change becomes one scrape instead of one scrape + throw everything away. Principal-oversight note: this should have been questioned during Phase 1 discussion — I preserved the original architecture without pushing back.
 - ⏭ Also candidate: AI regression eval suite (10 golden listings, nightly, alert on drift). Closes the AI risk.
 - ⏭ Also candidate: heartbeat alerting (Telegram if no scraper POST in N hours). Closes the scraper-death risk.
 
