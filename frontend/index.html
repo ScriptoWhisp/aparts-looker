@@ -3000,6 +3000,376 @@
     .pq-actions .btn { min-height: 40px; }
     .settings-sidebar-pill { min-height: 40px; }
   }
+
+  /* ══════════════════════════════════════════════════════════
+     Wave 5C — Shortlist tab: sidebar funnel + decision bar
+     + accordion checklist + Ask at the viewing card
+     ══════════════════════════════════════════════════════════ */
+
+  /* ── Sidebar funnel group header ── */
+  .sl-group-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 14px 12px 6px;
+    font: 600 9.5px Inter, system-ui, sans-serif;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    position: sticky;
+    top: 0;
+    background: var(--color-app-bg);
+    z-index: 1;
+  }
+  .sl-group-label { flex: 1; }
+  .sl-group-count {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 10px;
+    color: var(--color-text-muted);
+  }
+  .sl-dropped-toggle {
+    background: none;
+    border: none;
+    padding: 0 2px;
+    font: 400 10.5px Inter, system-ui, sans-serif;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    margin-left: auto;
+  }
+  .sl-dropped-toggle:hover { color: var(--color-text); }
+  .sl-dropped-body {
+    overflow: hidden;
+    max-height: 0;
+    transition: max-height 0.2s ease;
+  }
+  .sl-dropped-body.visible { max-height: 2000px; }
+
+  /* ── Sidebar row right-side status indicator ── */
+  .sl-row-indicator {
+    flex-shrink: 0;
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 10px;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+  }
+
+  /* ── Sidebar footer ── */
+  .sl-sidebar-footer {
+    flex: none;
+    padding: 10px 12px;
+    font: 400 11px/1.5 Inter, system-ui, sans-serif;
+    font-style: italic;
+    color: var(--color-text-muted);
+    box-shadow: inset 0 1px 0 var(--color-hairline);
+  }
+
+  /* ── After-viewing decision bar ── */
+  .sl-decision-bar {
+    flex: none;
+    margin: 14px 20px 0;
+    padding: 12px 16px;
+    border-radius: var(--radius-md);
+    background: var(--color-sunken);
+    box-shadow: inset 0 0 0 1px rgba(145,132,217,.3);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .sl-decision-bar-label {
+    font: 600 9.5px Inter, system-ui, sans-serif;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    flex: none;
+    margin-right: 4px;
+  }
+  .sl-decision-bar-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  /* ── Status pill (hero row) ── */
+  .sl-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font: 600 11px/1 Inter, system-ui, sans-serif;
+    letter-spacing: 0.02em;
+    flex-shrink: 0;
+  }
+  .sl-pill-to-view {
+    background: rgba(79,185,141,0.15);
+    color: var(--status-approved-text, #4fb98d);
+    box-shadow: inset 0 0 0 1px rgba(79,185,141,0.3);
+  }
+  .sl-pill-viewing {
+    background: rgba(145,132,217,0.15);
+    color: var(--status-viewing-text, #9184d9);
+    box-shadow: inset 0 0 0 1px rgba(145,132,217,0.3);
+  }
+  .sl-pill-viewed {
+    background: rgba(145,132,217,0.15);
+    color: var(--status-viewing-text, #9184d9);
+    box-shadow: inset 0 0 0 1px rgba(145,132,217,0.3);
+  }
+  .sl-pill-thinking {
+    background: rgba(201,139,82,0.15);
+    color: var(--status-pending-text, #c98b52);
+    box-shadow: inset 0 0 0 1px rgba(201,139,82,0.3);
+  }
+  .sl-pill-offer {
+    background: rgba(145,132,217,0.2);
+    color: var(--status-viewing-text, #9184d9);
+    box-shadow: inset 0 0 0 1px rgba(145,132,217,0.4);
+  }
+  .sl-pill-dropped {
+    background: rgba(196,99,95,0.15);
+    color: var(--status-rejected-text, #c4635f);
+    box-shadow: inset 0 0 0 1px rgba(196,99,95,0.3);
+  }
+  .sl-shortlisted-ago {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 11px;
+    color: var(--color-text-muted);
+  }
+
+  /* ── Drop-reason modal overlay ── */
+  .sl-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(8,9,18,0.72);
+    z-index: 9900;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .sl-modal {
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md, 0 16px 48px rgba(0,0,0,0.5));
+    padding: 24px;
+    width: 340px;
+    max-width: calc(100vw - 32px);
+    box-sizing: border-box;
+  }
+  .sl-modal-title {
+    font: 500 15px/1.3 Inter, system-ui, sans-serif;
+    color: var(--color-text);
+    margin: 0 0 6px;
+  }
+  .sl-modal-subtitle {
+    font: 400 12px/1.5 Inter, system-ui, sans-serif;
+    color: var(--color-text-secondary);
+    margin: 0 0 14px;
+  }
+  .sl-modal-input {
+    width: 100%;
+    box-sizing: border-box;
+    background: var(--color-sunken);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    color: var(--color-text);
+    font: 400 13px/1.5 Inter, system-ui, sans-serif;
+    padding: 8px 10px;
+    resize: vertical;
+    min-height: 64px;
+    outline: none;
+  }
+  .sl-modal-input:focus { border-color: var(--color-accent); }
+  .sl-modal-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 14px;
+    justify-content: flex-end;
+  }
+
+  /* ── Accordion checklist (option A) ── */
+  .sl-acc-card {
+    background: var(--color-sunken);
+    border-radius: 10px;
+    box-shadow: inset 0 0 0 1px var(--color-hairline);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .sl-acc-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px 12px;
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--color-hairline);
+  }
+  .sl-acc-card-title { font: 500 14px Inter, system-ui, sans-serif; }
+  .sl-acc-card-stats {
+    display: flex;
+    gap: 8px;
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 11px;
+  }
+  .sl-acc-stat-ok    { color: var(--status-approved-text, #4fb98d); }
+  .sl-acc-stat-unk   { color: var(--color-text-muted); }
+  .sl-acc-stat-flag  { color: var(--status-rejected-text, #c4635f); }
+  .sl-acc-groups     { overflow-y: auto; flex: 1; }
+
+  /* Single accordion group */
+  .sl-acc-group { border-bottom: 1px solid var(--color-hairline); }
+  .sl-acc-group:last-child { border-bottom: none; }
+  .sl-acc-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    cursor: pointer;
+    user-select: none;
+    transition: background var(--transition-fast, 80ms);
+  }
+  .sl-acc-header:hover { background: rgba(233,233,237,0.04); }
+  .sl-acc-left-rule {
+    flex-shrink: 0;
+    width: 2px;
+    height: 24px;
+    border-radius: 1px;
+    background: var(--acc-rule-color, var(--color-hairline));
+  }
+  .sl-acc-info { flex: 1; min-width: 0; }
+  .sl-acc-label {
+    font: 500 13px/1.3 Inter, system-ui, sans-serif;
+    color: var(--color-text);
+  }
+  .sl-acc-sub {
+    font: 400 11px Inter, system-ui, sans-serif;
+    color: var(--color-text-muted);
+    margin-top: 1px;
+  }
+  .sl-acc-badges {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .sl-acc-badge {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 8px;
+  }
+  .sl-acc-badge-flag {
+    background: rgba(196,99,95,0.18);
+    color: var(--status-rejected-text, #c4635f);
+  }
+  .sl-acc-badge-unk {
+    background: rgba(233,233,237,0.08);
+    color: var(--color-text-muted);
+  }
+  .sl-acc-badge-ok {
+    background: rgba(79,185,141,0.12);
+    color: var(--status-approved-text, #4fb98d);
+  }
+  .sl-acc-chevron {
+    flex-shrink: 0;
+    font-size: 10px;
+    color: var(--color-text-muted);
+    transition: transform 0.15s;
+  }
+  .sl-acc-group.open .sl-acc-chevron { transform: rotate(90deg); }
+  .sl-acc-body {
+    display: none;
+    flex-direction: column;
+    padding: 4px 16px 12px 26px;
+    gap: 1px;
+  }
+  .sl-acc-group.open .sl-acc-body { display: flex; }
+  .sl-acc-row {
+    display: flex;
+    gap: 7px;
+    align-items: baseline;
+    padding: 3px 0;
+  }
+  .sl-acc-glyph {
+    font-size: 10px;
+    flex-shrink: 0;
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    line-height: 1.5;
+  }
+  .sl-acc-row-label {
+    font: 400 12px/1.4 Inter, system-ui, sans-serif;
+    color: var(--color-text-secondary);
+    flex: 1;
+    min-width: 0;
+    word-break: break-word;
+  }
+  .sl-acc-row.sl-acc-flagged .sl-acc-row-label  { color: var(--color-text); }
+  .sl-acc-row.sl-acc-warning  .sl-acc-row-label { color: var(--color-text); }
+  .sl-acc-foot {
+    flex-shrink: 0;
+    padding: 8px 16px 12px;
+    font: 400 11.5px Inter, system-ui, sans-serif;
+    color: var(--color-text-muted);
+    box-shadow: inset 0 1px 0 var(--color-hairline);
+  }
+
+  /* ── Ask at the viewing card ── */
+  .sl-ask-card {
+    background: var(--color-sunken);
+    border-radius: 10px;
+    box-shadow: inset 0 0 0 1px var(--color-hairline);
+    padding: 14px 16px;
+    flex-shrink: 0;
+  }
+  .sl-ask-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .sl-ask-kicker {
+    font: 600 9.5px Inter, system-ui, sans-serif;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+  }
+  .sl-ask-count {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 10px;
+    color: var(--color-text-muted);
+  }
+  .sl-ask-items {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .sl-ask-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 3px 0;
+  }
+  .sl-ask-cb {
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+    margin-top: 2px;
+    accent-color: var(--color-accent);
+    cursor: pointer;
+  }
+  .sl-ask-label {
+    font: 400 12px/1.45 Inter, system-ui, sans-serif;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    flex: 1;
+    min-width: 0;
+  }
+  .sl-ask-empty {
+    font: 400 12px/1.5 Inter, system-ui, sans-serif;
+    color: var(--color-text-muted);
+    font-style: italic;
+  }
 </style>
 </head>
 <body>
