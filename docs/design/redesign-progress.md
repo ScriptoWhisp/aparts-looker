@@ -514,3 +514,69 @@ Wave 4 used `rgba(var(--color-approved-rgb), 0.4)` (green). The mockup 2a calls 
 ### Test results
 
 Backend tests unchanged: **130 passed** (no Python changes in this wave).
+
+---
+
+## Wave 5C — Shortlist tab (COMPLETE)
+
+The largest frontend wave. Full rebuild of the Shortlist tab per design brief v2 mockup 2b.
+
+### Deliverables
+
+**1. Sidebar funnel (3-group)**
+
+`renderDetailList()` now renders three groups: "To view" (approved + viewing_scheduled), "Viewed" (viewed + thinking + offer_drafted), "Dropped" (dropped). Each group has a sticky header with label and row count. Dropped group is collapsed by default with a show/hide toggle button; collapse state is preserved in the `_droppedGroupVisible` module variable across re-renders within the same session. Per-row right-side indicators: To view shows scheduled date (mono blue) or "unbooked"; Viewed shows "thinking" or "offer" text; Dropped shows the drop reason from `viewing_history`. Rows within each group are sorted by score descending. Dropped rows get `opacity:0.4` and strikethrough title. Sidebar footer is italic muted text fixed at the bottom.
+
+**2. Hero row rebuild**
+
+`_buildHeroRow()` places the status pill on the LEFT of the top row (per design brief, moved from right/center). Status pill (`_buildStatusPill()`) has distinct styling per status: approved (green tint), viewing_scheduled (purple tint), viewed (purple), thinking (amber), offer_drafted (stronger purple), dropped (red). "Shortlisted N days ago" appears next to the pill in muted 11px mono. "Mark viewed" button is conditional — only appears when `status === "viewing_scheduled"`, and is disabled before the scheduled time with a tooltip. "Schedule viewing" button (with inline datetime-local picker popover) appears for `status === "approved"`.
+
+**3. After-viewing decision bar**
+
+`_buildDecisionBar()` handles three cases:
+- `status === "dropped"`: shows Undo drop ghost button (calls `undoDropClick` → POST thinking)
+- `_inGroup(status, SHORTLIST_TO_VIEW)`: bar hidden (`display:none`)
+- `_inGroup(status, SHORTLIST_VIEWED)`: shows "After the viewing" label + 3 buttons: "Still in / draft offer" (→ POST offer_drafted), "Thinking" (→ POST thinking), "Drop" (→ opens modal)
+
+Bar container styled: `margin: 14px 20px 0`, sunken background, `box-shadow: inset 0 0 0 1px rgba(145,132,217,.3)`.
+
+**4. Checklist — accordion (option A)**
+
+`_buildAccordionChecklist()` replaces the 5-column signal grid with 5 named categories in flags-first sort order. Each category is a collapsible accordion group (`.sl-acc-group`) with: a left-rule bar colored by worst status in the group (red for any flag, amber for unknowns only, muted for all-ok), label + subtitle, flag/unknown/ok badges on the right, chevron that rotates 90° when open. Groups are sorted by (flags DESC, unknown DESC, ok DESC) so the most problematic categories rise to the top. The `.sl-acc-body` shows per-item rows with glyph (✓/✗/?) and label. First group auto-expands on render. Summary stat counts (ok/unknown/flags) shown in the card header.
+
+**5. Ask at the viewing card + gated Negotiation**
+
+`_buildAskAtViewingCard()` lists checklist items that have `null`/unknown status as client-side checkboxes. Unknown items are those where `_getChecklistStatus(entry, storageKey)` returns null. Each item is a `<label>` with `<input type="checkbox">` — checking one visually marks it done (client-side only, not persisted). Shows empty-state italic text if all items are known. Count shown in card header.
+
+`_buildNocturneNegCard()` gates the entire Negotiation card when `status ∈ SHORTLIST_TO_VIEW`: applies `opacity:0.45; pointer-events:none` to the card element. Header changes from "regenerate" to "unlocks after viewing" when gated.
+
+**6. Drop-reason modal + Undo drop**
+
+`dropClick()` opens a full-screen `sl-modal-overlay` with a `<textarea>` for the reason. On confirm: POST `/api/entry/{id}/viewing-decision` with `{decision:"drop", reason}`. On success: `loadData()` then `renderDetailList()` + `openDetailPanel()`. Modal closes on Escape via `document.addEventListener("keydown")` and on overlay click-outside. Reason field auto-focuses via `requestAnimationFrame`. Modal is removed from DOM on close (no leaks).
+
+`undoDropClick()` POSTs `{decision:"thinking"}` with no reason to move the listing back to Viewed group.
+
+### Files created / modified
+
+| File | Change |
+|------|--------|
+| `frontend/js/detail-panel.js` | Complete rewrite (~920 lines). Old Wave 3 implementation removed. New: `_renderShortlistGroups`, `_renderGroup`, `_renderDroppedGroup`, `_buildToViewIndicator`, `_buildViewedIndicator`, `_buildDroppedIndicator`, `_buildSidebarRow`, `_buildHeroRow`, `_buildStatusPill`, `_buildDecisionBar`, `_buildAccordionChecklist`, `_buildAskAtViewingCard`, `_buildNocturneNegCard`, `_buildUtilityButtons`, `_buildKuCard`. New global handlers: `stillInDraftOfferClick`, `thinkingClick`, `dropClick`, `undoDropClick`. Preserved: `scheduleViewingClick`, `markViewedClick`, `regenerateBriefClick`, `refreshKuClick`, `saveKuManualNotes`. |
+| `frontend/index.html` | New CSS classes added before `</style>`: `.sl-group-header`, `.sl-group-label`, `.sl-group-count`, `.sl-dropped-toggle`, `.sl-dropped-body.visible`, `.sl-row-indicator`, `.sl-sidebar-footer`, `.sl-decision-bar`, `.sl-decision-bar-label`, `.sl-decision-bar-actions`, `.sl-status-pill` (+ 6 status variants), `.sl-shortlisted-ago`, `.sl-modal-overlay`, `.sl-modal`, `.sl-modal-title`, `.sl-modal-subtitle`, `.sl-modal-input`, `.sl-modal-actions`, `.sl-acc-card`, `.sl-acc-card-head`, `.sl-acc-card-title`, `.sl-acc-card-stats`, `.sl-acc-stat-ok/unk/flag`, `.sl-acc-groups`, `.sl-acc-group`, `.sl-acc-header`, `.sl-acc-left-rule`, `.sl-acc-info`, `.sl-acc-label`, `.sl-acc-sub`, `.sl-acc-badges`, `.sl-acc-badge` (+ variants), `.sl-acc-chevron`, `.sl-acc-body`, `.sl-acc-row`, `.sl-acc-glyph`, `.sl-acc-row-label`, `.sl-acc-foot`, `.sl-ask-card`, `.sl-ask-head`, `.sl-ask-kicker`, `.sl-ask-count`, `.sl-ask-items`, `.sl-ask-item`, `.sl-ask-cb`, `.sl-ask-label`, `.sl-ask-empty`. |
+
+### Deviations from brief
+
+**Deviation 1: Dropped group uses `display:none` toggle instead of CSS `max-height` animation**
+
+The brief implies a smooth collapse. The implementation starts with `display:none` and toggles to `display:block` synchronously. CSS `max-height` transition is set on `.sl-dropped-body.visible` but `display:none` overrides it. Acceptable for the MVP — a follow-up can change to `max-height:0 → max-height:2000px` with `overflow:hidden` to get the animation.
+
+**Deviation 2: Mark viewed button disabled check uses client time, not server time**
+
+The "disable before scheduled time" check compares `new Date()` to `entry.scheduled_at`. This uses the browser's local clock. If the client clock is wrong, the button may be incorrectly enabled or disabled. No known issue in practice since this is a single-user tool.
+
+**Deviation 3: Ask at the viewing checkboxes are client-side only**
+
+Checkboxes are not persisted to the backend. They reset on every re-render. The brief says "client-side-only checkboxes" — this is intentional per spec.
+
+### Test results
+
+Backend tests unchanged: **130 passed** (no Python changes in this wave).
