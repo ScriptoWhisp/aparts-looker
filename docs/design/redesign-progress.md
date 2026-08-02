@@ -5,6 +5,38 @@ It supersedes `wave-1-notes.md` (the Wave 1-only version is kept for history).
 
 ---
 
+## Redesign complete
+
+All 4 waves shipped. The Aparts Looker frontend is fully migrated to the Nocturne design system.
+
+### What shipped across all waves
+
+| Wave | Tab(s) | Key output |
+|------|--------|------------|
+| Wave 1 | Foundation | `tokens.css` design system, Inter + JetBrains Mono fonts, bridge aliases, score ramp helpers |
+| Wave 2 | Overview | 2-column map+charts layout, histogram, scatter, hero card, next-up list |
+| Wave 3 | Detail | 284px sidebar with score rules, hero row, verdict band, 5-column signal checklist grid |
+| Wave 4 | Pending, Rejected, Settings, Mobile, Empty states, CSS cleanup | See below |
+
+### Wave 4 deliverables
+
+- **Pending tab**: 3-column `.pq-grid` card layout; each card has 132px photo, score badge, verdict with left-rule, Approve/Reject buttons; Reject opens animated `.pq-reject-overlay` with reason chips (Price / Location / Condition / Other)
+- **Settings tab**: 2-column `.settings-nocturne` layout (200px sidebar categories + form pane); sliders with fill/thumb, ramp slider for threshold fields; sidebar categories: Buyer profile / Scoring & AI / Cost model / Telegram / Dashboard
+- **Rejected tab**: Same 3-column grid, dimmed photo, rejected tag, rejection reason line
+- **Mobile responsive** (`≤768px`): Pending/Rejected collapse to 1-column; Overview map fixed 400px; Detail sidebar hidden; Settings sidebar becomes horizontal-scroll pill row; touch targets ≥ 44px
+- **Empty states**: `Queue is empty` card in Pending (with threshold hint + scrape button); `No listings yet` first-run card in Overview (with Telegram status check + setup checklist)
+- **CSS cleanup**: Removed `--shadow` bridge alias (0 references found); all other bridge aliases (`--bg`, `--border`, `--text`, etc.) kept as still referenced by Detail/filter-bar styles
+
+### Remaining follow-ups
+
+- Bridge aliases (`--bg`, `--surface`, `--border`, etc.) can be fully removed once the detail-filter-bar CSS is migrated to Nocturne tokens (a separate phase)
+- Inline `<style>` block can be split into per-tab CSS files when it becomes large enough to justify
+- Keyboard shortcuts (j/k/a/r) on Pending tab are aspirational — documented in header hint text but not implemented
+- Bottom-dock mobile nav (mockup 1g) is aspirational v2 — MVP uses top header
+- Settings tab: segmented control for Rooms and chip picker for Districts can replace sliders if those fields appear in the schema (currently all fields are numeric/string, so sliders/inputs are used)
+
+---
+
 ## Wave 1 — Foundation (COMPLETE)
 
 See `wave-1-notes.md` for the full Wave 1 notes. Summary:
@@ -177,3 +209,66 @@ After Wave 3 + 4 complete their migrations, the bridge-alias block in `:root` in
 ```
 
 The inline `<style>` block can then be replaced with a `<link rel="stylesheet" href="/css/overview.css">` and similar per-tab CSS files. The `tokens.css` file stays as-is.
+
+---
+
+## Wave 4 — Pending, Rejected, Settings, Mobile, Empty States (COMPLETE)
+
+### Objective
+
+Rebuild the final three tabs (Pending, Rejected, Settings) with the Nocturne design system, add mobile responsive breakpoints, add empty states for first-run and empty-queue scenarios, and clean up unused bridge aliases.
+
+### Files modified
+
+| File | Changes |
+|------|---------|
+| `frontend/index.html` | New CSS sections: `.pq-*` (pending/rejected grid), `.settings-nocturne` (2-col settings), `.pq-empty-*` (empty states), `.pq-firstrun-*` (first-run checklist), mobile `@media (max-width: 768px)`. New HTML: `#pending-grid-root`, `#rejected-grid-root`, `.settings-nocturne` shell. New JS: `renderPendingGrid()`, `_buildPqCard()`, `_showPqRejectOverlay()`, `_buildPendingEmptyState()`, `renderRejectedGrid()`, `_buildRejectedCard()`, `renderSettingsNocturne()`, `_buildSettingsSidebar()`, `_renderSettingsPane()`, `_buildSettingsFieldNocturne()`, `_saveSettingsNocturne()`, `_buildFirstRunEmptyState()`. Updated: `renderApp()` routes pending/rejected to new grid renderers; `renderOverview()` injects first-run empty state when both properties and pending are empty. |
+
+### Architecture change: Pending/Rejected tab rendering
+
+Previously, Pending and Rejected tabs shared `#listings-view` (the Detail sidebar + filter-bar + main-pane shell). Wave 4 gives them their own DOM roots:
+- `#tab-pending` → `#pending-grid-root` → `renderPendingGrid()`
+- `#tab-rejected` → `#rejected-grid-root` → `renderRejectedGrid()`
+
+The `#listings-view` is now only shown for `body.tab-detail`. This removes the `.listings-view` display from `body.tab-pending` and `body.tab-rejected` CSS.
+
+Legacy `renderPending()`, `renderRejected()`, `renderSettings()`, `_saveSettings()`, `_buildSettingsField()` stubs remain for any external callers but are no-ops or aliases.
+
+### Settings sidebar categories (Wave 4 mapping)
+
+| Schema group | Sidebar label |
+|---|---|
+| `filter` | Buyer profile |
+| `ai` | Scoring & AI |
+| `cost` | Cost model |
+| `telegram` | Telegram |
+| `dashboard` | Scraper / Dashboard |
+
+### Bridge alias cleanup (Wave 4)
+
+Scanned all `var(--alias)` usages across `index.html`, `ui.js`, `detail-panel.js`. Only `--shadow` had 0 references — it was removed from the `:root` bridge block. All other 13 aliases remain referenced by Detail-tab, filter-bar, checklist, and legacy chart CSS that is intentionally preserved until a future migration.
+
+### Deviations from brief
+
+**Deviation 1: Pending/Rejected tabs no longer use the shared listings-view**
+
+Brief 1e shows a standalone card grid. The implementation creates dedicated render roots (`#pending-grid-root`, `#rejected-grid-root`) rather than trying to repurpose the shared sidebar+filter-bar shell. This gives cleaner DOM isolation and avoids filter-bar state bleed.
+
+**Deviation 2: Settings sliders for all numeric fields**
+
+Brief shows segmented controls (Rooms) and chip pickers (Districts) for specific fields. The settings schema uses `filter` / `int` / `float` / `str` types but does not mark which fields should be segmented vs. chip pickers. Wave 4 uses sliders for all bounded numeric fields (straightforward implementation) and text/number inputs for string/unbounded fields. If a future schema extension adds `ui_type: "segmented"` or `ui_type: "chips"`, those renderers can be added without changing the base architecture.
+
+**Deviation 3: Toggle switch not connected to a boolean schema field**
+
+The `.sn-toggle` CSS and JS component is implemented and ready. The current settings schema exposes all values as `int`/`float`/`str` — no `bool` type exists yet. If the schema gains boolean fields, the `_buildSettingsFieldNocturne()` function can add a `f.type === 'bool'` branch that renders the toggle.
+
+**Deviation 4: Mobile bottom-dock nav not implemented**
+
+Brief 1g shows a bottom-fixed dock (Overview / Detail / Pending / Settings). MVP keeps the top header with reduced padding and hidden scrape-info meta. The bottom dock is marked as aspirational v2.
+
+### Preserved public APIs
+
+- `window.renderPendingGrid()` — new, callable by external code
+- `window.renderRejectedGrid()` — new, callable by external code
+- `window._settingsData` — now a `window` property (was module-local `var`); exposed for the empty-state threshold display
+- All Wave 1–3 public APIs unchanged
