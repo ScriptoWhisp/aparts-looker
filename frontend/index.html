@@ -563,11 +563,11 @@
   }
 
   /* ---------- Detail tab — split layout ---------- */
-  /* The tab-detail/pending/rejected sections are now empty placeholders — the
-     real DOM lives in #listings-view which is toggled by body.tab-* class. */
+  /* The tab-shortlist/inbox sections are empty placeholders or own-root shells —
+     the real Detail DOM lives in #listings-view which is toggled by body.tab-* class. */
   .listings-scope { display: none; }
   .listings-view { display: none; }
-  body.tab-detail .listings-view {
+  body.tab-shortlist .listings-view {
     display: flex; flex-direction: column; overflow: hidden;
     height: calc(100vh - 48px);
   }
@@ -2226,11 +2226,10 @@
   }
 
   /* ======================================================================
-     WAVE 4: PENDING GRID TAB
+     WAVE 5B: INBOX TAB (was WAVE 4: PENDING GRID TAB)
      ====================================================================== */
-  /* Tab sections for pending/rejected now render their own content directly */
-  #tab-pending.active,
-  #tab-rejected.active {
+  /* Inbox tab section renders its own content directly */
+  #tab-inbox.active {
     height: calc(100vh - 48px);
     overflow-y: auto;
   }
@@ -2281,7 +2280,79 @@
     flex-direction: column;
   }
   .pq-card.pq-card-best {
-    box-shadow: inset 0 0 0 1px var(--color-hairline), 0 0 0 1px rgba(127,191,122,.25);
+    /* Wave 5B: accent-purple outline for inbox best card (replaces old green) */
+    box-shadow: inset 0 0 0 1px var(--color-hairline), 0 0 0 1px rgba(145,132,217,.4);
+  }
+
+  /* ======================================================================
+     WAVE 5B: INBOX — header, keyboard hint, skip overlay, countdown
+     ====================================================================== */
+
+  /* Inbox header */
+  .inbox-header {
+    padding: 20px 20px 0;
+    flex-shrink: 0;
+  }
+  .inbox-header-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .inbox-header-left { flex: 1; min-width: 0; }
+  .inbox-title {
+    font: 500 22px/1.1 Inter, system-ui, sans-serif;
+    letter-spacing: -0.02em;
+    color: var(--color-text);
+    margin: 0 0 4px;
+  }
+  .inbox-subhead {
+    font: 400 13px Inter, system-ui, sans-serif;
+    color: var(--color-text-secondary);
+    margin: 0;
+  }
+  .inbox-kbd-hint {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 12px;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+    flex-shrink: 0;
+    padding-top: 4px;
+  }
+
+  /* Skip overlay (slides down from below the photo) */
+  .pq-skip-overlay {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: 132px; /* below photo area */
+    background: rgba(22,24,38,.92);
+    display: flex;
+    flex-direction: column;
+    padding: 14px 16px;
+    gap: 10px;
+    animation: pq-overlay-in 120ms cubic-bezier(0.2,0.7,0.3,1);
+    z-index: 10;
+  }
+  .pq-skip-countdown {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 11px;
+    color: var(--color-text-muted);
+  }
+  .pq-skip-progress {
+    height: 2px;
+    border-radius: 1px;
+    background: var(--color-hairline);
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .pq-skip-progress-fill {
+    height: 100%;
+    background: var(--status-rejected-border, #c4635f);
+    border-radius: 1px;
+    transition: width 1s linear;
+    width: 100%;
   }
 
   /* Photo area */
@@ -2896,7 +2967,7 @@
     }
     .dm-checklist-grid { grid-template-columns: 1fr; }
 
-    /* Pending/rejected: single column */
+    /* Inbox: single column */
     .pq-grid { grid-template-columns: 1fr; gap: 10px; padding: 12px; }
     .pq-header { padding: 14px 12px 0; }
     .pq-header-meta { display: none; }
@@ -2943,12 +3014,11 @@
   <!-- Tab navigation -->
   <nav class="tab-nav">
     <button data-tab="overview" class="active">Overview</button>
-    <button data-tab="detail">Detail</button>
-    <button data-tab="pending">
-      Pending
+    <button data-tab="inbox">
+      Inbox
       <span class="tab-pending-count" id="tab-pending-count"></span>
     </button>
-    <button data-tab="rejected">Rejected</button>
+    <button data-tab="shortlist">Shortlist</button>
     <button data-tab="settings">Settings</button>
   </nav>
 
@@ -3084,17 +3154,16 @@
     </div>
   </section>
 
-  <!-- ===== DETAIL TAB ===== -->
-  <!-- ===== SHARED LISTINGS VIEW (Detail only after Wave 4) ===== -->
-  <!-- Pending and Rejected now have their own grid renderers (Wave 4). -->
-  <section id="tab-detail" class="listings-scope"></section>
-  <!-- Pending and Rejected tabs render their own content via JS (Wave 4) -->
-  <section id="tab-pending" class="listings-scope">
-    <div id="pending-grid-root" class="pq-shell"></div>
+  <!-- ===== SHORTLIST TAB (formerly Detail — content unchanged, Wave 5C rebuilds) ===== -->
+  <!-- ===== SHARED LISTINGS VIEW (Shortlist only after Wave 4→5B rename) ===== -->
+  <!-- Inbox has its own grid renderer (Wave 5B). -->
+  <section id="tab-shortlist" class="listings-scope"></section>
+  <!-- Inbox tab renders its own content via JS (Wave 5B) -->
+  <section id="tab-inbox" class="listings-scope">
+    <div id="inbox-grid-root" class="pq-shell"></div>
   </section>
-  <section id="tab-rejected" class="listings-scope">
-    <div id="rejected-grid-root" class="pq-shell"></div>
-  </section>
+  <!-- Rejected section removed (Wave 5B) — rejected items flow to Shortlist sidebar in Wave 5C -->
+  <!-- Compare section removed (Wave 5B) — Compare feature dropped -->
   <div id="listings-view" class="listings-view">
     <div class="detail-filter-bar" id="detail-filter-bar">
       <div class="dfb-group">
@@ -3294,8 +3363,9 @@
       var params = new URLSearchParams(window.location.search);
       var id = params.get("listing") || params.get("open");
       if (!id) return;
-      var detailBtn = document.querySelector('.tab-nav button[data-tab="detail"]');
-      if (detailBtn) detailBtn.click();
+      /* Wave 5B: Shortlist tab replaced Detail tab */
+      var shortlistBtn = document.querySelector('.tab-nav button[data-tab="shortlist"]');
+      if (shortlistBtn) shortlistBtn.click();
       if (window.openDetailPanel) window.openDetailPanel(id);
       // Clean the URL so a refresh doesn't re-trigger the deep-link.
       var clean = window.location.pathname + window.location.hash;
@@ -3315,15 +3385,14 @@
     document.body.className = "tab-" + tabName;
     if (tabName === "overview") {
       window.renderOverview();
-    } else if (tabName === "detail") {
+    } else if (tabName === "shortlist") {
+      /* Wave 5B: shortlist = former detail tab. Content unchanged; Wave 5C rebuilds it. */
       window.currentScope = "all";
       if (window.renderDetailList) window.renderDetailList();
-    } else if (tabName === "pending") {
+    } else if (tabName === "inbox") {
+      /* Wave 5B: inbox = former pending tab, rebuilt with new card copy + skip overlay */
       window.currentScope = "pending";
-      renderPendingGrid();
-    } else if (tabName === "rejected") {
-      window.currentScope = "rejected";
-      renderRejectedGrid();
+      renderInboxGrid();
     } else if (tabName === "settings") {
       renderSettingsNocturne();
     }
@@ -3463,7 +3532,16 @@
      Hash-based routing: #overview | #detail | #pending | #rejected | #settings.
      Refresh preserves the tab. Back/forward navigate between visited tabs. */
 
-  var VALID_TABS = ["overview", "detail", "pending", "rejected", "settings"];
+  /* Wave 5B: 4-tab layout. Old tab names are mapped for backward compat. */
+  var VALID_TABS = ["overview", "inbox", "shortlist", "settings"];
+
+  /* Hash backward-compat map — old bookmarks and Telegram deep-links keep working */
+  var _HASH_COMPAT = {
+    "pending":  "inbox",
+    "detail":   "shortlist",
+    "rejected": "shortlist",
+    "compare":  "overview"
+  };
 
   function _activateTab(name) {
     if (VALID_TABS.indexOf(name) === -1) name = "overview";
@@ -3478,6 +3556,8 @@
 
   function _tabFromHash() {
     var raw = (window.location.hash || "").replace(/^#/, "").split("?")[0];
+    /* Translate old hash values to new tab names */
+    if (_HASH_COMPAT[raw]) return _HASH_COMPAT[raw];
     return VALID_TABS.indexOf(raw) === -1 ? "overview" : raw;
   }
 
@@ -3500,34 +3580,70 @@
   // Initial activation on load — before renderApp() runs elsewhere.
   _activateTab(_tabFromHash());
 
-  /* ============================== WAVE 4: PENDING GRID RENDERER ============================== */
+  /* ============================== WAVE 5B: INBOX GRID RENDERER (was WAVE 4: PENDING) ============================== */
 
-  /* Build the Nocturne 3-column pending card grid */
-  function renderPendingGrid() {
-    var root = document.getElementById("pending-grid-root");
+  /* Build the Nocturne 3-column inbox card grid */
+  function renderInboxGrid() {
+    var root = document.getElementById("inbox-grid-root");
     if (!root) return;
     while (root.firstChild) root.removeChild(root.firstChild);
 
     var entries = window.state.pending || [];
     var totalPending = entries.length;
 
-    /* Header row */
-    var header = document.createElement("div");
-    header.className = "pq-header";
-    var titleEl = document.createElement("div");
-    titleEl.className = "pq-header-title";
-    titleEl.textContent = "Approval queue";
-    header.appendChild(titleEl);
-    var metaEl = document.createElement("div");
-    metaEl.className = "pq-header-meta";
-    metaEl.textContent = totalPending + " listing" + (totalPending !== 1 ? "s" : "") +
-      " \xB7 sorted by score \xB7 j/k to move, a approve, r reject";
-    header.appendChild(metaEl);
-    root.appendChild(header);
+    /* ---- Header ---- */
+    var headerWrap = document.createElement("div");
+    headerWrap.className = "inbox-header";
+
+    var headerRow = document.createElement("div");
+    headerRow.className = "inbox-header-row";
+
+    var headerLeft = document.createElement("div");
+    headerLeft.className = "inbox-header-left";
+
+    var inboxTitleEl = document.createElement("h1");
+    inboxTitleEl.className = "inbox-title";
+    inboxTitleEl.textContent = "Inbox";
+    headerLeft.appendChild(inboxTitleEl);
+
+    var subhead = document.createElement("p");
+    subhead.className = "inbox-subhead";
+    if (totalPending === 0) {
+      subhead.textContent = "Nothing awaiting review";
+    } else {
+      var oldestDate = null;
+      entries.forEach(function(e) {
+        var hist = window.state.priceHistory && window.state.priceHistory[e.id];
+        var d = (hist && hist.length) ? hist[0].date : (e.queued_at || null);
+        if (d && (!oldestDate || d < oldestDate)) oldestDate = d;
+      });
+      var sinceStr = "your last check";
+      if (oldestDate) {
+        try {
+          var dObj = new Date(oldestDate);
+          var wdays = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+          var mons  = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+          sinceStr = wdays[dObj.getDay()] + ", " + dObj.getDate() + " " + mons[dObj.getMonth()];
+        } catch(eDate) {}
+      }
+      subhead.textContent = totalPending + " new listing" +
+        (totalPending !== 1 ? "s" : "") + " since " + sinceStr +
+        " — clear it, then open the shortlist";
+    }
+    headerLeft.appendChild(subhead);
+    headerRow.appendChild(headerLeft);
+
+    var kbdHint = document.createElement("div");
+    kbdHint.className = "inbox-kbd-hint";
+    kbdHint.textContent = "L look closer \xB7 S skip \xB7 ↑↓ move";
+    headerRow.appendChild(kbdHint);
+
+    headerWrap.appendChild(headerRow);
+    root.appendChild(headerWrap);
 
     /* Empty state */
     if (totalPending === 0) {
-      root.appendChild(_buildPendingEmptyState());
+      root.appendChild(_buildInboxEmptyState());
       return;
     }
 
@@ -3538,22 +3654,27 @@
     /* Grid */
     var grid = document.createElement("div");
     grid.className = "pq-grid";
+    grid.style.paddingTop = "18px";
 
-    sorted.forEach(function(entry) {
-      grid.appendChild(_buildPqCard(entry, entry === best));
+    sorted.forEach(function(entry, idx) {
+      grid.appendChild(_buildInboxCard(entry, entry === best, idx));
     });
 
     root.appendChild(grid);
+
+    /* Wire keyboard shortcuts */
+    _wireInboxKeyboard(sorted, grid);
   }
 
-  /* Build a single pending card */
-  function _buildPqCard(entry, isBest) {
+  /* Build a single inbox card (Wave 5B: replaced _buildPqCard) */
+  function _buildInboxCard(entry, isBest, idx) {
     var bucket = window.scoreBucket(entry.score || 0);
-    var color = window.scoreColor(entry.score || 0);
 
     var card = document.createElement("div");
     card.className = "pq-card" + (isBest ? " pq-card-best" : "");
     card.style.position = "relative";
+    card.dataset.inboxIdx = String(idx || 0);
+    card.dataset.entryId = entry.id;
 
     /* --- Photo area --- */
     var photo = document.createElement("div");
@@ -3588,25 +3709,22 @@
     var body = document.createElement("div");
     body.className = "pq-body";
 
-    /* Title */
     var titleEl = document.createElement("div");
     titleEl.className = "pq-card-title";
     titleEl.textContent = entry.title || entry.url || "(untitled)";
     body.appendChild(titleEl);
 
-    /* Meta line: district · area · year · floor */
     var metaParts = [];
     if (entry.district) metaParts.push(entry.district);
-    if (entry.area_sqm) metaParts.push(entry.area_sqm + " m\xB2");
+    if (entry.area_sqm) metaParts.push(entry.area_sqm + " m²");
     if (entry.year_built || entry.year) metaParts.push(String(entry.year_built || entry.year));
     if (entry.floor && entry.total_floors) metaParts.push(entry.floor + "/" + entry.total_floors + " fl.");
     else if (entry.floor) metaParts.push("fl." + entry.floor);
     var metaEl = document.createElement("div");
     metaEl.className = "pq-card-meta";
-    metaEl.textContent = metaParts.join(" \xB7 ") || " ";
+    metaEl.textContent = metaParts.join(" · ") || " ";
     body.appendChild(metaEl);
 
-    /* Price row */
     var priceRow = document.createElement("div");
     priceRow.className = "pq-price-row";
     var priceVal = entry.price_eur || entry.price;
@@ -3619,12 +3737,11 @@
     if (entry.price_per_sqm) {
       var sqmEl = document.createElement("span");
       sqmEl.className = "pq-price-sqm";
-      sqmEl.textContent = entry.price_per_sqm + " €/m\xB2";
+      sqmEl.textContent = entry.price_per_sqm + " €/m²";
       priceRow.appendChild(sqmEl);
     }
     body.appendChild(priceRow);
 
-    /* Verdict block */
     if (entry.verdict) {
       var verdictEl = document.createElement("div");
       verdictEl.className = "pq-verdict";
@@ -3633,33 +3750,23 @@
       body.appendChild(verdictEl);
     }
 
-    /* Actions */
+    /* Actions row: "Look closer" + "Skip" */
     var actionsRow = document.createElement("div");
     actionsRow.className = "pq-actions";
 
-    var approveBtn = document.createElement("button");
-    approveBtn.type = "button";
-    approveBtn.className = "btn";
-    approveBtn.style.borderColor = "var(--score-85)";
-    approveBtn.style.color = "#6fc9a3";
-    approveBtn.textContent = "Approve";
-    approveBtn.addEventListener("click", function() {
-      approveBtn.disabled = true;
-      fetch("/api/pending/" + encodeURIComponent(entry.id) + "/approve", {method: "POST"})
-        .then(function(r) { return r.json(); })
-        .then(function(d) { if (d.ok || d.status) window.loadData(); })
-        .catch(function() { window.loadData(); });
-    });
-    actionsRow.appendChild(approveBtn);
+    var lookBtn = document.createElement("button");
+    lookBtn.type = "button";
+    lookBtn.className = "btn btn-primary";
+    lookBtn.textContent = "Look closer";
+    lookBtn.addEventListener("click", function() { _inboxLookCloser(entry, card); });
+    actionsRow.appendChild(lookBtn);
 
-    var rejectBtn = document.createElement("button");
-    rejectBtn.type = "button";
-    rejectBtn.className = "btn btn-secondary";
-    rejectBtn.textContent = "Reject";
-    rejectBtn.addEventListener("click", function() {
-      _showPqRejectOverlay(entry, card, body, actionsRow);
-    });
-    actionsRow.appendChild(rejectBtn);
+    var skipBtn = document.createElement("button");
+    skipBtn.type = "button";
+    skipBtn.className = "btn btn-secondary";
+    skipBtn.textContent = "Skip";
+    skipBtn.addEventListener("click", function() { _showInboxSkipOverlay(entry, card); });
+    actionsRow.appendChild(skipBtn);
 
     body.appendChild(actionsRow);
     card.appendChild(body);
@@ -3667,28 +3774,59 @@
     return card;
   }
 
-  /* Reject-with-reason overlay */
-  function _showPqRejectOverlay(entry, card, body, actionsRow) {
-    /* Remove existing overlay */
-    var existing = card.querySelector(".pq-reject-overlay");
+  /* "Look closer" — approve + navigate to Shortlist */
+  function _inboxLookCloser(entry, card) {
+    card.style.opacity = "0.5";
+    card.style.pointerEvents = "none";
+
+    fetch("/api/pending/" + encodeURIComponent(entry.id) + "/approve", {method: "POST"})
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d.ok || d.status) {
+          window.location.hash = "shortlist";
+          window.loadData();
+          setTimeout(function() {
+            if (window.openDetailPanel) window.openDetailPanel(entry.id);
+          }, 350);
+        } else {
+          card.style.opacity = "";
+          card.style.pointerEvents = "";
+          window.loadData();
+        }
+      })
+      .catch(function() {
+        card.style.opacity = "";
+        card.style.pointerEvents = "";
+        window.loadData();
+      });
+  }
+
+  /* Skip overlay with 8-second undo grace period */
+  function _showInboxSkipOverlay(entry, card) {
+    var existing = card.querySelector(".pq-skip-overlay");
     if (existing) { existing.remove(); return; }
 
     var overlay = document.createElement("div");
-    overlay.className = "pq-reject-overlay";
+    overlay.className = "pq-skip-overlay";
 
     var overlayTitle = document.createElement("div");
     overlayTitle.className = "pq-overlay-title";
-    overlayTitle.textContent = "Reject — why?";
+    overlayTitle.textContent = "Skipped — what put you off?";
     overlay.appendChild(overlayTitle);
+
+    var explainer = document.createElement("div");
+    explainer.className = "pq-overlay-hint";
+    explainer.textContent = "Optional. It only tunes future scoring.";
+    overlay.appendChild(explainer);
 
     var chipsWrap = document.createElement("div");
     chipsWrap.className = "pq-reason-chips";
 
     var REASONS = [
-      {label: "Price", value: "price"},
-      {label: "Location", value: "location"},
+      {label: "Price",     value: "price"},
+      {label: "Location",  value: "location"},
       {label: "Condition", value: "condition"},
-      {label: "Other", value: "other"},
+      {label: "Other",     value: "other"},
     ];
     var selectedReason = null;
 
@@ -3707,47 +3845,133 @@
     });
     overlay.appendChild(chipsWrap);
 
-    var hint = document.createElement("div");
-    hint.className = "pq-overlay-hint";
-    hint.textContent = entry.district
-      ? "Future listings in " + entry.district + " or matching this reason will be scored down. Undo for 8s."
-      : "Future listings matching this reason will be scored down. Undo for 8s.";
-    overlay.appendChild(hint);
+    /* Bottom row: Undo + progress + countdown */
+    var bottomRow = document.createElement("div");
+    bottomRow.className = "pq-overlay-actions";
+    bottomRow.style.alignItems = "center";
+    bottomRow.style.gap = "8px";
 
-    var overlayActions = document.createElement("div");
-    overlayActions.className = "pq-overlay-actions";
+    var undoBtn = document.createElement("button");
+    undoBtn.type = "button";
+    undoBtn.className = "btn btn-secondary";
+    undoBtn.style.flex = "none";
+    undoBtn.textContent = "Undo";
 
-    var confirmBtn = document.createElement("button");
-    confirmBtn.type = "button";
-    confirmBtn.className = "btn btn-rejected";
-    confirmBtn.textContent = "Confirm reject";
-    confirmBtn.addEventListener("click", function() {
-      confirmBtn.disabled = true;
-      var reason = selectedReason || "other";
+    var progressWrap = document.createElement("div");
+    progressWrap.className = "pq-skip-progress";
+    progressWrap.style.flex = "1";
+    var progressFill = document.createElement("div");
+    progressFill.className = "pq-skip-progress-fill";
+    progressWrap.appendChild(progressFill);
+
+    var countdown = document.createElement("span");
+    countdown.className = "pq-skip-countdown";
+    countdown.textContent = "auto-closes 8s";
+
+    bottomRow.appendChild(undoBtn);
+    bottomRow.appendChild(progressWrap);
+    bottomRow.appendChild(countdown);
+    overlay.appendChild(bottomRow);
+
+    card.appendChild(overlay);
+
+    var DURATION = 8;
+    var remaining = DURATION;
+    var committed = false;
+    var cancelled = false;
+
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() {
+        progressFill.style.transitionDuration = DURATION + "s";
+        progressFill.style.width = "0%";
+      });
+    });
+
+    var tickInterval = setInterval(function() {
+      if (cancelled) { clearInterval(tickInterval); return; }
+      remaining--;
+      countdown.textContent = "auto-closes " + remaining + "s";
+      if (remaining <= 0) {
+        clearInterval(tickInterval);
+        if (!cancelled) _commitSkip();
+      }
+    }, 1000);
+
+    function _commitSkip() {
+      if (committed || cancelled) return;
+      committed = true;
+      var reason = selectedReason || null;
       fetch("/api/pending/" + encodeURIComponent(entry.id) + "/reject", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({reason: reason}),
       })
         .then(function(r) { return r.json(); })
-        .then(function(d) { if (d.ok || d.status) window.loadData(); })
+        .then(function() { window.loadData(); })
         .catch(function() { window.loadData(); });
+      card.style.transition = "opacity 300ms";
+      card.style.opacity = "0";
+      setTimeout(function() { card.remove(); }, 320);
+    }
+
+    undoBtn.addEventListener("click", function() {
+      cancelled = true;
+      clearInterval(tickInterval);
+      overlay.remove();
     });
-    overlayActions.appendChild(confirmBtn);
-
-    var cancelBtn = document.createElement("button");
-    cancelBtn.type = "button";
-    cancelBtn.className = "btn-ghost btn";
-    cancelBtn.textContent = "Cancel";
-    cancelBtn.addEventListener("click", function() { overlay.remove(); });
-    overlayActions.appendChild(cancelBtn);
-
-    overlay.appendChild(overlayActions);
-    card.appendChild(overlay);
   }
 
-  /* Empty state for pending queue */
-  function _buildPendingEmptyState() {
+  /* Keyboard shortcuts for Inbox tab: L / S / arrows */
+  var _inboxKeyboardHandler = null;
+
+  function _wireInboxKeyboard(sorted, grid) {
+    if (_inboxKeyboardHandler) {
+      document.removeEventListener("keydown", _inboxKeyboardHandler);
+    }
+    var selectedIdx = 0;
+
+    function _highlightCard(idx) {
+      var cards = grid.querySelectorAll(".pq-card");
+      cards.forEach(function(c, i) {
+        c.style.outline = (i === idx) ? "2px solid var(--color-accent)" : "";
+      });
+      var target = cards[idx];
+      if (target) target.scrollIntoView({block: "nearest", behavior: "smooth"});
+    }
+
+    if (sorted.length) _highlightCard(selectedIdx);
+
+    _inboxKeyboardHandler = function(e) {
+      var activeTab = document.querySelector(".tab-nav button.active");
+      if (!activeTab || activeTab.dataset.tab !== "inbox") return;
+      var tag = document.activeElement && document.activeElement.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      var cards = grid.querySelectorAll(".pq-card");
+      if (!cards.length) return;
+
+      if (e.key === "ArrowDown" || e.key === "j") {
+        e.preventDefault();
+        selectedIdx = Math.min(selectedIdx + 1, cards.length - 1);
+        _highlightCard(selectedIdx);
+      } else if (e.key === "ArrowUp" || e.key === "k") {
+        e.preventDefault();
+        selectedIdx = Math.max(selectedIdx - 1, 0);
+        _highlightCard(selectedIdx);
+      } else if (e.key === "l" || e.key === "L") {
+        e.preventDefault();
+        var tCard = cards[selectedIdx];
+        if (tCard) { var lb = tCard.querySelector(".btn-primary"); if (lb) lb.click(); }
+      } else if (e.key === "s" || e.key === "S") {
+        e.preventDefault();
+        var tCard2 = cards[selectedIdx];
+        if (tCard2) { var sb = tCard2.querySelector(".btn-secondary"); if (sb) sb.click(); }
+      }
+    };
+    document.addEventListener("keydown", _inboxKeyboardHandler);
+  }
+
+  /* Empty state for inbox */
+  function _buildInboxEmptyState() {
     var wrap = document.createElement("div");
     wrap.className = "pq-empty-state";
 
@@ -3765,12 +3989,11 @@
 
     var heading = document.createElement("h2");
     heading.className = "pq-empty-heading";
-    heading.textContent = "Queue is empty";
+    heading.textContent = "Inbox is empty";
     card.appendChild(heading);
 
     var text = document.createElement("p");
     text.className = "pq-empty-text";
-    /* Compute next scrape time hint if available */
     var threshold = "";
     try {
       if (window._settingsData && window._settingsData.schema) {
@@ -3790,7 +4013,7 @@
     settingsBtn.className = "btn btn-primary";
     settingsBtn.textContent = "Adjust threshold in Settings";
     settingsBtn.addEventListener("click", function() {
-      var settingsTabBtn = document.querySelector('.tab-nav button[data-tab="settings"]');
+      var settingsTabBtn = document.querySelector('[data-tab="settings"]');
       if (settingsTabBtn) settingsTabBtn.click();
     });
     actions.appendChild(settingsBtn);
@@ -3813,143 +4036,14 @@
     return wrap;
   }
 
-  /* ============================== WAVE 4: REJECTED GRID RENDERER ============================== */
+  /* Legacy alias for backward compat — external code calling renderPendingGrid() still works */
+  function renderPendingGrid() { renderInboxGrid(); }
 
-  function renderRejectedGrid() {
-    var root = document.getElementById("rejected-grid-root");
-    if (!root) return;
-    while (root.firstChild) root.removeChild(root.firstChild);
+    /* Wave 5B: Rejected tab removed. Rejected items will appear in Shortlist sidebar (Wave 5C). */
+  function renderRejectedGrid() { /* no-op */ }
+  function _buildRejectedCard() { /* no-op */ }
 
-    var entries = window.state.rejected || [];
-
-    /* Header row */
-    var header = document.createElement("div");
-    header.className = "pq-header";
-    var titleEl = document.createElement("div");
-    titleEl.className = "pq-header-title";
-    titleEl.textContent = "Rejected listings";
-    header.appendChild(titleEl);
-    var metaEl = document.createElement("div");
-    metaEl.className = "pq-header-meta";
-    metaEl.textContent = entries.length + " listing" + (entries.length !== 1 ? "s" : "") + " rejected";
-    header.appendChild(metaEl);
-    root.appendChild(header);
-
-    if (entries.length === 0) {
-      var emptyWrap = document.createElement("div");
-      emptyWrap.className = "pq-empty-state";
-      var emptyCard = document.createElement("div");
-      emptyCard.className = "pq-empty-card";
-      var emptyH = document.createElement("h2");
-      emptyH.className = "pq-empty-heading";
-      emptyH.textContent = "No rejected listings";
-      emptyCard.appendChild(emptyH);
-      var emptyP = document.createElement("p");
-      emptyP.className = "pq-empty-text";
-      emptyP.textContent = "Listings you reject from the Pending queue will appear here.";
-      emptyCard.appendChild(emptyP);
-      emptyWrap.appendChild(emptyCard);
-      root.appendChild(emptyWrap);
-      return;
-    }
-
-    var grid = document.createElement("div");
-    grid.className = "pq-grid";
-
-    entries.forEach(function(entry) {
-      grid.appendChild(_buildRejectedCard(entry));
-    });
-
-    root.appendChild(grid);
-  }
-
-  function _buildRejectedCard(entry) {
-    var bucket = window.scoreBucket(entry.score || 0);
-
-    var card = document.createElement("div");
-    card.className = "pq-card pq-card-rejected";
-
-    /* Photo area */
-    var photo = document.createElement("div");
-    photo.className = "pq-photo";
-    var imgUrl = entry.image_url || entry.imageUrl || "";
-    if (imgUrl && (imgUrl.startsWith("http://") || imgUrl.startsWith("https://"))) {
-      var img = document.createElement("img");
-      img.src = imgUrl;
-      img.alt = "";
-      img.loading = "lazy";
-      photo.appendChild(img);
-    }
-    var placeholder = document.createElement("div");
-    placeholder.className = "pq-photo-placeholder";
-    placeholder.textContent = "no photo";
-    if (imgUrl) placeholder.style.display = "none";
-    photo.appendChild(placeholder);
-
-    /* Score badge */
-    if (entry.score != null) {
-      var scoreBadge = document.createElement("div");
-      scoreBadge.className = "pq-score-badge";
-      scoreBadge.dataset.scoreBucket = bucket;
-      scoreBadge.textContent = String(entry.score);
-      photo.appendChild(scoreBadge);
-    }
-
-    card.appendChild(photo);
-
-    /* Body */
-    var body = document.createElement("div");
-    body.className = "pq-body";
-
-    /* Rejected status pill */
-    var rejectedTag = document.createElement("span");
-    rejectedTag.className = "tag tag-rejected";
-    rejectedTag.style.marginBottom = "8px";
-    rejectedTag.style.alignSelf = "flex-start";
-    rejectedTag.textContent = "Rejected";
-    body.appendChild(rejectedTag);
-
-    var titleEl = document.createElement("div");
-    titleEl.className = "pq-card-title";
-    titleEl.textContent = entry.title || entry.url || "(untitled)";
-    body.appendChild(titleEl);
-
-    var metaParts = [];
-    if (entry.district) metaParts.push(entry.district);
-    if (entry.area_sqm) metaParts.push(entry.area_sqm + " m\xB2");
-    if (entry.year_built || entry.year) metaParts.push(String(entry.year_built || entry.year));
-    var metaEl = document.createElement("div");
-    metaEl.className = "pq-card-meta";
-    metaEl.textContent = metaParts.join(" \xB7 ") || " ";
-    body.appendChild(metaEl);
-
-    /* Price */
-    var priceVal = entry.price_eur || entry.price;
-    if (priceVal) {
-      var priceEl = document.createElement("div");
-      priceEl.className = "pq-price";
-      priceEl.style.marginTop = "10px";
-      priceEl.style.fontSize = "18px";
-      priceEl.textContent = window.fmtEur ? window.fmtEur(priceVal) : (priceVal + " €");
-      body.appendChild(priceEl);
-    }
-
-    /* Rejection reason */
-    if (entry.reject_reason) {
-      var reasonEl = document.createElement("div");
-      reasonEl.className = "pq-rejected-tag";
-      reasonEl.textContent = "Rejected because:";
-      var strongEl = document.createElement("strong");
-      strongEl.textContent = entry.reject_reason;
-      reasonEl.appendChild(strongEl);
-      body.appendChild(reasonEl);
-    }
-
-    card.appendChild(body);
-    return card;
-  }
-
-  /* Days-on-market: today minus the date of the first (oldest) price_history entry.
+    /* Days-on-market: today minus the date of the first (oldest) price_history entry.
      Returns an integer (days) or null when no history exists. */
   function daysOnMarket(listingId) {
     var hist = window.state.priceHistory[listingId];

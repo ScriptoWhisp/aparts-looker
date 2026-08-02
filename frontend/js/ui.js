@@ -326,7 +326,7 @@
       /* Click: open detail panel */
       dot.addEventListener("click", function () {
         if (window.openDetailPanel) {
-          var detailBtn = document.querySelector('.tab-nav button[data-tab="detail"]');
+          var detailBtn = document.querySelector('.tab-nav button[data-tab="shortlist"]');
           if (detailBtn) detailBtn.click();
           window.openDetailPanel(p.id);
         }
@@ -472,7 +472,7 @@
     openBtn.className = "hero-btn-primary";
     openBtn.textContent = "Open detail";
     openBtn.addEventListener("click", function () {
-      window.location.hash = "detail";
+      window.location.hash = "shortlist";
       if (window.openDetailPanel) window.openDetailPanel(best.id);
     });
     actions.appendChild(openBtn);
@@ -483,7 +483,7 @@
     schedBtn.textContent = "Schedule viewing";
     schedBtn.addEventListener("click", function () {
       /* Wave 3 will implement inline scheduling. For now, route to detail panel. */
-      window.location.hash = "detail";
+      window.location.hash = "shortlist";
       if (window.openDetailPanel) window.openDetailPanel(best.id);
     });
     actions.appendChild(schedBtn);
@@ -585,7 +585,7 @@
 
       /* Click handler */
       row.addEventListener("click", function () {
-        window.location.hash = "detail";
+        window.location.hash = "shortlist";
         if (window.openDetailPanel) window.openDetailPanel(entry.id);
       });
 
@@ -719,7 +719,7 @@
           /* Trigger the real tab switch (updates buttons AND section visibility
              AND re-renders) by clicking the Detail nav button, then open the
              detail panel for the best listing. */
-          var detailBtn = document.querySelector('.tab-nav button[data-tab="detail"]');
+          var detailBtn = document.querySelector('.tab-nav button[data-tab="shortlist"]');
           if (detailBtn) detailBtn.click();
           if (window.openDetailPanel) window.openDetailPanel(best.id);
         });
