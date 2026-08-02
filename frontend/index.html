@@ -29,7 +29,7 @@
     --font-mono:  "JetBrains Mono", ui-monospace, Menlo, monospace;
     --font-sans:  "Inter", system-ui, sans-serif;
     --radius:     var(--radius-sm);
-    --shadow:     var(--shadow-sm);
+    /* --shadow removed (Wave 4 cleanup) — no remaining references */
   }
   a { color: var(--blue); }
 
@@ -567,9 +567,7 @@
      real DOM lives in #listings-view which is toggled by body.tab-* class. */
   .listings-scope { display: none; }
   .listings-view { display: none; }
-  body.tab-detail .listings-view,
-  body.tab-pending .listings-view,
-  body.tab-rejected .listings-view {
+  body.tab-detail .listings-view {
     display: flex; flex-direction: column; overflow: hidden;
     height: calc(100vh - 48px);
   }
@@ -2226,6 +2224,711 @@
     .kpi-strip { grid-template-columns: repeat(2, 1fr); }
     .map-full { height: 60vh; min-height: 340px; }
   }
+
+  /* ======================================================================
+     WAVE 4: PENDING GRID TAB
+     ====================================================================== */
+  /* Tab sections for pending/rejected now render their own content directly */
+  #tab-pending.active,
+  #tab-rejected.active {
+    height: calc(100vh - 48px);
+    overflow-y: auto;
+  }
+
+  /* Pending/rejected tab inner shell */
+  .pq-shell {
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100vh - 48px);
+  }
+
+  /* Tab header row */
+  .pq-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 20px 20px 0;
+    flex-shrink: 0;
+  }
+  .pq-header-title {
+    font-family: var(--font-heading);
+    font-weight: 500;
+    font-size: 22px;
+    letter-spacing: -0.02em;
+    color: var(--color-text);
+  }
+  .pq-header-meta {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 11px;
+    color: var(--color-text-muted);
+  }
+
+  /* 3-column card grid */
+  .pq-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    padding: 24px 20px;
+  }
+
+  /* Individual pending/rejected card */
+  .pq-card {
+    background: var(--color-sunken);
+    border-radius: var(--radius-md);
+    box-shadow: inset 0 0 0 1px var(--color-hairline);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .pq-card.pq-card-best {
+    box-shadow: inset 0 0 0 1px var(--color-hairline), 0 0 0 1px rgba(127,191,122,.25);
+  }
+
+  /* Photo area */
+  .pq-photo {
+    position: relative;
+    height: 132px;
+    background: linear-gradient(150deg, #2a2d3d, #191b28);
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .pq-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .pq-photo-placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font: 400 11px Inter, system-ui, sans-serif;
+    color: #4a4d5c;
+  }
+  .pq-score-badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+    font-size: 16px;
+    padding: 2px 8px;
+    border-radius: 5px;
+    color: #fff;
+  }
+  .pq-score-badge[data-score-bucket="bad"]   { background: var(--score-0); }
+  .pq-score-badge[data-score-bucket="poor"]  { background: var(--score-40); }
+  .pq-score-badge[data-score-bucket="ok"]    { background: var(--score-60); }
+  .pq-score-badge[data-score-bucket="good"]  { background: var(--score-75); }
+  .pq-score-badge[data-score-bucket="great"] { background: var(--score-85); }
+
+  /* Rejected photo dim */
+  .pq-card-rejected .pq-photo { opacity: 0.5; }
+
+  /* Card body */
+  .pq-body {
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+  }
+  .pq-card-title {
+    font-family: var(--font-heading);
+    font-weight: 500;
+    font-size: 15px;
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .pq-card-meta {
+    font: 400 11.5px Inter, system-ui, sans-serif;
+    color: var(--color-text-muted);
+    margin-top: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .pq-price-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .pq-price {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--color-text);
+    letter-spacing: -0.02em;
+  }
+  .pq-price-sqm {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 11px;
+    color: var(--color-text-muted);
+  }
+
+  /* Verdict block */
+  .pq-verdict {
+    margin-top: 10px;
+    padding-left: 10px;
+    border-left: 2px solid var(--color-border);
+    font: 400 13px/1.5 Inter, system-ui, sans-serif;
+    color: var(--color-text-secondary);
+  }
+  .pq-verdict[data-score-bucket="bad"]   { border-left-color: var(--score-0); }
+  .pq-verdict[data-score-bucket="poor"]  { border-left-color: var(--score-40); }
+  .pq-verdict[data-score-bucket="ok"]    { border-left-color: var(--score-60); }
+  .pq-verdict[data-score-bucket="good"]  { border-left-color: var(--score-75); }
+  .pq-verdict[data-score-bucket="great"] { border-left-color: var(--score-85); }
+
+  /* Actions row */
+  .pq-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: auto;
+    padding-top: 14px;
+  }
+  .pq-actions .btn { flex: 1; }
+
+  /* Reject reason overlay */
+  .pq-reject-overlay {
+    position: absolute;
+    inset: 0;
+    top: 132px; /* below photo */
+    background: rgba(22,24,38,.92);
+    display: flex;
+    flex-direction: column;
+    padding: 14px 16px;
+    gap: 10px;
+    animation: pq-overlay-in 120ms cubic-bezier(0.2,0.7,0.3,1);
+    z-index: 10;
+  }
+  @keyframes pq-overlay-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .pq-overlay-title {
+    font: 500 13px Inter, system-ui, sans-serif;
+    color: var(--color-text);
+  }
+  .pq-reason-chips {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .pq-reason-chip {
+    font: 400 12px Inter, system-ui, sans-serif;
+    padding: 5px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    background: transparent;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+  }
+  .pq-reason-chip.selected {
+    background: var(--status-rejected-bg);
+    border-color: var(--status-rejected-border);
+    color: var(--status-rejected-text);
+  }
+  .pq-overlay-hint {
+    font: 400 11px Inter, system-ui, sans-serif;
+    color: var(--color-text-muted);
+    line-height: 1.4;
+  }
+  .pq-overlay-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: auto;
+  }
+  .pq-overlay-actions .btn { flex: 1; }
+  .btn-rejected {
+    color: var(--status-rejected-text);
+    border-color: var(--status-rejected-border);
+  }
+  .btn-rejected:hover:not(:disabled) {
+    background: var(--status-rejected-bg);
+  }
+
+  /* Rejected reason tag */
+  .pq-rejected-tag {
+    display: inline-flex;
+    align-items: center;
+    margin-top: 8px;
+    font: 400 11px Inter, system-ui, sans-serif;
+    color: var(--color-text-muted);
+  }
+  .pq-rejected-tag strong {
+    color: var(--status-rejected-text);
+    margin-left: 4px;
+    font-weight: 500;
+  }
+
+  /* ======================================================================
+     WAVE 4: EMPTY STATES
+     ====================================================================== */
+  .pq-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    padding: 60px 20px;
+  }
+  .pq-empty-card {
+    background: var(--color-sunken);
+    border-radius: var(--radius-md);
+    box-shadow: inset 0 0 0 1px var(--color-hairline);
+    padding: 32px 40px;
+    max-width: 440px;
+    width: 100%;
+    text-align: center;
+  }
+  .pq-empty-dots {
+    display: flex;
+    gap: 5px;
+    justify-content: center;
+    margin-bottom: 12px;
+  }
+  .pq-empty-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-accent);
+    opacity: 0.5;
+  }
+  .pq-empty-dot:nth-child(2) { opacity: 0.7; }
+  .pq-empty-dot:nth-child(3) { opacity: 0.9; }
+  .pq-empty-heading {
+    font: 500 19px/1.2 Inter, system-ui, sans-serif;
+    letter-spacing: -0.015em;
+    color: var(--color-text);
+    margin: 0 0 10px;
+  }
+  .pq-empty-text {
+    font: 400 13px/1.55 Inter, system-ui, sans-serif;
+    color: var(--color-text-secondary);
+    margin: 0 0 20px;
+  }
+  .pq-empty-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  /* First-run checklist */
+  .pq-firstrun-list {
+    list-style: none;
+    margin: 0 0 20px;
+    padding: 0;
+    text-align: left;
+  }
+  .pq-firstrun-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--color-hairline);
+    font: 400 13px Inter, system-ui, sans-serif;
+    color: var(--color-text-secondary);
+  }
+  .pq-firstrun-item:last-child { border-bottom: none; }
+  .pq-firstrun-glyph {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 12px;
+    font-weight: 700;
+    flex-shrink: 0;
+    width: 18px;
+    text-align: center;
+  }
+  .pq-firstrun-glyph.ok  { color: var(--status-approved-text); }
+  .pq-firstrun-glyph.err { color: var(--status-rejected-text); }
+  .pq-firstrun-glyph.unk { color: var(--color-text-muted); }
+  .pq-firstrun-val {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 11px;
+    color: var(--color-text-muted);
+    margin-left: auto;
+  }
+
+  /* ======================================================================
+     WAVE 4: SETTINGS 2-COLUMN LAYOUT
+     ====================================================================== */
+  .settings-nocturne {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    height: calc(100vh - 48px);
+    overflow: hidden;
+  }
+
+  /* Left sidebar */
+  .settings-sidebar {
+    padding: 24px 12px;
+    box-shadow: inset -1px 0 0 var(--color-hairline);
+    background: var(--color-app-bg);
+    overflow-y: auto;
+    flex-shrink: 0;
+  }
+  .settings-sidebar-kicker {
+    font: 600 9.5px Inter, system-ui, sans-serif;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    padding: 0 8px 10px;
+  }
+  .settings-sidebar-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    font: 400 13px Inter, system-ui, sans-serif;
+    color: var(--color-text-secondary);
+    border: none;
+    background: transparent;
+    width: 100%;
+    text-align: left;
+    transition: background var(--transition-fast), color var(--transition-fast);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .settings-sidebar-pill:hover:not(.active) {
+    color: var(--color-text);
+  }
+  .settings-sidebar-pill.active {
+    background: rgba(145,132,217,.12);
+    color: var(--color-accent-400);
+    font-weight: 500;
+  }
+
+  /* Right pane */
+  .settings-pane {
+    overflow-y: auto;
+    padding: 28px 32px;
+    background: var(--color-app-bg);
+  }
+  .settings-pane-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .settings-pane-title {
+    font: 500 22px/1.1 Inter, system-ui, sans-serif;
+    letter-spacing: -0.02em;
+    color: var(--color-text);
+    margin: 0 0 4px;
+  }
+  .settings-pane-subtitle {
+    font: 400 13px Inter, system-ui, sans-serif;
+    color: var(--color-text-muted);
+    margin: 0;
+  }
+
+  /* Settings 2-column field grid */
+  .settings-field-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+    max-width: 1040px;
+  }
+  @media (max-width: 900px) {
+    .settings-field-grid { grid-template-columns: 1fr; gap: 20px; }
+  }
+
+  /* Individual field wrapper (Nocturne) */
+  .sn-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .sn-field-label {
+    font: 600 10px Inter, system-ui, sans-serif;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .sn-field-value {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 13px;
+    color: var(--color-accent-400);
+  }
+  .sn-input {
+    width: 100%;
+    box-sizing: border-box;
+    height: 36px;
+    background: var(--color-sunken);
+    box-shadow: inset 0 0 0 1px var(--color-hairline);
+    border: none;
+    border-radius: var(--radius-md);
+    padding: 0 12px;
+    font: 400 13px Inter, system-ui, sans-serif;
+    color: var(--color-text);
+    outline: none;
+    transition: box-shadow var(--transition-fast);
+  }
+  .sn-input:focus { box-shadow: inset 0 0 0 1px var(--color-accent); }
+  .sn-input::placeholder { color: var(--color-text-muted); }
+  .sn-field-hint {
+    font: 400 11px Inter, system-ui, sans-serif;
+    color: var(--color-text-muted);
+    line-height: 1.4;
+  }
+
+  /* Slider */
+  .sn-slider-track-wrap {
+    position: relative;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--color-hairline);
+    cursor: pointer;
+  }
+  .sn-slider-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    border-radius: 2px;
+    background: var(--color-accent);
+    pointer-events: none;
+  }
+  .sn-slider-thumb {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--color-accent-400);
+    pointer-events: none;
+    box-shadow: 0 0 0 2px var(--color-app-bg);
+  }
+  .sn-slider-minmax {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 4px;
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 10px;
+    color: var(--color-text-muted);
+  }
+  /* Threshold slider with color ramp */
+  .sn-slider-track-wrap.sn-ramp {
+    background: linear-gradient(to right, var(--score-0), var(--score-40), var(--score-60), var(--score-75), var(--score-85));
+  }
+  .sn-slider-track-wrap.sn-ramp .sn-slider-fill { display: none; }
+  .sn-ramp-marker {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 2px;
+    height: 12px;
+    background: #fff;
+    border-radius: 1px;
+    pointer-events: none;
+    box-shadow: 0 0 3px rgba(0,0,0,0.5);
+  }
+
+  /* Toggle switch */
+  .sn-toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .sn-toggle-label {
+    font: 400 13px Inter, system-ui, sans-serif;
+    color: var(--color-text);
+  }
+  .sn-toggle {
+    position: relative;
+    width: 36px;
+    height: 20px;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+  .sn-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .sn-toggle-track {
+    position: absolute;
+    inset: 0;
+    border-radius: 10px;
+    background: var(--color-hairline);
+    transition: background var(--transition-med);
+  }
+  .sn-toggle input:checked + .sn-toggle-track {
+    background: rgba(145,132,217,.35);
+  }
+  .sn-toggle-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--color-text-muted);
+    transition: transform var(--transition-med), background var(--transition-med);
+    pointer-events: none;
+  }
+  .sn-toggle input:checked ~ .sn-toggle-thumb {
+    transform: translateX(16px);
+    background: var(--color-accent-400);
+  }
+
+  /* Settings card wrapper (for complex controls) */
+  .sn-card {
+    background: var(--color-sunken);
+    border-radius: var(--radius-md);
+    box-shadow: inset 0 0 0 1px var(--color-hairline);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .sn-card-kicker {
+    font: 600 9.5px Inter, system-ui, sans-serif;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+  }
+
+  /* Segmented control (rooms) */
+  .sn-segmented {
+    display: inline-flex;
+    box-shadow: inset 0 0 0 1px var(--color-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+  .sn-segment {
+    padding: 7px 15px;
+    font: 400 12px Inter, system-ui, sans-serif;
+    color: var(--color-text-secondary);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: background var(--transition-fast), color var(--transition-fast);
+    white-space: nowrap;
+  }
+  .sn-segment.active {
+    background: var(--color-accent-tint);
+    color: var(--color-accent-400);
+    font-weight: 500;
+  }
+  .sn-segment:hover:not(.active) { background: rgba(255,255,255,.04); }
+  .sn-segment + .sn-segment { box-shadow: inset 1px 0 0 var(--color-border); }
+
+  /* Chip picker (districts) */
+  .sn-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .sn-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 11px;
+    border-radius: var(--radius-sm);
+    font: 400 12px Inter, system-ui, sans-serif;
+    border: 1px solid var(--color-border);
+    color: var(--color-text-secondary);
+    background: transparent;
+    cursor: pointer;
+    transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+  }
+  .sn-chip.selected {
+    background: var(--color-accent-tint);
+    border-color: rgba(145,132,217,.45);
+    color: var(--color-accent-400);
+  }
+  .sn-chip .sn-chip-x { font-size: 10px; opacity: 0.6; }
+
+  /* Settings save button in pane header */
+  .settings-nocturne-save {
+    flex-shrink: 0;
+  }
+
+  /* ======================================================================
+     WAVE 4: MOBILE RESPONSIVE
+     ====================================================================== */
+  @media (max-width: 768px) {
+    /* Header: reduce padding, hide scrape info meta */
+    .header { padding: 0 12px; gap: 12px; }
+    .header-scrape-info { display: none; }
+
+    /* Overview: single column */
+    .overview-grid {
+      grid-template-columns: 1fr;
+      padding: 10px;
+      gap: 10px;
+    }
+    .overview-right { order: -1; }
+    .hero-card, .this-week-card { display: none; }
+    .map-card {
+      height: 400px;
+      min-height: 300px;
+    }
+    .overview-charts-row { grid-template-columns: 1fr; }
+
+    /* Detail: hide sidebar on mobile, keep main pane */
+    .detail-sidebar { display: none; }
+    .dm-hero-row {
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+    .dm-photo-card { height: 220px; }
+    .dm-metric-strip { flex-wrap: wrap; gap: 12px; }
+    .dm-metric-cell + .dm-metric-cell { box-shadow: none; }
+    .dm-content-row {
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+    .dm-checklist-grid { grid-template-columns: 1fr; }
+
+    /* Pending/rejected: single column */
+    .pq-grid { grid-template-columns: 1fr; gap: 10px; padding: 12px; }
+    .pq-header { padding: 14px 12px 0; }
+    .pq-header-meta { display: none; }
+
+    /* Settings: collapse to stacked layout */
+    .settings-nocturne { grid-template-columns: 1fr; height: auto; }
+    .settings-sidebar {
+      box-shadow: inset 0 -1px 0 var(--color-hairline);
+      padding: 12px;
+      overflow-x: auto;
+    }
+    .settings-sidebar .settings-sidebar-kicker { display: none; }
+    /* Horizontal scroll pill row on mobile */
+    .settings-sidebar-pills-wrap {
+      display: flex;
+      flex-direction: row;
+      gap: 4px;
+      white-space: nowrap;
+    }
+    .settings-sidebar-pills-wrap .settings-sidebar-pill {
+      width: auto;
+      flex-shrink: 0;
+    }
+    .settings-pane { padding: 16px; }
+    .settings-field-grid { grid-template-columns: 1fr; gap: 16px; }
+
+    /* Ensure touch targets are ≥ 44px */
+    .tab-nav button { padding: 6px 8px; min-height: 44px; }
+    .btn { min-height: 44px; }
+    .pq-actions .btn { min-height: 40px; }
+    .settings-sidebar-pill { min-height: 40px; }
+  }
 </style>
 </head>
 <body>
@@ -2382,12 +3085,16 @@
   </section>
 
   <!-- ===== DETAIL TAB ===== -->
-  <!-- ===== SHARED LISTINGS VIEW (Detail / Pending / Rejected) ===== -->
-  <!-- Visibility toggled by body.tab-<name> class from the tab-nav handler.
-       All three tabs share this DOM; window.currentScope filters the data. -->
+  <!-- ===== SHARED LISTINGS VIEW (Detail only after Wave 4) ===== -->
+  <!-- Pending and Rejected now have their own grid renderers (Wave 4). -->
   <section id="tab-detail" class="listings-scope"></section>
-  <section id="tab-pending" class="listings-scope"></section>
-  <section id="tab-rejected" class="listings-scope"></section>
+  <!-- Pending and Rejected tabs render their own content via JS (Wave 4) -->
+  <section id="tab-pending" class="listings-scope">
+    <div id="pending-grid-root" class="pq-shell"></div>
+  </section>
+  <section id="tab-rejected" class="listings-scope">
+    <div id="rejected-grid-root" class="pq-shell"></div>
+  </section>
   <div id="listings-view" class="listings-view">
     <div class="detail-filter-bar" id="detail-filter-bar">
       <div class="dfb-group">
@@ -2438,13 +3145,19 @@
 
   <!-- ===== SETTINGS TAB ===== -->
   <section id="tab-settings">
-    <div class="settings-wrap">
-      <div class="settings-page-title">Settings</div>
-      <div class="settings-page-hint">
-        Runtime tuning knobs. Values persist to <code>data/settings.json</code> and hot-apply — no restart needed.
-        Env vars in <code>.env</code> remain the initial defaults on fresh boot.
+    <div class="settings-nocturne" id="settings-nocturne-root">
+      <!-- Left sidebar — categories -->
+      <div class="settings-sidebar" id="settings-sidebar">
+        <div class="settings-sidebar-kicker">Settings</div>
+        <div class="settings-sidebar-pills-wrap" id="settings-sidebar-pills">
+          <!-- Filled by JS -->
+          <div class="empty-state"><div class="big" style="font-size:12px">Loading…</div></div>
+        </div>
       </div>
-      <div id="settings-groups"><div class="empty-state"><div class="big">Loading…</div></div></div>
+      <!-- Right pane -->
+      <div class="settings-pane" id="settings-pane">
+        <div class="empty-state"><div class="big">Loading…</div></div>
+      </div>
     </div>
   </section>
 </main>
@@ -2607,23 +3320,144 @@
       if (window.renderDetailList) window.renderDetailList();
     } else if (tabName === "pending") {
       window.currentScope = "pending";
-      if (window.renderDetailList) window.renderDetailList();
+      renderPendingGrid();
     } else if (tabName === "rejected") {
       window.currentScope = "rejected";
-      if (window.renderDetailList) window.renderDetailList();
+      renderRejectedGrid();
     } else if (tabName === "settings") {
-      renderSettings();
+      renderSettingsNocturne();
     }
     _updateFilterCount();
   };
 
   window.renderOverview = function() {
+    /* Wave 4: first-run empty state when no listings at all */
+    var noListings = (window.state.properties || []).length === 0 &&
+                     (window.state.pending || []).length === 0;
+    var firstRunEl = document.getElementById("ov-firstrun-empty");
+    if (noListings) {
+      if (!firstRunEl) {
+        firstRunEl = _buildFirstRunEmptyState();
+        firstRunEl.id = "ov-firstrun-empty";
+        var overviewGrid = document.querySelector(".overview-grid");
+        if (overviewGrid) overviewGrid.appendChild(firstRunEl);
+      }
+    } else {
+      if (firstRunEl) firstRunEl.remove();
+    }
     if (window.initMap) window.initMap();
     if (window.renderKpiStrip) window.renderKpiStrip();
     if (window.renderScoreDistribution) window.renderScoreDistribution();
     if (window.renderPriceScatter) window.renderPriceScatter();
     if (window.renderActivityFeed) window.renderActivityFeed();
   };
+
+  function _buildFirstRunEmptyState() {
+    var wrap = document.createElement("div");
+    wrap.style.cssText = "grid-column:1/-1;display:flex;justify-content:center;padding:40px 20px;";
+
+    var card = document.createElement("div");
+    card.className = "pq-empty-card";
+
+    var dots = document.createElement("div");
+    dots.className = "pq-empty-dots";
+    for (var i = 0; i < 3; i++) {
+      var dot = document.createElement("div"); dot.className = "pq-empty-dot"; dots.appendChild(dot);
+    }
+    card.appendChild(dots);
+
+    var kicker = document.createElement("div");
+    kicker.className = "card-kicker";
+    kicker.style.textAlign = "center";
+    kicker.style.marginBottom = "8px";
+    kicker.textContent = "First run";
+    card.appendChild(kicker);
+
+    var heading = document.createElement("h2");
+    heading.className = "pq-empty-heading";
+    heading.textContent = "No listings yet";
+    card.appendChild(heading);
+
+    var text = document.createElement("p");
+    text.className = "pq-empty-text";
+    text.textContent = "The scraper on the mini PC hasn't posted anything. Two things to check before the first batch lands.";
+    card.appendChild(text);
+
+    /* Mini checklist */
+    var list = document.createElement("ul");
+    list.className = "pq-firstrun-list";
+
+    function makeCheckItem(label, glyphClass, glyph, valText) {
+      var li = document.createElement("li");
+      li.className = "pq-firstrun-item";
+      var g = document.createElement("span");
+      g.className = "pq-firstrun-glyph " + glyphClass;
+      g.textContent = glyph;
+      li.appendChild(g);
+      var lblEl = document.createElement("span");
+      lblEl.textContent = label;
+      li.appendChild(lblEl);
+      if (valText) {
+        var valEl = document.createElement("span");
+        valEl.className = "pq-firstrun-val";
+        valEl.textContent = valText;
+        li.appendChild(valEl);
+      }
+      return li;
+    }
+
+    list.appendChild(makeCheckItem("Buyer profile saved", "ok", "✓", null));
+    list.appendChild(makeCheckItem("Scraper last posted", "unk", "?", "never"));
+    list.appendChild(makeCheckItem("Telegram bot connected", "unk", "?", null));
+
+    /* Update telegram check asynchronously */
+    fetch("/api/telegram/status")
+      .then(function(r) { return r.json(); })
+      .then(function(s) {
+        var tgItem = list.children[2];
+        if (!tgItem) return;
+        var g = tgItem.querySelector(".pq-firstrun-glyph");
+        if (s.bot_configured) {
+          g.className = "pq-firstrun-glyph ok";
+          g.textContent = "✓";
+        } else {
+          g.className = "pq-firstrun-glyph err";
+          g.textContent = "!";
+        }
+      })
+      .catch(function() {});
+
+    card.appendChild(list);
+
+    var actions = document.createElement("div");
+    actions.className = "pq-empty-actions";
+
+    var settingsBtn = document.createElement("button");
+    settingsBtn.type = "button";
+    settingsBtn.className = "btn btn-primary";
+    settingsBtn.textContent = "Check settings";
+    settingsBtn.addEventListener("click", function() {
+      var settingsTabBtn = document.querySelector('.tab-nav button[data-tab="settings"]');
+      if (settingsTabBtn) settingsTabBtn.click();
+    });
+    actions.appendChild(settingsBtn);
+
+    var scrapeBtn = document.createElement("button");
+    scrapeBtn.type = "button";
+    scrapeBtn.className = "btn btn-secondary";
+    scrapeBtn.textContent = "Run scrape now";
+    scrapeBtn.addEventListener("click", function() {
+      scrapeBtn.disabled = true;
+      fetch("/api/check-now", {method: "POST"})
+        .then(function() { window.showToast("Scrape started", "ok"); scrapeBtn.disabled = false; })
+        .catch(function() { scrapeBtn.disabled = false; });
+    });
+    actions.appendChild(scrapeBtn);
+
+    card.appendChild(actions);
+    wrap.appendChild(card);
+    return wrap;
+  }
 
   /* ============================== TAB SWITCHING ==============================
      Hash-based routing: #overview | #detail | #pending | #rejected | #settings.
@@ -2666,46 +3500,453 @@
   // Initial activation on load — before renderApp() runs elsewhere.
   _activateTab(_tabFromHash());
 
-  /* ============================== PENDING TAB RENDERER ============================== */
+  /* ============================== WAVE 4: PENDING GRID RENDERER ============================== */
 
-  function renderPending() {
-    var container = document.getElementById("pending-list");
-    if (!container) return;
-    while (container.firstChild) container.removeChild(container.firstChild);
+  /* Build the Nocturne 3-column pending card grid */
+  function renderPendingGrid() {
+    var root = document.getElementById("pending-grid-root");
+    if (!root) return;
+    while (root.firstChild) root.removeChild(root.firstChild);
+
     var entries = window.state.pending || [];
-    if (entries.length === 0) {
-      var empty = document.createElement("div");
-      empty.className = "empty-state";
-      var big = document.createElement("div");
-      big.className = "big";
-      big.textContent = "No pending listings";
-      empty.appendChild(big);
-      container.appendChild(empty);
+    var totalPending = entries.length;
+
+    /* Header row */
+    var header = document.createElement("div");
+    header.className = "pq-header";
+    var titleEl = document.createElement("div");
+    titleEl.className = "pq-header-title";
+    titleEl.textContent = "Approval queue";
+    header.appendChild(titleEl);
+    var metaEl = document.createElement("div");
+    metaEl.className = "pq-header-meta";
+    metaEl.textContent = totalPending + " listing" + (totalPending !== 1 ? "s" : "") +
+      " \xB7 sorted by score \xB7 j/k to move, a approve, r reject";
+    header.appendChild(metaEl);
+    root.appendChild(header);
+
+    /* Empty state */
+    if (totalPending === 0) {
+      root.appendChild(_buildPendingEmptyState());
       return;
     }
-    entries.forEach(function(entry) {
-      container.appendChild(buildPendingCard(entry));
+
+    /* Sort by score descending — best first */
+    var sorted = entries.slice().sort(function(a, b) { return (b.score || 0) - (a.score || 0); });
+    var best = sorted[0];
+
+    /* Grid */
+    var grid = document.createElement("div");
+    grid.className = "pq-grid";
+
+    sorted.forEach(function(entry) {
+      grid.appendChild(_buildPqCard(entry, entry === best));
     });
+
+    root.appendChild(grid);
   }
 
-  function renderRejected() {
-    var container = document.getElementById("rejected-list");
-    if (!container) return;
-    while (container.firstChild) container.removeChild(container.firstChild);
+  /* Build a single pending card */
+  function _buildPqCard(entry, isBest) {
+    var bucket = window.scoreBucket(entry.score || 0);
+    var color = window.scoreColor(entry.score || 0);
+
+    var card = document.createElement("div");
+    card.className = "pq-card" + (isBest ? " pq-card-best" : "");
+    card.style.position = "relative";
+
+    /* --- Photo area --- */
+    var photo = document.createElement("div");
+    photo.className = "pq-photo";
+
+    var imgUrl = entry.image_url || entry.imageUrl || "";
+    if (imgUrl && (imgUrl.startsWith("http://") || imgUrl.startsWith("https://"))) {
+      var img = document.createElement("img");
+      img.src = imgUrl;
+      img.alt = "";
+      img.loading = "lazy";
+      photo.appendChild(img);
+    }
+    var placeholder = document.createElement("div");
+    placeholder.className = "pq-photo-placeholder";
+    placeholder.textContent = "no photo";
+    if (imgUrl) placeholder.style.display = "none";
+    photo.appendChild(placeholder);
+
+    /* Score badge */
+    if (entry.score != null) {
+      var scoreBadge = document.createElement("div");
+      scoreBadge.className = "pq-score-badge";
+      scoreBadge.dataset.scoreBucket = bucket;
+      scoreBadge.textContent = String(entry.score);
+      photo.appendChild(scoreBadge);
+    }
+
+    card.appendChild(photo);
+
+    /* --- Body --- */
+    var body = document.createElement("div");
+    body.className = "pq-body";
+
+    /* Title */
+    var titleEl = document.createElement("div");
+    titleEl.className = "pq-card-title";
+    titleEl.textContent = entry.title || entry.url || "(untitled)";
+    body.appendChild(titleEl);
+
+    /* Meta line: district · area · year · floor */
+    var metaParts = [];
+    if (entry.district) metaParts.push(entry.district);
+    if (entry.area_sqm) metaParts.push(entry.area_sqm + " m\xB2");
+    if (entry.year_built || entry.year) metaParts.push(String(entry.year_built || entry.year));
+    if (entry.floor && entry.total_floors) metaParts.push(entry.floor + "/" + entry.total_floors + " fl.");
+    else if (entry.floor) metaParts.push("fl." + entry.floor);
+    var metaEl = document.createElement("div");
+    metaEl.className = "pq-card-meta";
+    metaEl.textContent = metaParts.join(" \xB7 ") || " ";
+    body.appendChild(metaEl);
+
+    /* Price row */
+    var priceRow = document.createElement("div");
+    priceRow.className = "pq-price-row";
+    var priceVal = entry.price_eur || entry.price;
+    if (priceVal) {
+      var priceEl = document.createElement("span");
+      priceEl.className = "pq-price";
+      priceEl.textContent = window.fmtEur ? window.fmtEur(priceVal) : (priceVal + " €");
+      priceRow.appendChild(priceEl);
+    }
+    if (entry.price_per_sqm) {
+      var sqmEl = document.createElement("span");
+      sqmEl.className = "pq-price-sqm";
+      sqmEl.textContent = entry.price_per_sqm + " €/m\xB2";
+      priceRow.appendChild(sqmEl);
+    }
+    body.appendChild(priceRow);
+
+    /* Verdict block */
+    if (entry.verdict) {
+      var verdictEl = document.createElement("div");
+      verdictEl.className = "pq-verdict";
+      verdictEl.dataset.scoreBucket = bucket;
+      verdictEl.textContent = entry.verdict;
+      body.appendChild(verdictEl);
+    }
+
+    /* Actions */
+    var actionsRow = document.createElement("div");
+    actionsRow.className = "pq-actions";
+
+    var approveBtn = document.createElement("button");
+    approveBtn.type = "button";
+    approveBtn.className = "btn";
+    approveBtn.style.borderColor = "var(--score-85)";
+    approveBtn.style.color = "#6fc9a3";
+    approveBtn.textContent = "Approve";
+    approveBtn.addEventListener("click", function() {
+      approveBtn.disabled = true;
+      fetch("/api/pending/" + encodeURIComponent(entry.id) + "/approve", {method: "POST"})
+        .then(function(r) { return r.json(); })
+        .then(function(d) { if (d.ok || d.status) window.loadData(); })
+        .catch(function() { window.loadData(); });
+    });
+    actionsRow.appendChild(approveBtn);
+
+    var rejectBtn = document.createElement("button");
+    rejectBtn.type = "button";
+    rejectBtn.className = "btn btn-secondary";
+    rejectBtn.textContent = "Reject";
+    rejectBtn.addEventListener("click", function() {
+      _showPqRejectOverlay(entry, card, body, actionsRow);
+    });
+    actionsRow.appendChild(rejectBtn);
+
+    body.appendChild(actionsRow);
+    card.appendChild(body);
+
+    return card;
+  }
+
+  /* Reject-with-reason overlay */
+  function _showPqRejectOverlay(entry, card, body, actionsRow) {
+    /* Remove existing overlay */
+    var existing = card.querySelector(".pq-reject-overlay");
+    if (existing) { existing.remove(); return; }
+
+    var overlay = document.createElement("div");
+    overlay.className = "pq-reject-overlay";
+
+    var overlayTitle = document.createElement("div");
+    overlayTitle.className = "pq-overlay-title";
+    overlayTitle.textContent = "Reject — why?";
+    overlay.appendChild(overlayTitle);
+
+    var chipsWrap = document.createElement("div");
+    chipsWrap.className = "pq-reason-chips";
+
+    var REASONS = [
+      {label: "Price", value: "price"},
+      {label: "Location", value: "location"},
+      {label: "Condition", value: "condition"},
+      {label: "Other", value: "other"},
+    ];
+    var selectedReason = null;
+
+    REASONS.forEach(function(r) {
+      var chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "pq-reason-chip";
+      chip.textContent = r.label;
+      chip.addEventListener("click", function() {
+        selectedReason = r.value;
+        chipsWrap.querySelectorAll(".pq-reason-chip").forEach(function(c) {
+          c.classList.toggle("selected", c === chip);
+        });
+      });
+      chipsWrap.appendChild(chip);
+    });
+    overlay.appendChild(chipsWrap);
+
+    var hint = document.createElement("div");
+    hint.className = "pq-overlay-hint";
+    hint.textContent = entry.district
+      ? "Future listings in " + entry.district + " or matching this reason will be scored down. Undo for 8s."
+      : "Future listings matching this reason will be scored down. Undo for 8s.";
+    overlay.appendChild(hint);
+
+    var overlayActions = document.createElement("div");
+    overlayActions.className = "pq-overlay-actions";
+
+    var confirmBtn = document.createElement("button");
+    confirmBtn.type = "button";
+    confirmBtn.className = "btn btn-rejected";
+    confirmBtn.textContent = "Confirm reject";
+    confirmBtn.addEventListener("click", function() {
+      confirmBtn.disabled = true;
+      var reason = selectedReason || "other";
+      fetch("/api/pending/" + encodeURIComponent(entry.id) + "/reject", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({reason: reason}),
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(d) { if (d.ok || d.status) window.loadData(); })
+        .catch(function() { window.loadData(); });
+    });
+    overlayActions.appendChild(confirmBtn);
+
+    var cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "btn-ghost btn";
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.addEventListener("click", function() { overlay.remove(); });
+    overlayActions.appendChild(cancelBtn);
+
+    overlay.appendChild(overlayActions);
+    card.appendChild(overlay);
+  }
+
+  /* Empty state for pending queue */
+  function _buildPendingEmptyState() {
+    var wrap = document.createElement("div");
+    wrap.className = "pq-empty-state";
+
+    var card = document.createElement("div");
+    card.className = "pq-empty-card";
+
+    var dots = document.createElement("div");
+    dots.className = "pq-empty-dots";
+    for (var i = 0; i < 3; i++) {
+      var dot = document.createElement("div");
+      dot.className = "pq-empty-dot";
+      dots.appendChild(dot);
+    }
+    card.appendChild(dots);
+
+    var heading = document.createElement("h2");
+    heading.className = "pq-empty-heading";
+    heading.textContent = "Queue is empty";
+    card.appendChild(heading);
+
+    var text = document.createElement("p");
+    text.className = "pq-empty-text";
+    /* Compute next scrape time hint if available */
+    var threshold = "";
+    try {
+      if (window._settingsData && window._settingsData.schema) {
+        var threshField = window._settingsData.schema.find(function(f) { return f.key === "draft_score_threshold"; });
+        if (threshField) threshold = " " + threshField.value;
+      }
+    } catch(e) {}
+    text.textContent = "Everything scraped in the last 2 hours scored below your Telegram threshold" +
+      (threshold ? " of" + threshold : "") + ". Check again after the next scrape.";
+    card.appendChild(text);
+
+    var actions = document.createElement("div");
+    actions.className = "pq-empty-actions";
+
+    var settingsBtn = document.createElement("button");
+    settingsBtn.type = "button";
+    settingsBtn.className = "btn btn-primary";
+    settingsBtn.textContent = "Adjust threshold in Settings";
+    settingsBtn.addEventListener("click", function() {
+      var settingsTabBtn = document.querySelector('.tab-nav button[data-tab="settings"]');
+      if (settingsTabBtn) settingsTabBtn.click();
+    });
+    actions.appendChild(settingsBtn);
+
+    var scrapeBtn = document.createElement("button");
+    scrapeBtn.type = "button";
+    scrapeBtn.className = "btn btn-secondary";
+    scrapeBtn.textContent = "Run scrape now";
+    scrapeBtn.addEventListener("click", function() {
+      scrapeBtn.disabled = true;
+      fetch("/api/check-now", {method: "POST"})
+        .then(function(r) { return r.json(); })
+        .then(function() { window.showToast("Scrape started", "ok"); scrapeBtn.disabled = false; })
+        .catch(function() { scrapeBtn.disabled = false; });
+    });
+    actions.appendChild(scrapeBtn);
+
+    card.appendChild(actions);
+    wrap.appendChild(card);
+    return wrap;
+  }
+
+  /* ============================== WAVE 4: REJECTED GRID RENDERER ============================== */
+
+  function renderRejectedGrid() {
+    var root = document.getElementById("rejected-grid-root");
+    if (!root) return;
+    while (root.firstChild) root.removeChild(root.firstChild);
+
     var entries = window.state.rejected || [];
+
+    /* Header row */
+    var header = document.createElement("div");
+    header.className = "pq-header";
+    var titleEl = document.createElement("div");
+    titleEl.className = "pq-header-title";
+    titleEl.textContent = "Rejected listings";
+    header.appendChild(titleEl);
+    var metaEl = document.createElement("div");
+    metaEl.className = "pq-header-meta";
+    metaEl.textContent = entries.length + " listing" + (entries.length !== 1 ? "s" : "") + " rejected";
+    header.appendChild(metaEl);
+    root.appendChild(header);
+
     if (entries.length === 0) {
-      var empty = document.createElement("div");
-      empty.className = "empty-state";
-      var big = document.createElement("div");
-      big.className = "big";
-      big.textContent = "No rejected listings";
-      empty.appendChild(big);
-      container.appendChild(empty);
+      var emptyWrap = document.createElement("div");
+      emptyWrap.className = "pq-empty-state";
+      var emptyCard = document.createElement("div");
+      emptyCard.className = "pq-empty-card";
+      var emptyH = document.createElement("h2");
+      emptyH.className = "pq-empty-heading";
+      emptyH.textContent = "No rejected listings";
+      emptyCard.appendChild(emptyH);
+      var emptyP = document.createElement("p");
+      emptyP.className = "pq-empty-text";
+      emptyP.textContent = "Listings you reject from the Pending queue will appear here.";
+      emptyCard.appendChild(emptyP);
+      emptyWrap.appendChild(emptyCard);
+      root.appendChild(emptyWrap);
       return;
     }
+
+    var grid = document.createElement("div");
+    grid.className = "pq-grid";
+
     entries.forEach(function(entry) {
-      container.appendChild(buildPendingCard(entry));
+      grid.appendChild(_buildRejectedCard(entry));
     });
+
+    root.appendChild(grid);
+  }
+
+  function _buildRejectedCard(entry) {
+    var bucket = window.scoreBucket(entry.score || 0);
+
+    var card = document.createElement("div");
+    card.className = "pq-card pq-card-rejected";
+
+    /* Photo area */
+    var photo = document.createElement("div");
+    photo.className = "pq-photo";
+    var imgUrl = entry.image_url || entry.imageUrl || "";
+    if (imgUrl && (imgUrl.startsWith("http://") || imgUrl.startsWith("https://"))) {
+      var img = document.createElement("img");
+      img.src = imgUrl;
+      img.alt = "";
+      img.loading = "lazy";
+      photo.appendChild(img);
+    }
+    var placeholder = document.createElement("div");
+    placeholder.className = "pq-photo-placeholder";
+    placeholder.textContent = "no photo";
+    if (imgUrl) placeholder.style.display = "none";
+    photo.appendChild(placeholder);
+
+    /* Score badge */
+    if (entry.score != null) {
+      var scoreBadge = document.createElement("div");
+      scoreBadge.className = "pq-score-badge";
+      scoreBadge.dataset.scoreBucket = bucket;
+      scoreBadge.textContent = String(entry.score);
+      photo.appendChild(scoreBadge);
+    }
+
+    card.appendChild(photo);
+
+    /* Body */
+    var body = document.createElement("div");
+    body.className = "pq-body";
+
+    /* Rejected status pill */
+    var rejectedTag = document.createElement("span");
+    rejectedTag.className = "tag tag-rejected";
+    rejectedTag.style.marginBottom = "8px";
+    rejectedTag.style.alignSelf = "flex-start";
+    rejectedTag.textContent = "Rejected";
+    body.appendChild(rejectedTag);
+
+    var titleEl = document.createElement("div");
+    titleEl.className = "pq-card-title";
+    titleEl.textContent = entry.title || entry.url || "(untitled)";
+    body.appendChild(titleEl);
+
+    var metaParts = [];
+    if (entry.district) metaParts.push(entry.district);
+    if (entry.area_sqm) metaParts.push(entry.area_sqm + " m\xB2");
+    if (entry.year_built || entry.year) metaParts.push(String(entry.year_built || entry.year));
+    var metaEl = document.createElement("div");
+    metaEl.className = "pq-card-meta";
+    metaEl.textContent = metaParts.join(" \xB7 ") || " ";
+    body.appendChild(metaEl);
+
+    /* Price */
+    var priceVal = entry.price_eur || entry.price;
+    if (priceVal) {
+      var priceEl = document.createElement("div");
+      priceEl.className = "pq-price";
+      priceEl.style.marginTop = "10px";
+      priceEl.style.fontSize = "18px";
+      priceEl.textContent = window.fmtEur ? window.fmtEur(priceVal) : (priceVal + " €");
+      body.appendChild(priceEl);
+    }
+
+    /* Rejection reason */
+    if (entry.reject_reason) {
+      var reasonEl = document.createElement("div");
+      reasonEl.className = "pq-rejected-tag";
+      reasonEl.textContent = "Rejected because:";
+      var strongEl = document.createElement("strong");
+      strongEl.textContent = entry.reject_reason;
+      reasonEl.appendChild(strongEl);
+      body.appendChild(reasonEl);
+    }
+
+    card.appendChild(body);
+    return card;
   }
 
   /* Days-on-market: today minus the date of the first (oldest) price_history entry.
@@ -3223,6 +4464,7 @@
 
   /* ============================== SETTINGS TAB ============================== */
 
+  /* Category map: API group → sidebar label + subtitle */
   var GROUP_META = {
     cost:      {title: "Mortgage & cost of ownership", hint: "Applied when computing the monthly cost card. Change once, all future scrapes + backfills use these."},
     filter:    {title: "Ingest filters",               hint: "Applied at ingest time. Listings above/below these bounds are dropped before AI evaluation."},
@@ -3231,158 +4473,313 @@
     dashboard: {title: "Dashboard",                    hint: "External URL of this UI — used by Telegram cards' Dashboard button to deep-link into a listing."},
   };
 
-  var _settingsData = null;
+  /* Sidebar category labels (mapping schema group → display label) */
+  var SIDEBAR_CATEGORIES = [
+    {key: "filter",   label: "Buyer profile"},
+    {key: "ai",       label: "Scoring & AI"},
+    {key: "cost",     label: "Cost model"},
+    {key: "telegram", label: "Telegram"},
+    {key: "dashboard",label: "Scraper / Dashboard"},
+  ];
+
+  window._settingsData = null;
   var _dirtyKeys = new Set();
+  var _activeSettingsGroup = "filter";
 
-  function renderSettings() {
-    var container = document.getElementById("settings-groups");
-    if (!container) return;
-    while (container.firstChild) container.removeChild(container.firstChild);
-    _dirtyKeys.clear();
+  function renderSettingsNocturne() {
+    var sidebarPills = document.getElementById("settings-sidebar-pills");
+    var pane = document.getElementById("settings-pane");
+    if (!sidebarPills || !pane) return;
 
-    fetch("/api/settings").then(function (r) { return r.json(); }).then(function (d) {
-      _settingsData = d;
-      _renderSettingsForm(container, d.schema);
-    }).catch(function () {
-      container.textContent = "Could not load settings.";
+    while (sidebarPills.firstChild) sidebarPills.removeChild(sidebarPills.firstChild);
+    while (pane.firstChild) pane.removeChild(pane.firstChild);
+
+    var loadingEl = document.createElement("div");
+    loadingEl.className = "empty-state";
+    var loadingBig = document.createElement("div");
+    loadingBig.className = "big";
+    loadingBig.textContent = "Loading…";
+    loadingEl.appendChild(loadingBig);
+    pane.appendChild(loadingEl);
+
+    fetch("/api/settings").then(function(r) { return r.json(); }).then(function(d) {
+      window._settingsData = d;
+      _dirtyKeys.clear();
+      _buildSettingsSidebar(sidebarPills, d.schema);
+      _renderSettingsPane(pane, d.schema, _activeSettingsGroup);
+    }).catch(function() {
+      pane.textContent = "Could not load settings.";
     });
   }
 
-  function _renderSettingsForm(container, schema) {
+  function _buildSettingsSidebar(container, schema) {
+    while (container.firstChild) container.removeChild(container.firstChild);
+
+    /* Only show categories that have at least one field */
     var groups = {};
-    schema.forEach(function (f) {
+    (schema || []).forEach(function(f) {
       if (!groups[f.group]) groups[f.group] = [];
       groups[f.group].push(f);
     });
 
-    Object.keys(GROUP_META).forEach(function (gkey) {
-      var fields = groups[gkey] || [];
-      if (fields.length === 0) return;
-      var meta = GROUP_META[gkey];
-
-      var g = document.createElement("div");
-      g.className = "settings-group";
-      var t = document.createElement("div"); t.className = "settings-group-title"; t.textContent = meta.title; g.appendChild(t);
-      var h = document.createElement("div"); h.className = "settings-group-hint";  h.textContent = meta.hint;  g.appendChild(h);
-
-      var grid = document.createElement("div"); grid.className = "settings-fields";
-      fields.forEach(function (f) { grid.appendChild(_buildSettingsField(f)); });
-      g.appendChild(grid);
-      container.appendChild(g);
+    SIDEBAR_CATEGORIES.forEach(function(cat) {
+      if (!groups[cat.key] || groups[cat.key].length === 0) return;
+      var pill = document.createElement("button");
+      pill.type = "button";
+      pill.className = "settings-sidebar-pill" + (cat.key === _activeSettingsGroup ? " active" : "");
+      pill.textContent = cat.label;
+      pill.dataset.group = cat.key;
+      pill.addEventListener("click", function() {
+        _activeSettingsGroup = cat.key;
+        container.querySelectorAll(".settings-sidebar-pill").forEach(function(p) {
+          p.classList.toggle("active", p.dataset.group === cat.key);
+        });
+        var pane = document.getElementById("settings-pane");
+        if (pane && window._settingsData) {
+          _renderSettingsPane(pane, window._settingsData.schema, cat.key);
+        }
+      });
+      container.appendChild(pill);
     });
-
-    /* Actions row */
-    var actions = document.createElement("div");
-    actions.className = "settings-actions";
-
-    var saveBtn = document.createElement("button");
-    saveBtn.className = "settings-save-all";
-    saveBtn.textContent = "Save changes";
-    saveBtn.addEventListener("click", _saveSettings);
-    actions.appendChild(saveBtn);
-
-    var reloadBtn = document.createElement("button");
-    reloadBtn.className = "settings-reload";
-    reloadBtn.textContent = "Discard";
-    reloadBtn.addEventListener("click", renderSettings);
-    actions.appendChild(reloadBtn);
-
-    var status = document.createElement("span");
-    status.className = "settings-status";
-    status.id = "settings-status";
-    actions.appendChild(status);
-
-    container.appendChild(actions);
   }
 
-  function _buildSettingsField(f) {
+  function _renderSettingsPane(pane, schema, groupKey) {
+    while (pane.firstChild) pane.removeChild(pane.firstChild);
+    _dirtyKeys.clear();
+
+    var catMeta = GROUP_META[groupKey] || {title: groupKey, hint: ""};
+    var fields = (schema || []).filter(function(f) { return f.group === groupKey; });
+
+    /* Pane header */
+    var paneHeader = document.createElement("div");
+    paneHeader.className = "settings-pane-header";
+
+    var headerLeft = document.createElement("div");
+    var paneTitle = document.createElement("h2");
+    paneTitle.className = "settings-pane-title";
+    paneTitle.textContent = catMeta.title;
+    headerLeft.appendChild(paneTitle);
+    if (catMeta.hint) {
+      var paneSubtitle = document.createElement("p");
+      paneSubtitle.className = "settings-pane-subtitle";
+      paneSubtitle.textContent = catMeta.hint;
+      headerLeft.appendChild(paneSubtitle);
+    }
+    paneHeader.appendChild(headerLeft);
+
+    var saveBtn = document.createElement("button");
+    saveBtn.type = "button";
+    saveBtn.className = "btn btn-primary settings-nocturne-save";
+    saveBtn.id = "settings-nocturne-save";
+    saveBtn.textContent = "Save";
+    saveBtn.addEventListener("click", _saveSettingsNocturne);
+    paneHeader.appendChild(saveBtn);
+
+    pane.appendChild(paneHeader);
+
+    /* Status line */
+    var statusEl = document.createElement("div");
+    statusEl.id = "settings-status";
+    statusEl.className = "settings-status";
+    statusEl.style.marginBottom = "16px";
+    pane.appendChild(statusEl);
+
+    /* Field grid */
+    var grid = document.createElement("div");
+    grid.className = "settings-field-grid";
+
+    fields.forEach(function(f) {
+      grid.appendChild(_buildSettingsFieldNocturne(f));
+    });
+
+    pane.appendChild(grid);
+  }
+
+  function _buildSettingsFieldNocturne(f) {
     var wrap = document.createElement("div");
-    wrap.className = "settings-field";
+    wrap.className = "sn-field";
     wrap.dataset.key = f.key;
 
-    var lbl = document.createElement("label");
-    lbl.setAttribute("for", "set-" + f.key);
-    lbl.textContent = f.label;
-    wrap.appendChild(lbl);
-
-    var input = document.createElement("input");
     var isString = (f.type === "str");
-    input.type = isString ? "text" : "number";
-    input.id = "set-" + f.key;
-    input.dataset.key = f.key;
-    input.dataset.type = f.type;
-    if (!isString) {
+    var isFloat = (f.type === "float");
+    var isInt = (f.type === "int");
+    var isNumeric = isFloat || isInt;
+
+    /* Label row */
+    var labelRow = document.createElement("div");
+    labelRow.className = "sn-field-label";
+
+    var labelText = document.createElement("span");
+    labelText.textContent = f.label;
+    labelRow.appendChild(labelText);
+
+    if (isNumeric) {
+      var valueDisplay = document.createElement("span");
+      valueDisplay.className = "sn-field-value";
+      valueDisplay.id = "sn-val-" + f.key;
+      valueDisplay.textContent = f.value != null ? String(f.value) : "";
+      labelRow.appendChild(valueDisplay);
+    }
+    wrap.appendChild(labelRow);
+
+    if (isNumeric && f.min != null && f.max != null) {
+      /* Slider */
+      var isThreshold = (f.key.indexOf("threshold") !== -1 || f.key.indexOf("score") !== -1);
+      var trackWrap = document.createElement("div");
+      trackWrap.className = "sn-slider-track-wrap" + (isThreshold ? " sn-ramp" : "");
+      trackWrap.style.position = "relative";
+
+      var currentVal = f.value != null ? Number(f.value) : f.min;
+      var range = f.max - f.min || 1;
+      var pct = Math.max(0, Math.min(100, ((currentVal - f.min) / range) * 100));
+
+      if (!isThreshold) {
+        var fill = document.createElement("div");
+        fill.className = "sn-slider-fill";
+        fill.style.width = pct + "%";
+        trackWrap.appendChild(fill);
+      } else {
+        var marker = document.createElement("div");
+        marker.className = "sn-ramp-marker";
+        marker.style.left = pct + "%";
+        trackWrap.appendChild(marker);
+      }
+
+      var thumb = document.createElement("div");
+      thumb.className = "sn-slider-thumb";
+      thumb.style.left = pct + "%";
+      trackWrap.appendChild(thumb);
+
+      /* Native input range (visually hidden, drives updates) */
+      var input = document.createElement("input");
+      input.type = "range";
       input.min = f.min;
       input.max = f.max;
-      input.step = (f.type === "float") ? "0.1" : "1";
+      input.step = isFloat ? "0.1" : "1";
+      input.value = currentVal;
+      input.id = "set-" + f.key;
+      input.dataset.key = f.key;
+      input.dataset.type = f.type;
+      input.style.cssText = "position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;margin:0;";
+      trackWrap.appendChild(input);
+
+      input.addEventListener("input", function() {
+        var v = parseFloat(input.value);
+        var p = Math.max(0, Math.min(100, ((v - f.min) / range) * 100));
+        thumb.style.left = p + "%";
+        if (fill) fill.style.width = p + "%";
+        if (marker) marker.style.left = p + "%";
+        var valEl = document.getElementById("sn-val-" + f.key);
+        if (valEl) valEl.textContent = isFloat ? v.toFixed(1) : String(Math.round(v));
+        if (v !== (f.value != null ? Number(f.value) : f.min)) {
+          _dirtyKeys.add(f.key);
+        } else {
+          _dirtyKeys.delete(f.key);
+        }
+      });
+
+      wrap.appendChild(trackWrap);
+
+      var minmax = document.createElement("div");
+      minmax.className = "sn-slider-minmax";
+      var minEl = document.createElement("span"); minEl.className = "mono"; minEl.textContent = String(f.min);
+      var maxEl = document.createElement("span"); maxEl.className = "mono"; maxEl.textContent = String(f.max);
+      minmax.appendChild(minEl);
+      minmax.appendChild(maxEl);
+      wrap.appendChild(minmax);
+
+    } else {
+      /* Text / number input */
+      var textInput = document.createElement("input");
+      textInput.type = isString ? "text" : "number";
+      textInput.id = "set-" + f.key;
+      textInput.dataset.key = f.key;
+      textInput.dataset.type = f.type;
+      textInput.className = "sn-input";
+      if (!isString && f.min != null) textInput.min = f.min;
+      if (!isString && f.max != null) textInput.max = f.max;
+      if (isFloat) textInput.step = "0.1";
+      textInput.value = f.value != null ? f.value : "";
+      textInput.addEventListener("input", function() {
+        if (String(textInput.value) !== String(f.value != null ? f.value : "")) {
+          _dirtyKeys.add(f.key);
+        } else {
+          _dirtyKeys.delete(f.key);
+        }
+      });
+      wrap.appendChild(textInput);
     }
-    input.value = f.value != null ? f.value : "";
-    input.addEventListener("input", function () {
-      if (String(input.value) !== String(f.value != null ? f.value : "")) {
-        _dirtyKeys.add(f.key);
-        wrap.classList.add("dirty");
-      } else {
-        _dirtyKeys.delete(f.key);
-        wrap.classList.remove("dirty");
-      }
-    });
-    wrap.appendChild(input);
 
     if (f.hint) {
       var hint = document.createElement("div");
-      hint.className = "settings-field-hint";
-      hint.textContent = isString ? f.hint : (f.hint + "  (range " + f.min + "–" + f.max + ")");
+      hint.className = "sn-field-hint";
+      hint.textContent = f.hint;
+      if (isNumeric && f.min != null && f.max != null) {
+        hint.textContent += "  (range " + f.min + "–" + f.max + ")";
+      }
       wrap.appendChild(hint);
     }
+
     return wrap;
   }
 
-  function _saveSettings() {
+  function _saveSettingsNocturne() {
     var status = document.getElementById("settings-status");
-    var container = document.getElementById("settings-groups");
+    var pane = document.getElementById("settings-pane");
+    if (!status || !pane) return;
+
     var updates = {};
-    container.querySelectorAll("input[data-key]").forEach(function (inp) {
+    pane.querySelectorAll("input[data-key]").forEach(function(inp) {
       if (!_dirtyKeys.has(inp.dataset.key)) return;
       var v = inp.value;
       if (inp.dataset.type === "str") {
-        updates[inp.dataset.key] = v; // preserve empty strings on purpose
+        updates[inp.dataset.key] = v;
       } else {
         var trimmed = v.trim();
         if (trimmed === "") return;
         updates[inp.dataset.key] = parseFloat(trimmed);
       }
     });
+
     if (Object.keys(updates).length === 0) {
-      status.className = "settings-status"; status.textContent = "No changes to save.";
+      status.className = "settings-status";
+      status.textContent = "No changes to save.";
       return;
     }
-    status.className = "settings-status"; status.textContent = "⏳ Saving…";
+
+    status.className = "settings-status";
+    status.textContent = "Saving…";
     fetch("/api/settings", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify(updates),
-    }).then(function (r) { return r.json().then(function (d) { return {ok: r.ok, body: d}; }); })
-      .then(function (res) {
+    }).then(function(r) { return r.json().then(function(d) { return {ok: r.ok, body: d}; }); })
+      .then(function(res) {
         if (res.body.ok) {
           status.className = "settings-status ok";
           var msg = "✓ Saved " + Object.keys(res.body.applied || {}).length + " setting(s)";
           if (res.body.costs_recomputed != null) {
-            msg += " · " + res.body.costs_recomputed + " costs recomputed";
+            msg += " \xB7 " + res.body.costs_recomputed + " costs recomputed";
           }
           status.textContent = msg;
-          /* Reload dashboard data so detail panes show the fresh cost immediately */
           if (window.loadData) window.loadData();
-          setTimeout(renderSettings, 1000);
+          _dirtyKeys.clear();
+          setTimeout(renderSettingsNocturne, 1200);
         } else {
           status.className = "settings-status err";
-          status.textContent = "✗ " + (res.body.errors || []).join(" · ");
+          status.textContent = "✗ " + (res.body.errors || []).join(" \xB7 ");
         }
       })
-      .catch(function () {
+      .catch(function() {
         status.className = "settings-status err";
         status.textContent = "✗ Network error";
       });
   }
+
+  /* Keep legacy aliases for any external callers */
+  function renderSettings() { renderSettingsNocturne(); }
+  function _saveSettings() { _saveSettingsNocturne(); }
+  function _buildSettingsField(f) { return _buildSettingsFieldNocturne(f); }
 
   /* ============================== FILTER HELPERS ============================== */
 
