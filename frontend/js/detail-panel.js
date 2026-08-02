@@ -1258,6 +1258,473 @@
   }
 
   /* ================================================================
+     Private: _buildUtilityButtons — re-evaluate / debug / delete (small, secondary)
+     These appear at the bottom of the left column in the new layout.
+     ================================================================ */
+  function _buildUtilityButtons(entry) {
+    var wrap = document.createElement("div");
+    wrap.style.cssText = "display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;";
+
+    /* Re-evaluate */
+    var reevalBtn = document.createElement("button");
+    reevalBtn.type = "button";
+    reevalBtn.className = "btn btn-secondary";
+    reevalBtn.style.fontSize = "12px";
+    reevalBtn.textContent = "Re-evaluate";
+    reevalBtn.title = "Re-run AI evaluation";
+    reevalBtn.addEventListener("click", function () {
+      reevalBtn.disabled = true;
+      reevalBtn.textContent = "Evaluating…";
+      fetch("/api/listings/" + encodeURIComponent(entry.id) + "/reevaluate", {method: "POST"})
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d.ok) {
+            window.showToast && window.showToast("Score: " + d.score + "/100", "ok");
+            window.loadData && window.loadData().then(function () { window.openDetailPanel(entry.id); });
+          } else {
+            window.showToast && window.showToast("Re-evaluate failed: " + (d.error || "unknown"), "error");
+            reevalBtn.disabled = false;
+            reevalBtn.textContent = "Re-evaluate";
+          }
+        })
+        .catch(function () {
+          window.showToast && window.showToast("Re-evaluate failed", "error");
+          reevalBtn.disabled = false;
+          reevalBtn.textContent = "Re-evaluate";
+        });
+    });
+    wrap.appendChild(reevalBtn);
+
+    /* Debug */
+    var debugBtn = document.createElement("button");
+    debugBtn.type = "button";
+    debugBtn.className = "btn btn-secondary";
+    debugBtn.style.fontSize = "12px";
+    debugBtn.textContent = "Debug";
+    debugBtn.title = "Show what data Claude sees";
+    debugBtn.addEventListener("click", function () {
+      fetch("/api/listings/" + encodeURIComponent(entry.id) + "/debug")
+        .then(function (r) { return r.json(); })
+        .then(function (d) { _showDebugModal(d); })
+        .catch(function () { window.showToast && window.showToast("Debug fetch failed", "error"); });
+    });
+    wrap.appendChild(debugBtn);
+
+    /* Delete */
+    var deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "btn btn-secondary";
+    deleteBtn.style.cssText = "font-size:12px;border-color:rgba(196,99,95,0.4);color:var(--score-0);";
+    deleteBtn.textContent = "Delete";
+    deleteBtn.title = "Remove this listing";
+    deleteBtn.addEventListener("click", function () {
+      if (!window.confirm("Delete this listing? This cannot be undone.")) return;
+      deleteBtn.disabled = true;
+      fetch("/api/listings/" + encodeURIComponent(entry.id), {method: "DELETE"})
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d.ok) {
+            window.showToast && window.showToast("Deleted", "ok");
+            currentListingId = null;
+            window.loadData && window.loadData().then(function () {
+              var mainEl = document.getElementById("detail-main");
+              if (mainEl) {
+                while (mainEl.firstChild) mainEl.removeChild(mainEl.firstChild);
+                var empty = document.createElement("div");
+                empty.className = "empty-state";
+                var msg = document.createElement("div");
+                msg.className = "big";
+                msg.textContent = "Select a listing from the list";
+                empty.appendChild(msg);
+                mainEl.appendChild(empty);
+              }
+            });
+          } else {
+            window.showToast && window.showToast("Delete failed: " + (d.error || ""), "error");
+            deleteBtn.disabled = false;
+          }
+        }).catch(function () {
+          window.showToast && window.showToast("Delete failed", "error");
+          deleteBtn.disabled = false;
+        });
+    });
+    wrap.appendChild(deleteBtn);
+
+    return wrap;
+  }
+
+  /* ================================================================
+     Private: _buildNocturneCostCard — Wave 3 cost of ownership card
+     Reuses the edit/save/reset logic from the original _buildCostOfOwnership
+     but renders with the new Nocturne tokens.
+     ================================================================ */
+  function _buildNocturneCostCard(coo, entry) {
+    var card = document.createElement("div");
+    card.className = "dm-coo-card";
+    if (coo.overridden) card.style.boxShadow = "inset 0 0 0 1px rgba(201,139,82,0.35)";
+
+    /* Header row: kicker + total */
+    var head = document.createElement("div");
+    head.className = "dm-coo-head";
+
+    var kicker = document.createElement("span");
+    kicker.className = "dm-coo-kicker";
+    kicker.textContent = "Cost of ownership";
+    head.appendChild(kicker);
+
+    var totalRight = document.createElement("div");
+    totalRight.style.cssText = "display:flex;align-items:center;gap:8px;";
+
+    var totalWrap = document.createElement("div");
+    totalWrap.className = "dm-coo-total-wrap";
+    var total = document.createElement("span");
+    total.className = "dm-coo-total";
+    total.textContent = window.fmtEur(coo.monthly_total_eur || 0);
+    totalWrap.appendChild(total);
+    var suf = document.createElement("span");
+    suf.className = "dm-coo-total-suffix";
+    suf.textContent = "/kuu";
+    totalWrap.appendChild(suf);
+    totalRight.appendChild(totalWrap);
+
+    /* Edit button — ghost style */
+    var editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "btn btn-ghost";
+    editBtn.style.cssText = "font-size:11px;padding:2px 6px;";
+    editBtn.textContent = coo.overridden ? "Edit ✎" : "✎";
+    editBtn.title = "Override cost breakdown";
+    totalRight.appendChild(editBtn);
+
+    head.appendChild(totalRight);
+    card.appendChild(head);
+
+    /* Stacked bar */
+    var barWrap = document.createElement("div");
+    barWrap.className = "dm-coo-bar-wrap";
+    var b = coo.breakdown || {};
+    var parts = [
+      {key: "mortgage", color: "var(--color-accent)"},
+      {key: "heating",  color: "var(--color-accent-700)"},
+      {key: "ku_fee",   color: "var(--color-accent-800)"},
+      {key: "utilities",color: "var(--color-accent-900)"},
+    ];
+    var total2 = (b.mortgage || 0) + (b.heating || 0) + (b.ku_fee || 0) + (b.utilities || 0);
+    parts.forEach(function (p) {
+      if (!total2) return;
+      var seg = document.createElement("div");
+      seg.style.cssText = "flex:" + ((b[p.key] || 0) / total2) + ";background:" + p.color + ";";
+      barWrap.appendChild(seg);
+    });
+    card.appendChild(barWrap);
+
+    /* Breakdown rows (read view) */
+    var readGrid = document.createElement("div");
+    readGrid.className = "dm-coo-breakdown";
+    var lines = [
+      ["mortgage",  "Laen 2.1% · 30a"],
+      ["heating",   "Küte (talv, keskm.)"],
+      ["ku_fee",    "KÜ + remondifond"],
+      ["utilities", "Vesi, elekter, kindlustus"],
+    ];
+    lines.forEach(function (pair) {
+      var row = document.createElement("div");
+      row.className = "dm-coo-row";
+      var lbl = document.createElement("span");
+      lbl.className = "dm-coo-label";
+      lbl.textContent = pair[1];
+      row.appendChild(lbl);
+      var val = document.createElement("span");
+      val.className = "dm-coo-val";
+      val.textContent = b[pair[0]] != null ? window.fmtEur(b[pair[0]]) : "—";
+      row.appendChild(val);
+      readGrid.appendChild(row);
+    });
+    card.appendChild(readGrid);
+
+    /* Assumptions footnote */
+    var a = coo.assumptions || {};
+    if (Object.keys(a).length) {
+      var foot = document.createElement("div");
+      foot.style.cssText = "font-size:10px;color:var(--color-text-muted);margin-top:8px;font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;";
+      var footParts = [];
+      if (a.down_pct != null) footParts.push(a.down_pct + "% down");
+      if (a.interest_pct != null) footParts.push(a.interest_pct + "% rate");
+      if (a.term_years != null) footParts.push(a.term_years + "y");
+      foot.textContent = footParts.join(" · ");
+      card.appendChild(foot);
+    }
+
+    /* Edit form (hidden by default) — reuses backend /api/entry/{id}/cost-override */
+    var editWrap = document.createElement("div");
+    editWrap.style.display = "none";
+    editWrap.style.marginTop = "10px";
+
+    var editHint = document.createElement("div");
+    editHint.style.cssText = "font-size:11px;color:var(--color-text-muted);margin-bottom:8px;";
+    editHint.textContent = "Override per-listing values. Blank = keep current.";
+    editWrap.appendChild(editHint);
+
+    var editGrid = document.createElement("div");
+    editGrid.style.cssText = "display:flex;flex-direction:column;gap:6px;";
+    var inputs = {};
+    lines.forEach(function (pair) {
+      var key = pair[0], label = pair[1];
+      var field = document.createElement("div");
+      field.style.cssText = "display:flex;justify-content:space-between;align-items:center;gap:8px;";
+      var lbl = document.createElement("label");
+      lbl.style.cssText = "font-size:12px;color:var(--color-text-secondary);flex:1;";
+      lbl.textContent = label;
+      var inp = document.createElement("input");
+      inp.type = "number";
+      inp.min = "0";
+      inp.step = "1";
+      inp.style.cssText = "width:80px;background:var(--color-sunken);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:4px 8px;color:var(--color-text);font-family:'JetBrains Mono',monospace;font-size:12px;";
+      inp.placeholder = String(b[key] != null ? b[key] : "");
+      inp.value = b[key] != null ? String(b[key]) : "";
+      inputs[key] = inp;
+      field.appendChild(lbl);
+      field.appendChild(inp);
+      editGrid.appendChild(field);
+    });
+    editWrap.appendChild(editGrid);
+
+    var actRow = document.createElement("div");
+    actRow.style.cssText = "display:flex;gap:8px;margin-top:10px;";
+    var saveBtn = document.createElement("button");
+    saveBtn.type = "button";
+    saveBtn.className = "btn btn-primary";
+    saveBtn.style.fontSize = "12px";
+    saveBtn.textContent = "Save";
+    var cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "btn btn-secondary";
+    cancelBtn.style.fontSize = "12px";
+    cancelBtn.textContent = "Cancel";
+    var resetBtn = document.createElement("button");
+    resetBtn.type = "button";
+    resetBtn.className = "btn btn-ghost";
+    resetBtn.style.fontSize = "12px";
+    resetBtn.textContent = "Reset";
+    actRow.appendChild(saveBtn);
+    actRow.appendChild(cancelBtn);
+    actRow.appendChild(resetBtn);
+    editWrap.appendChild(actRow);
+    card.appendChild(editWrap);
+
+    function _swap(showEdit) {
+      editWrap.style.display = showEdit ? "block" : "none";
+      readGrid.style.display  = showEdit ? "none"  : "flex";
+      editBtn.textContent     = showEdit ? "Close" : "✎";
+    }
+    editBtn.addEventListener("click", function () { _swap(editWrap.style.display === "none"); });
+    cancelBtn.addEventListener("click", function () { _swap(false); });
+
+    function _replaceCard(newCoo) {
+      if (!entry) return;
+      entry.cost_of_ownership = newCoo;
+      var fresh = _buildNocturneCostCard(newCoo, entry);
+      card.parentNode.replaceChild(fresh, card);
+    }
+
+    saveBtn.addEventListener("click", function () {
+      var body = {};
+      Object.keys(inputs).forEach(function (k) {
+        var v = inputs[k].value.trim();
+        if (v !== "") body[k] = Number(v);
+      });
+      saveBtn.disabled = true;
+      fetch("/api/entry/" + encodeURIComponent(entry.id) + "/cost-override", {
+        method: "POST",
+        headers: {"content-type": "application/json"},
+        body: JSON.stringify(body),
+      })
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(r); })
+        .then(function (j) {
+          window.showToast && window.showToast("Cost updated", "success");
+          _replaceCard(j.cost_of_ownership);
+        })
+        .catch(function () {
+          saveBtn.disabled = false;
+          window.showToast && window.showToast("Save failed", "error");
+        });
+    });
+
+    resetBtn.addEventListener("click", function () {
+      resetBtn.disabled = true;
+      fetch("/api/entry/" + encodeURIComponent(entry.id) + "/cost-override", {method: "DELETE"})
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(r); })
+        .then(function (j) {
+          window.showToast && window.showToast("Reset to computed", "success");
+          _replaceCard(j.cost_of_ownership);
+        })
+        .catch(function () {
+          resetBtn.disabled = false;
+          window.showToast && window.showToast("Reset failed", "error");
+        });
+    });
+
+    return card;
+  }
+
+  /* ================================================================
+     Private: _buildNocturneNegCard — Wave 3 negotiation + draft email card
+     ================================================================ */
+  function _buildNocturneNegCard(entry, isPending, isRejected) {
+    var card = document.createElement("div");
+    card.className = "dm-neg-card";
+
+    var brief = entry.negotiation_brief || {};
+
+    /* Header: kicker + regenerate */
+    var head = document.createElement("div");
+    head.className = "dm-neg-head";
+    var kicker = document.createElement("span");
+    kicker.className = "dm-neg-kicker";
+    kicker.textContent = "Negotiation";
+    head.appendChild(kicker);
+
+    var regenBtn = document.createElement("button");
+    regenBtn.type = "button";
+    regenBtn.className = "dm-neg-regen";
+    regenBtn.textContent = "regenerate";
+    regenBtn.addEventListener("click", function () {
+      regenBtn.disabled = true;
+      window.regenerateBriefClick && window.regenerateBriefClick(entry.id, regenBtn);
+    });
+    head.appendChild(regenBtn);
+    card.appendChild(head);
+
+    /* needs_review warning */
+    if (brief.needs_review === true) {
+      var badge = document.createElement("div");
+      badge.style.cssText = "font-size:11px;color:var(--score-40);margin-top:6px;";
+      badge.textContent = "Numbers may need review";
+      card.appendChild(badge);
+    }
+
+    /* Offer range */
+    var low = brief.suggested_offer_low_eur;
+    var high = brief.suggested_offer_high_eur;
+    if (low || high) {
+      var offerRow = document.createElement("div");
+      offerRow.className = "dm-neg-offer-row";
+
+      var offerEl = document.createElement("span");
+      offerEl.className = "dm-neg-offer";
+      /* Format as XXX–XXXk */
+      function _kFmt(n) {
+        if (!n) return "—";
+        return Math.round(n / 1000) + "k";
+      }
+      offerEl.textContent = (low ? _kFmt(low) : "—") + (high ? "–" + _kFmt(high) : "");
+      offerRow.appendChild(offerEl);
+
+      var askPrice = entry.price_eur || entry.price;
+      var meta = document.createElement("span");
+      meta.className = "dm-neg-offer-meta";
+      meta.textContent = "target" + (askPrice ? " · ask " + _kFmt(askPrice) : "");
+      offerRow.appendChild(meta);
+
+      card.appendChild(offerRow);
+
+      /* Progress bar */
+      if (askPrice && low && high) {
+        var progressBar = document.createElement("div");
+        progressBar.className = "dm-neg-progress";
+        var scaleMin = askPrice * 0.70;
+        var scaleMax = askPrice;
+        var span = scaleMax - scaleMin;
+        var leftPct = ((low - scaleMin) / span) * 100;
+        var widthPct = ((high - low) / span) * 100;
+        leftPct = Math.max(0, Math.min(95, leftPct));
+        widthPct = Math.max(2, Math.min(95 - leftPct, widthPct));
+
+        var fill = document.createElement("div");
+        fill.className = "dm-neg-progress-fill";
+        fill.style.left = leftPct.toFixed(1) + "%";
+        fill.style.width = widthPct.toFixed(1) + "%";
+        progressBar.appendChild(fill);
+
+        var askMark = document.createElement("div");
+        askMark.className = "dm-neg-progress-ask";
+        askMark.style.left = "98%";
+        progressBar.appendChild(askMark);
+
+        card.appendChild(progressBar);
+      }
+    } else if (!brief.brief_ru) {
+      var emptyMsg = document.createElement("div");
+      emptyMsg.style.cssText = "color:var(--color-text-muted);font-size:12px;margin-top:10px;";
+      emptyMsg.textContent = "No negotiation brief yet — click regenerate.";
+      card.appendChild(emptyMsg);
+    }
+
+    /* Brief text */
+    if (brief.brief_ru) {
+      var body = document.createElement("div");
+      body.className = "dm-neg-body";
+      body.textContent = brief.brief_ru;
+      card.appendChild(body);
+    } else if (brief.error) {
+      var errEl = document.createElement("div");
+      errEl.style.cssText = "color:var(--score-0);font-size:12px;margin-top:10px;";
+      errEl.textContent = brief.error;
+      card.appendChild(errEl);
+    }
+
+    /* Action row: Draft broker email + KÜ history */
+    var actions = document.createElement("div");
+    actions.className = "dm-neg-actions";
+
+    if (!isPending && !isRejected) {
+      var draftBtn = document.createElement("button");
+      draftBtn.type = "button";
+      draftBtn.className = "btn btn-primary";
+      draftBtn.style.fontSize = "12px";
+      draftBtn.textContent = "Draft broker email";
+      var draftStatus = document.createElement("span");
+      draftStatus.style.cssText = "font-size:11px;color:var(--color-text-muted);";
+      draftBtn.addEventListener("click", function () {
+        draftBtn.disabled = true;
+        fetch("/api/draft/" + encodeURIComponent(entry.id), {method: "POST"})
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (d.ok) {
+              draftStatus.textContent = "Draft created — check Gmail Drafts";
+              window.showToast && window.showToast("Draft created", "ok");
+            } else {
+              draftStatus.textContent = d.reason === "no_email" ? "No agent email" : "Failed — retry";
+              draftBtn.disabled = false;
+            }
+          }).catch(function () {
+            draftStatus.textContent = "Failed — retry";
+            draftBtn.disabled = false;
+          });
+      });
+      actions.appendChild(draftBtn);
+      actions.appendChild(draftStatus);
+    }
+
+    var kuBtn = document.createElement("button");
+    kuBtn.type = "button";
+    kuBtn.className = "btn btn-secondary";
+    kuBtn.style.fontSize = "12px";
+    kuBtn.textContent = "KÜ · price history";
+    kuBtn.addEventListener("click", function () {
+      /* Scroll to KÜ card if visible */
+      var kuCard = document.querySelector(".dm-ku-section");
+      if (kuCard) kuCard.scrollIntoView({behavior: "smooth", block: "start"});
+      else window.showToast && window.showToast("No KÜ data available for this listing", "ok");
+    });
+    actions.appendChild(kuBtn);
+
+    card.appendChild(actions);
+
+    return card;
+  }
+
+  /* ================================================================
      Private: _buildCostOfOwnership(coo) — true monthly cost card
      ================================================================ */
   function _buildCostOfOwnership(coo, entry) {
