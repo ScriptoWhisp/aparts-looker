@@ -275,7 +275,9 @@
   }
 
   /* ================================================================
-     Private: _renderMainPane(listingId) — full listing detail in right pane
+     Private: _renderMainPane(listingId) — Wave 3 Nocturne redesign
+     Layout: hero row → verdict band → content row (checklist | cost+neg)
+     All legacy action handlers preserved (scheduleViewingClick, etc.)
      ================================================================ */
   function _renderMainPane(listingId) {
     var main = document.getElementById("detail-main");
@@ -290,6 +292,7 @@
     while (main.firstChild) main.removeChild(main.firstChild);
     currentListingId = listingId;
 
+    /* ---- Resolve entry ---- */
     var entry = null, isPending = false, isRejected = false;
     for (var i = 0; i < window.state.properties.length; i++) {
       if (window.state.properties[i].id === listingId) { entry = window.state.properties[i]; break; }
@@ -306,288 +309,33 @@
     }
     if (!entry) return;
 
-    /* ---- Dealbreaker banner ---- */
+    var scoreColor = window.scoreColor(entry.score || 0);
+    var status = entry.status || (isPending ? "pending" : isRejected ? "rejected" : "approved");
+
+    /* ---- [1] HERO ROW ---- */
+    var heroRow = _buildHeroRow(entry, isPending, isRejected, status, scoreColor);
+    main.appendChild(heroRow);
+
+    /* ---- [2] VERDICT BAND ---- */
+    main.appendChild(_buildVerdictBand(entry, scoreColor));
+
+    /* ---- [3] CONTENT ROW: checklist (left) + cost/neg (right) ---- */
+    var contentRow = document.createElement("div");
+    contentRow.className = "dm-content-row";
+
+    /* Left col: 5-column signal grid + legacy action buttons */
+    var leftCol = document.createElement("div");
+    leftCol.className = "dm-left-col";
+
+    /* Dealbreaker banner */
     var dealbreakerBanner = document.createElement("div");
     dealbreakerBanner.className = "dealbreaker-banner";
     dealbreakerBanner.style.display = "none";
     var bannerIcon = document.createElement("span");
-    bannerIcon.textContent = "⚠";
-    var bannerText = document.createElement("span");
-    bannerText.textContent = "Dealbreaker issue — cannot approve until resolved";
+    bannerIcon.textContent = "Dealbreaker issue — cannot approve until resolved";
     dealbreakerBanner.appendChild(bannerIcon);
-    dealbreakerBanner.appendChild(bannerText);
-    main.appendChild(dealbreakerBanner);
+    leftCol.appendChild(dealbreakerBanner);
 
-    /* ---- Header: title + score ---- */
-    var titleRow = document.createElement("div");
-    titleRow.style.cssText = "display:flex;align-items:center;gap:12px;margin-bottom:12px;";
-
-    var scoreEl = document.createElement("span");
-    scoreEl.className = "score-badge";
-    scoreEl.style.background = window.scoreColor(entry.score || 0);
-    scoreEl.textContent = (entry.score != null ? entry.score : "?") + "/100";
-    titleRow.appendChild(scoreEl);
-
-    if (isPending) {
-      var pt = document.createElement("span");
-      pt.className = "card-pending-tag";
-      pt.textContent = "PENDING";
-      titleRow.appendChild(pt);
-    }
-
-    var titleEl = document.createElement("h2");
-    titleEl.style.cssText = "font-size:16px;font-weight:600;color:var(--text);margin:0;flex:1;";
-    titleEl.textContent = entry.title || entry.name || entry.id || "";
-    titleRow.appendChild(titleEl);
-
-    /* Re-evaluate AI button */
-    var reevalBtn = document.createElement("button");
-    reevalBtn.type = "button";
-    reevalBtn.className = "header-action-btn";
-    reevalBtn.textContent = "🤖 Re-evaluate";
-    reevalBtn.title = "Re-run AI evaluation on this listing";
-    reevalBtn.addEventListener("click", function () {
-      reevalBtn.disabled = true;
-      var originalText = reevalBtn.textContent;
-      reevalBtn.textContent = "⏳ Evaluating…";
-      fetch("/api/listings/" + encodeURIComponent(entry.id) + "/reevaluate", {method: "POST"})
-        .then(function (r) { return r.json(); })
-        .then(function (d) {
-          if (d.ok) {
-            window.showToast && window.showToast("Score: " + d.score + "/100 — " + (d.verdict || "").slice(0, 60), "ok");
-            window.loadData().then(function () {
-              window.openDetailPanel(entry.id);
-            });
-          } else {
-            window.showToast && window.showToast("Re-evaluate failed: " + (d.error || "unknown"), "error");
-            reevalBtn.disabled = false;
-            reevalBtn.textContent = originalText;
-          }
-        })
-        .catch(function () {
-          window.showToast && window.showToast("Re-evaluate failed", "error");
-          reevalBtn.disabled = false;
-          reevalBtn.textContent = originalText;
-        });
-    });
-    titleRow.appendChild(reevalBtn);
-
-    /* Debug button — shows exactly what data would be sent to Claude */
-    var debugBtn = document.createElement("button");
-    debugBtn.type = "button";
-    debugBtn.className = "header-action-btn";
-    debugBtn.textContent = "🐛 Debug";
-    debugBtn.title = "Show what data Claude sees for this listing";
-    debugBtn.addEventListener("click", function () {
-      fetch("/api/listings/" + encodeURIComponent(entry.id) + "/debug")
-        .then(function (r) { return r.json(); })
-        .then(function (d) { _showDebugModal(d); })
-        .catch(function () { window.showToast && window.showToast("Debug fetch failed", "error"); });
-    });
-    titleRow.appendChild(debugBtn);
-
-    /* Delete button — hard-remove listing from data store */
-    var deleteBtn = document.createElement("button");
-    deleteBtn.type = "button";
-    deleteBtn.className = "header-action-btn";
-    deleteBtn.style.borderColor = "rgba(239,68,68,0.4)";
-    deleteBtn.style.color = "var(--red)";
-    deleteBtn.textContent = "🗑 Delete";
-    deleteBtn.title = "Remove this listing from the data store";
-    deleteBtn.addEventListener("click", function () {
-      if (!window.confirm("Delete this listing? This cannot be undone.")) return;
-      deleteBtn.disabled = true;
-      fetch("/api/listings/" + encodeURIComponent(entry.id), {method: "DELETE"})
-        .then(function (r) { return r.json(); })
-        .then(function (d) {
-          if (d.ok) {
-            window.showToast && window.showToast("Deleted from " + d.removed_from, "ok");
-            currentListingId = null;
-            window.loadData().then(function () {
-              /* Clear main pane */
-              var mainEl = document.getElementById("detail-main");
-              if (mainEl) {
-                while (mainEl.firstChild) mainEl.removeChild(mainEl.firstChild);
-                var empty = document.createElement("div");
-                empty.className = "empty-state";
-                var msg = document.createElement("div");
-                msg.className = "big";
-                msg.textContent = "Select a listing from the list";
-                empty.appendChild(msg);
-                mainEl.appendChild(empty);
-              }
-            });
-          } else {
-            window.showToast && window.showToast("Delete failed: " + (d.error || "unknown"), "error");
-            deleteBtn.disabled = false;
-          }
-        }).catch(function () {
-          window.showToast && window.showToast("Delete failed", "error");
-          deleteBtn.disabled = false;
-        });
-    });
-    titleRow.appendChild(deleteBtn);
-
-    main.appendChild(titleRow);
-
-    /* ---- Hero image ---- */
-    var imgUrl = entry.image_url || entry.imageUrl || "";
-    if (imgUrl && (imgUrl.startsWith("http://") || imgUrl.startsWith("https://"))) {
-      var imgWrap = document.createElement("div");
-      imgWrap.style.cssText = "position:relative;margin:0 0 14px;border-radius:6px;overflow:hidden;background:var(--surface-2);";
-      var img = document.createElement("img");
-      img.src = imgUrl;
-      img.alt = entry.title || entry.name || "";
-      img.loading = "lazy";
-      img.style.cssText = "width:100%;max-height:340px;object-fit:cover;display:block;";
-      img.addEventListener("error", function () { imgWrap.style.display = "none"; });
-      imgWrap.appendChild(img);
-
-      var count = entry.image_count || entry.imageCount || 0;
-      if (count > 1) {
-        var badge = document.createElement("span");
-        badge.style.cssText = "position:absolute;bottom:10px;right:10px;background:rgba(0,0,0,0.7);color:#fff;padding:4px 10px;border-radius:14px;font-size:11px;font-family:var(--font-mono);";
-        badge.textContent = "📷 " + count + " photos";
-        imgWrap.appendChild(badge);
-      }
-
-      var url = entry.url || "";
-      if (url.startsWith("http://") || url.startsWith("https://")) {
-        var linkOverlay = document.createElement("a");
-        linkOverlay.href = url;
-        linkOverlay.target = "_blank";
-        linkOverlay.rel = "noopener noreferrer";
-        linkOverlay.style.cssText = "position:absolute;inset:0;cursor:zoom-in;";
-        linkOverlay.title = "Open on kv.ee";
-        imgWrap.appendChild(linkOverlay);
-      }
-      main.appendChild(imgWrap);
-    }
-
-    /* ---- Commute badge ---- */
-    var tier = window.commuteTier(entry.commute_minutes);
-    var commuteBadge = document.createElement("span");
-    commuteBadge.className = "commute-badge";
-    if (tier) {
-      commuteBadge.classList.add("commute-" + tier);
-      commuteBadge.textContent = "⏱ " + entry.commute_minutes + " min drive to Bolt HQ";
-    } else {
-      commuteBadge.classList.add("commute-none");
-      commuteBadge.textContent = "⏱ Commute unknown";
-    }
-    main.appendChild(commuteBadge);
-
-    /* ---- Mini-map ---- */
-    if (entry.lat != null && entry.lng != null) {
-      var miniDiv = document.createElement("div");
-      miniDiv.style.cssText = "height:220px;margin:14px 0;border-radius:6px;overflow:hidden;";
-      main.appendChild(miniDiv);
-
-      (function (div, ent) {
-        requestAnimationFrame(function () {
-          var mm = L.map(div, {
-            zoomControl: true, scrollWheelZoom: false, dragging: true, doubleClickZoom: true
-          }).setView([ent.lat, ent.lng], 15); // Leaflet [lat, lng] order
-          L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-            attribution: "© OpenStreetMap contributors", maxZoom: 19
-          }).addTo(mm);
-          L.circleMarker([ent.lat, ent.lng], { // Leaflet [lat, lng] order
-            radius: 10, fillColor: window.scoreColor(ent.score || 0),
-            color: "#fff", weight: 2, fillOpacity: 0.9
-          }).addTo(mm);
-          if (window.state.isochroneGeoJson && window.state.isochroneGeoJson.features && window.state.isochroneGeoJson.features.length) {
-            L.geoJSON(window.state.isochroneGeoJson, {
-              style: {fillColor: "#3b82f6", fillOpacity: 0.12, color: "#3b82f6", weight: 1}
-            }).addTo(mm);
-          }
-          currentMiniMap = mm;
-        });
-      })(miniDiv, entry);
-    }
-
-    /* ---- Key details ---- */
-    var fieldsDiv = document.createElement("div");
-    fieldsDiv.className = "detail-fields";
-
-    function addField(label, value) {
-      if (value == null || value === "" || value === "null") return;
-      var row = document.createElement("div");
-      row.className = "detail-field-row";
-      var lEl = document.createElement("span");
-      lEl.className = "detail-field-label";
-      lEl.textContent = label;
-      var vEl = document.createElement("span");
-      vEl.className = "detail-field-value";
-      vEl.textContent = String(value);
-      row.appendChild(lEl);
-      row.appendChild(vEl);
-      fieldsDiv.appendChild(row);
-    }
-
-    /* Verdict is rendered as a prominent callout in the AI Depth section
-       below — no need to repeat it as a plain field row here. */
-    addField("Price", (entry.price_eur || entry.price) ? window.fmtEur(entry.price_eur || entry.price) : null);
-    addField("Price/m²", (entry.price_per_sqm || entry.pricePerSqm) ? (window.fmtEur(entry.price_per_sqm || entry.pricePerSqm) + " / m²") : null);
-    addField("Area", entry.area_sqm ? entry.area_sqm + " m²" : null);
-    addField("Rooms", entry.rooms);
-    addField("District", entry.district);
-    addField("Floor", (entry.floor != null && entry.floor_total != null) ? (entry.floor + "/" + entry.floor_total) : entry.floor);
-    addField("Year", entry.year_built || entry.year);
-    addField("Material", entry.material);
-    addField("Energy class", entry.energy_class);
-    addField("Parking", entry.parking);
-    addField("Renovation", entry.needs_renovation);
-
-    var url = entry.url || "";
-    if (url.startsWith("http://") || url.startsWith("https://")) {
-      var linkRow = document.createElement("div");
-      linkRow.style.marginTop = "8px";
-      var linkEl = document.createElement("a");
-      linkEl.href = url;
-      linkEl.target = "_blank";
-      linkEl.rel = "noopener noreferrer";
-      linkEl.textContent = "View on kv.ee ↗";
-      linkEl.style.fontSize = "13px";
-      linkRow.appendChild(linkEl);
-      fieldsDiv.appendChild(linkRow);
-    }
-
-    main.appendChild(fieldsDiv);
-
-    /* ---- AI evaluation depth blocks (verdict first, per D-07 ordering) ---- */
-    main.appendChild(_buildAiDepthSection(entry));
-
-    /* ---- Negotiation brief card (below AI Verdict, above COO per D-07) ---- */
-    if (entry.negotiation_brief && entry.negotiation_brief.brief_ru) {
-      main.appendChild(_buildNegotiationBrief(entry.negotiation_brief, entry));
-    }
-
-    /* ---- Cost of ownership block ---- */
-    if (entry.cost_of_ownership) {
-      main.appendChild(_buildCostOfOwnership(entry.cost_of_ownership, entry));
-    }
-
-    /* ---- KÜ data card (ENRICH-01, D-13 hide-when-empty) ---- */
-    var kuHasAuto = entry.ku && entry.ku.auto && entry.ku.auto.reg_code;
-    var kuHasManual = entry.ku && entry.ku.manual;
-    if (kuHasAuto || kuHasManual) {
-      main.appendChild(_buildKuCard(entry.ku, entry));
-    }
-
-    /* ---- Full checklist ---- */
-    var clData = window.state.checklists[entry.id] || {};
-    var manualChecklist = clData.manual_checklist || {};
-
-    var clSection = document.createElement("div");
-    clSection.className = "full-checklist";
-    clSection.style.marginTop = "16px";
-
-    var clHeading = document.createElement("div");
-    clHeading.className = "section-label";
-    clHeading.textContent = "Diligence Checklist";
-    clSection.appendChild(clHeading);
-
-    /* approveBtn reference for dealbreaker blocking */
     var approveBtnRef = null;
 
     function onChecklistChange() {
@@ -595,25 +343,17 @@
       _updateDealbreakerBanner(entry.id, dealbreakerBanner, approveBtnRef);
     }
 
-    var aiFills = entry.ai_checklist_fills || {};
+    leftCol.appendChild(_buildSignalGrid(entry, onChecklistChange));
 
-    (window.FULL_CHECKLIST || []).forEach(function (section) {
-      clSection.appendChild(
-        _buildChecklistGroup(section.label, section.items, entry.id, manualChecklist, false, onChecklistChange, aiFills)
-      );
-    });
-
-    main.appendChild(clSection);
-
-    /* ---- Action buttons (pending only) ---- */
+    /* Legacy action buttons for pending entries */
     if (isPending) {
       var actionsDiv = document.createElement("div");
       actionsDiv.className = "detail-actions";
-      actionsDiv.style.marginTop = "16px";
+      actionsDiv.style.cssText = "margin-top:8px;display:flex;gap:8px;";
 
       var approveBtn = document.createElement("button");
       approveBtn.type = "button";
-      approveBtn.className = "action-btn action-btn-primary";
+      approveBtn.className = "btn btn-primary";
       approveBtn.textContent = "Approve";
       approveBtnRef = approveBtn;
       approveBtn.addEventListener("click", function () {
@@ -629,7 +369,7 @@
 
       var rejectBtn = document.createElement("button");
       rejectBtn.type = "button";
-      rejectBtn.className = "action-btn action-btn-secondary";
+      rejectBtn.className = "btn btn-secondary";
       rejectBtn.textContent = "Reject";
       rejectBtn.addEventListener("click", function () {
         var reason = window.prompt("Reason:", "other");
@@ -645,139 +385,285 @@
       });
       actionsDiv.appendChild(rejectBtn);
 
-      main.appendChild(actionsDiv);
+      leftCol.appendChild(actionsDiv);
     }
 
-    /* ---- Draft Email button (approved listings only — per PROJECT.md decision
-       "approval-gated email drafting" and per main.py:/api/draft/{id} which
-       calls data_store.get_approved_listing).  ---- */
-    if (!isPending && !isRejected) {
-      var draftActionsDiv = document.createElement("div");
-      draftActionsDiv.className = "detail-actions";
-      draftActionsDiv.style.marginTop = "16px";
-      var draftBtn = document.createElement("button");
-      draftBtn.type = "button";
-      draftBtn.className = "action-btn action-btn-secondary";
-      draftBtn.textContent = "Draft Email";
-      var draftStatus = document.createElement("div");
-      draftStatus.className = "action-status";
-      draftBtn.addEventListener("click", function () {
-        draftBtn.disabled = true;
-        fetch("/api/draft/" + encodeURIComponent(entry.id), {method: "POST"})
-          .then(function (r) { return r.json(); })
-          .then(function (d) {
-            if (d.ok) draftStatus.textContent = "Draft created — check Gmail Drafts";
-            else {
-              draftStatus.textContent = d.reason === "no_email" ? "No agent email" : "Failed — retry";
-              draftBtn.disabled = false;
-            }
-          }).catch(function () { draftStatus.textContent = "Failed — retry"; draftBtn.disabled = false; });
+    /* Re-eval + debug + delete utility buttons */
+    leftCol.appendChild(_buildUtilityButtons(entry));
+
+    contentRow.appendChild(leftCol);
+
+    /* Right col: cost + negotiation */
+    var rightCol = document.createElement("div");
+    rightCol.className = "dm-right-col";
+
+    if (entry.cost_of_ownership) {
+      rightCol.appendChild(_buildNocturneCostCard(entry.cost_of_ownership, entry));
+    }
+
+    rightCol.appendChild(_buildNocturneNegCard(entry, isPending, isRejected));
+
+    /* KÜ section: collapsible at the bottom of right col */
+    var kuHasAuto = entry.ku && entry.ku.auto && entry.ku.auto.reg_code;
+    var kuHasManual = entry.ku && entry.ku.manual;
+    if (kuHasAuto || kuHasManual) {
+      var kuWrap = document.createElement("div");
+      kuWrap.className = "dm-ku-section";
+      kuWrap.appendChild(_buildKuCard(entry.ku, entry));
+      rightCol.appendChild(kuWrap);
+    }
+
+    contentRow.appendChild(rightCol);
+    main.appendChild(contentRow);
+
+    /* Initialize dealbreaker banner */
+    _updateDealbreakerBanner(entry.id, dealbreakerBanner, approveBtnRef);
+  }
+
+  /* ----------------------------------------------------------------
+     _buildHeroRow — photo card (300px) + header block
+     ---------------------------------------------------------------- */
+  function _buildHeroRow(entry, isPending, isRejected, status, scoreColor) {
+    var heroRow = document.createElement("div");
+    heroRow.className = "dm-hero-row";
+
+    /* ---- Left: photo card 300×184 ---- */
+    var photoCard = document.createElement("div");
+    photoCard.className = "dm-photo-card";
+
+    var imgUrl = entry.image_url || entry.imageUrl || "";
+    if (imgUrl && (imgUrl.startsWith("http://") || imgUrl.startsWith("https://"))) {
+      var img = document.createElement("img");
+      img.src = imgUrl;
+      img.alt = entry.title || entry.name || "";
+      img.loading = "lazy";
+      img.addEventListener("error", function () {
+        img.style.display = "none";
       });
-      draftActionsDiv.appendChild(draftBtn);
-      main.appendChild(draftActionsDiv);
-      main.appendChild(draftStatus);
+      photoCard.appendChild(img);
+
+      /* Link overlay to kv.ee */
+      var entryUrl = entry.url || "";
+      if (entryUrl.startsWith("http://") || entryUrl.startsWith("https://")) {
+        var linkOverlay = document.createElement("a");
+        linkOverlay.href = entryUrl;
+        linkOverlay.target = "_blank";
+        linkOverlay.rel = "noopener noreferrer";
+        linkOverlay.style.cssText = "position:absolute;inset:0;z-index:2;";
+        photoCard.appendChild(linkOverlay);
+      }
+    } else {
+      var placeholder = document.createElement("span");
+      placeholder.textContent = "photo";
+      photoCard.appendChild(placeholder);
     }
 
-    /* ---- Viewing workflow buttons (approved / viewing_scheduled / viewed) ---- */
+    /* Photo count dots (visual only) */
+    var photoCount = entry.image_count || entry.imageCount || 0;
+    var dotsWrap = document.createElement("div");
+    dotsWrap.className = "dm-photo-dots";
+    var dotCount = Math.min(photoCount > 1 ? 3 : 1, 5);
+    for (var di = 0; di < dotCount; di++) {
+      var dot = document.createElement("span");
+      dot.className = "dm-photo-dot" + (di === 0 ? " active" : "");
+      dotsWrap.appendChild(dot);
+    }
+    if (photoCount > 0) photoCard.appendChild(dotsWrap);
+
+    heroRow.appendChild(photoCard);
+
+    /* ---- Right: header block ---- */
+    var hdrBlock = document.createElement("div");
+    hdrBlock.className = "dm-header-block";
+
+    /* Status row */
+    var statusRow = document.createElement("div");
+    statusRow.className = "dm-status-row";
+
+    /* Status tag */
+    var tagClass = "tag-" + (status === "viewing_scheduled" ? "viewing" : status === "viewed" ? "viewed" : status === "rejected" ? "rejected" : isPending ? "pending" : "approved");
+    var statusTag = document.createElement("span");
+    statusTag.className = "tag " + tagClass;
+    var statusLabels = {
+      "approved": "approved",
+      "viewing_scheduled": "viewing scheduled",
+      "viewed": "viewed",
+      "rejected": "rejected",
+      "pending": "pending"
+    };
+    statusTag.textContent = statusLabels[status] || status;
+    statusRow.appendChild(statusTag);
+
+    /* Viewing info */
+    if (entry.scheduled_at) {
+      var sep = document.createElement("span");
+      sep.style.color = "var(--color-text-muted)";
+      sep.textContent = "·";
+      statusRow.appendChild(sep);
+
+      var viewingInfo = document.createElement("span");
+      viewingInfo.className = "dm-viewing-info";
+      try {
+        var d = new Date(entry.scheduled_at);
+        var months = ["jan","feb","mar","apr","mai","jun","jul","aug","sep","okt","nov","dets"];
+        viewingInfo.textContent = "viewing " + d.getDate() + ". " + months[d.getMonth()] + " " +
+          String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+      } catch (_) {
+        viewingInfo.textContent = entry.scheduled_at;
+      }
+      statusRow.appendChild(viewingInfo);
+    }
+
+    /* Action buttons top-right */
+    var actionRow = document.createElement("div");
+    actionRow.className = "dm-action-row";
+
     if (!isPending && !isRejected) {
-      var status = entry.status || "approved";
-
       if (status === "approved") {
-        /* "Schedule viewing" button + inline datetime-local picker */
-        var viewingDiv = document.createElement("div");
-        viewingDiv.className = "detail-actions viewing-action-row";
-        viewingDiv.style.marginTop = "16px";
-
         var scheduleBtn = document.createElement("button");
         scheduleBtn.type = "button";
-        scheduleBtn.className = "action-btn action-btn-primary";
+        scheduleBtn.className = "btn btn-primary";
         scheduleBtn.id = "schedule-viewing-btn-" + entry.id;
         scheduleBtn.textContent = "Schedule viewing";
 
+        /* Inline picker (hidden) */
         var pickerWrap = document.createElement("div");
-        pickerWrap.className = "viewing-picker-wrap";
-        pickerWrap.style.display = "none";
-        pickerWrap.style.marginTop = "10px";
-
+        pickerWrap.style.cssText = "display:none;position:absolute;top:100%;right:0;z-index:100;background:var(--color-surface);border-radius:var(--radius-md);box-shadow:var(--shadow-md);padding:12px;margin-top:4px;flex-direction:column;gap:8px;min-width:220px;";
         var dtInput = document.createElement("input");
         dtInput.type = "datetime-local";
         dtInput.id = "scheduled-at-input-" + entry.id;
-        dtInput.className = "viewing-dt-input";
-        /* Default: today at 17:00 local (D-10) */
+        dtInput.style.cssText = "background:var(--color-sunken);border:1px solid var(--color-border);border-radius:var(--radius-sm);padding:6px 8px;color:var(--color-text);font-family:var(--font-body);font-size:13px;";
         var defDate = new Date();
         defDate.setHours(17, 0, 0, 0);
         dtInput.value = defDate.toISOString().slice(0, 16);
-
         var confirmBtn = document.createElement("button");
         confirmBtn.type = "button";
-        confirmBtn.className = "action-btn action-btn-primary";
-        confirmBtn.style.marginLeft = "8px";
+        confirmBtn.className = "btn btn-primary";
         confirmBtn.textContent = "Confirm";
-
+        confirmBtn.addEventListener("click", function () {
+          window.scheduleViewingClick(entry.id);
+          pickerWrap.style.display = "none";
+        });
         pickerWrap.appendChild(dtInput);
         pickerWrap.appendChild(confirmBtn);
 
+        var scheduleBtnWrap = document.createElement("div");
+        scheduleBtnWrap.style.cssText = "position:relative;display:inline-block;";
         scheduleBtn.addEventListener("click", function () {
           pickerWrap.style.display = pickerWrap.style.display === "none" ? "flex" : "none";
         });
-
-        confirmBtn.addEventListener("click", function () {
-          window.scheduleViewingClick(entry.id);
-        });
-
-        viewingDiv.appendChild(scheduleBtn);
-        viewingDiv.appendChild(pickerWrap);
-        main.appendChild(viewingDiv);
+        scheduleBtnWrap.appendChild(scheduleBtn);
+        scheduleBtnWrap.appendChild(pickerWrap);
+        actionRow.appendChild(scheduleBtnWrap);
 
       } else if (status === "viewing_scheduled") {
-        /* "Mark viewed" button — enabled only when scheduled_at is in the past */
-        var viewedDiv = document.createElement("div");
-        viewedDiv.className = "detail-actions viewing-action-row";
-        viewedDiv.style.marginTop = "16px";
-
         var markViewedBtn = document.createElement("button");
         markViewedBtn.type = "button";
-        markViewedBtn.className = "action-btn action-btn-primary";
+        markViewedBtn.className = "btn btn-primary";
         markViewedBtn.id = "mark-viewed-btn-" + entry.id;
         markViewedBtn.textContent = "Mark viewed";
-
-        var scheduledAt = entry.scheduled_at;
-        if (scheduledAt) {
-          var scheduledTime = new Date(scheduledAt);
+        if (entry.scheduled_at) {
+          var scheduledTime = new Date(entry.scheduled_at);
           if (new Date() < scheduledTime) {
             markViewedBtn.disabled = true;
-            markViewedBtn.style.opacity = "0.5";
             markViewedBtn.title = "Available from " + scheduledTime.toLocaleString();
           }
         }
-
         markViewedBtn.addEventListener("click", function () {
           window.markViewedClick(entry.id);
         });
+        actionRow.appendChild(markViewedBtn);
+      }
 
-        viewedDiv.appendChild(markViewedBtn);
-        main.appendChild(viewedDiv);
-
-      } else if (status === "viewed") {
-        /* Static label when already viewed */
-        var viewedLabel = document.createElement("div");
-        viewedLabel.className = "viewing-action-row";
-        viewedLabel.style.cssText = "margin-top:16px;font-size:12px;color:var(--text-muted);font-family:var(--font-mono);";
-        var viewedAt = "";
-        var history = entry.viewing_history || [];
-        for (var hi = history.length - 1; hi >= 0; hi--) {
-          if (history[hi].action === "viewed") {
-            viewedAt = new Date(history[hi].at).toLocaleDateString();
-            break;
-          }
-        }
-        viewedLabel.textContent = viewedAt ? "Viewed on " + viewedAt : "Viewed";
-        main.appendChild(viewedLabel);
+      /* kv.ee link button */
+      var entryUrl2 = entry.url || "";
+      if (entryUrl2.startsWith("http://") || entryUrl2.startsWith("https://")) {
+        var kvLink = document.createElement("a");
+        kvLink.href = entryUrl2;
+        kvLink.target = "_blank";
+        kvLink.rel = "noopener noreferrer";
+        kvLink.className = "btn btn-secondary";
+        kvLink.style.textDecoration = "none";
+        kvLink.textContent = "kv.ee ↗";
+        actionRow.appendChild(kvLink);
       }
     }
 
-    /* Initialize dealbreaker banner now that approveBtn is wired */
-    _updateDealbreakerBanner(entry.id, dealbreakerBanner, approveBtnRef);
+    var statusAndActions = document.createElement("div");
+    statusAndActions.style.cssText = "display:flex;justify-content:space-between;align-items:flex-start;gap:12px;";
+    statusAndActions.appendChild(statusRow);
+    statusAndActions.appendChild(actionRow);
+    hdrBlock.appendChild(statusAndActions);
+
+    /* Title */
+    var titleEl = document.createElement("div");
+    titleEl.className = "dm-title";
+    titleEl.textContent = entry.title || entry.name || entry.id || "";
+    hdrBlock.appendChild(titleEl);
+
+    /* Meta line: district · rooms · floor · year · energiaklass */
+    var metaParts = [];
+    if (entry.district) metaParts.push(entry.district);
+    if (entry.rooms) metaParts.push(entry.rooms + " tuba");
+    if (entry.floor != null && entry.floor_total != null) metaParts.push(entry.floor + "/" + entry.floor_total + " korrus");
+    else if (entry.floor != null) metaParts.push(entry.floor + ". korrus");
+    if (entry.year_built || entry.year) metaParts.push(String(entry.year_built || entry.year));
+    if (entry.energy_class) metaParts.push("energiaklass " + entry.energy_class);
+    var metaLine = document.createElement("div");
+    metaLine.className = "dm-meta-line";
+    metaLine.textContent = metaParts.join(" · ");
+    hdrBlock.appendChild(metaLine);
+
+    /* 4-metric strip */
+    var strip = document.createElement("div");
+    strip.className = "dm-metric-strip";
+
+    function _metricCell(val, meta, color) {
+      var cell = document.createElement("div");
+      cell.className = "dm-metric-cell";
+      var v = document.createElement("div");
+      v.className = "dm-metric-val";
+      if (color) v.style.color = color;
+      v.textContent = val;
+      var m = document.createElement("div");
+      m.className = "dm-metric-meta";
+      m.textContent = meta;
+      cell.appendChild(v);
+      cell.appendChild(m);
+      return cell;
+    }
+
+    /* Price */
+    var price = entry.price_eur || entry.price || 0;
+    var pricePerSqm = entry.price_per_sqm || entry.pricePerSqm;
+    var priceMetaParts = [];
+    if (pricePerSqm) priceMetaParts.push(Math.round(pricePerSqm) + " €/m²");
+    /* District delta: not reliably in entry data, skip if absent */
+    strip.appendChild(_metricCell(price ? window.fmtEur(price) : "—", priceMetaParts.join(" · ") || "asking price", null));
+
+    /* Area */
+    var areaMeta = entry.area_sqm ? "m²" : "";
+    if (entry.rooms) areaMeta += (areaMeta ? " · " : "") + entry.rooms + " tuba";
+    strip.appendChild(_metricCell(entry.area_sqm ? entry.area_sqm : "—", areaMeta || "area", null));
+
+    /* Score */
+    /* Rank among all known listings */
+    var allScored = (window.state.properties || []).concat(window.state.pending || []).filter(function (e) { return e.score != null; });
+    allScored.sort(function (a, b) { return b.score - a.score; });
+    var rank = allScored.findIndex(function (e) { return e.id === entry.id; });
+    var rankPct = allScored.length > 0 && rank >= 0 ? Math.round((rank / allScored.length) * 100) : null;
+    var scoreMeta = "score" + (rankPct !== null ? " · top " + Math.max(1, rankPct) + "%" : "");
+    strip.appendChild(_metricCell(entry.score != null ? String(entry.score) : "—", scoreMeta, scoreColor));
+
+    /* Monthly total */
+    var coo = entry.cost_of_ownership;
+    var monthlyTotal = coo ? coo.monthly_total_eur : null;
+    strip.appendChild(_metricCell(monthlyTotal ? window.fmtEur(monthlyTotal) : "—", "monthly, all-in", null));
+
+    hdrBlock.appendChild(strip);
+    heroRow.appendChild(hdrBlock);
+
+    return heroRow;
   }
 
   /* ================================================================
