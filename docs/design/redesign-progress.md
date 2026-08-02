@@ -79,7 +79,74 @@ All user/listing strings in Wave 2 JS use `.textContent`. No `innerHTML` with li
 
 ---
 
-## Handoff to Wave 3 — Detail Tab
+---
+
+## Wave 3 — Detail Tab (COMPLETE)
+
+### Objective
+
+Rebuild the Detail tab with the Nocturne layout from brief 1c/1d: 284px sidebar with
+score-colored left rules + main pane with hero row, verdict band, and the option B
+5-column signal grid checklist. Cost and negotiation cards in the 340px right column.
+
+### Files modified
+
+| File | Changes |
+|------|---------|
+| `frontend/index.html` | Rewrote `.detail-sidebar` (now 284px, flex column, hairline right shadow). Added new CSS classes: `.detail-sidebar-filter`, `.detail-sidebar-input`, `.detail-sidebar-list`, `.detail-sidebar-group-header`, refreshed `.sidebar-item` (score left rule via `--rule-color`, accent-tint on active). Added Wave 3 main pane classes: `.dm-hero-row`, `.dm-photo-card`, `.dm-photo-dots`, `.dm-header-block`, `.dm-status-row`, `.dm-title`, `.dm-meta-line`, `.dm-metric-strip`, `.dm-metric-cell`, `.dm-verdict-band`, `.dm-content-row`, `.dm-left-col`, `.dm-right-col`, `.dm-checklist-card`, `.dm-checklist-col`, `.dm-cl-row`, `.dm-coo-card`, `.dm-neg-card`, `.dm-cl-tooltip`, and all sub-elements. |
+| `frontend/js/detail-panel.js` | Rewrote `window.renderDetailList()` to build filter input + scrolling list with group headers. Added `_renderSidebarList()` for live title filtering. Rewrote `_buildSidebarItem()` with Nocturne score-rule design. Rewrote `_renderMainPane()` to orchestrate hero + verdict + content row. Added `_buildHeroRow()`, `_buildVerdictBand()`, `_buildSignalGrid()` (option B 5-column), `_buildNocturneCostCard()`, `_buildNocturneNegCard()`, `_buildUtilityButtons()`. All legacy global handlers preserved: `scheduleViewingClick`, `markViewedClick`, `regenerateBriefClick`, `refreshKuClick`, `saveKuManualNotes`. Original `_buildCostOfOwnership`, `_buildNegotiationBrief`, `_buildKuCard`, `_buildChecklistGroup`, `_buildAiDepthSection`, `_showDebugModal` kept intact for backward compat. |
+| `frontend/js/map.js` | Added `window.toggleCommuteLayer()` (show/hide isochrone layer, mirrors `toggleDistrictLayer`). Added `window.getCommuteLayerVisible()` getter. Added `window.getDistrictLayerVisible()` getter (fixes Wave 2 initial-state UX inversion). |
+
+### Layout decisions
+
+Sidebar is exactly 284px per brief 1c, using `box-shadow: inset -1px 0 0 var(--color-hairline)` instead of a border to avoid double-border with the listings-view container. The `.detail-split` flex container already provides the layout shell.
+
+The 5-column checklist grid maps FULL_CHECKLIST sections as follows:
+- Finance: s01 (Financial), s04 (Utilities), s06 (Extras), s07 (Agent)
+- Quality: s09 (Technical), s10 (Renovation), s15 (Physical), s11 (Pests), s12 (Waste)
+- Location: s16 (Location), s14 (Evaluation table)
+- Building fund: s03 (KÜ), s05 (Repair fund)
+- Risk: s02 (Legal), s08 (Seller questions), s13 (Documents)
+
+### Deviations from brief
+
+**Deviation 1: detail-filter-bar preserved**
+
+Brief 1c shows no top filter bar — just a sidebar input. The existing `.detail-filter-bar` (score / rooms / district / max-price / search) is shared with Pending and Rejected tabs. Removing it would break those tabs. It remains, and the sidebar now also has its own title-substring filter.
+
+**Deviation 2: Detail tab layout uses existing listings-view shell**
+
+Brief shows the sidebar+main directly under the header (no `.detail-filter-bar`). The actual DOM uses `#listings-view` shared by all three tabs. The sidebar CSS width is 284px but the layout still goes through the existing flex `.detail-split` shell, which includes the filter bar above it.
+
+**Deviation 3: accordion checklist kept alongside signal grid**
+
+`_buildChecklistGroup` (the old accordion) is kept but not rendered in `_renderMainPane`. The signal grid replaces it as the primary UI. The accordion remains available for future re-use or as a progressive-disclosure overlay.
+
+**Deviation 4: mini-map removed from main pane**
+
+The mini-map Leaflet panel has been removed from the main detail pane. The Overview map already shows all pins with full interactive context. Adding a mini-map in the detail pane created Leaflet lifecycle bugs (Pitfall 1) and consumed vertical space needed by the checklist grid. If needed in Wave 4+, it can be added as a small thumbnail in the hero photo area.
+
+**Deviation 5: AI depth section (score breakdown, risks, strengths) not rendered**
+
+Brief 1c/1d does not show the AI score breakdown accordion. The verdict text is surfaced in the verdict band. The full AI depth section (`_buildAiDepthSection`) is preserved in code but not rendered in the new main pane. Re-add it in a future wave as a collapsible panel below the checklist if desired.
+
+### Preserved public APIs
+
+- `window.renderDetailList()` — unchanged signature
+- `window.openDetailPanel(id)` — unchanged signature, deep-link still works
+- `window.scheduleViewingClick(listingId)` — unchanged
+- `window.markViewedClick(listingId)` — unchanged
+- `window.regenerateBriefClick(listingId, btn)` — unchanged
+- `window.refreshKuClick(listingId, btn)` — unchanged
+- `window.saveKuManualNotes(listingId, notes)` — unchanged
+- `window.toggleDistrictLayer()` — unchanged
+- `window.toggleCommuteLayer()` — new, mirrors toggleDistrictLayer
+- `window.getDistrictLayerVisible()` — new getter
+- `window.getCommuteLayerVisible()` — new getter
+
+---
+
+## Handoff to Wave 3 — Detail Tab (SUPERSEDED — see Wave 3 above)
 
 Wave 3 should:
 
@@ -89,13 +156,15 @@ Wave 3 should:
 4. If inline scheduling on the hero card is desired, add the datetime-local picker flow to `renderBestHero()` in ui.js (pattern: copy from `_renderMainPane` in detail-panel.js, POST to `/api/listings/{id}/schedule-viewing`).
 5. Do NOT touch the `.overview-*` or `.map-*` classes introduced in Wave 2.
 
-## Handoff to Wave 4 — Pending Tab
+## Handoff to Wave 4 — Pending Tab + Settings
 
 Wave 4 should:
 
-1. Rebuild Pending tab with the Nocturne card pattern (each pending listing as a `.card` with photo, score badge `.score-badge[data-score-bucket]`, verdict, approve/reject actions).
+1. Rebuild Pending tab with the Nocturne card pattern per brief 1e (3-column grid, each pending listing as a `.card` with 132px photo, score badge `.score-badge[data-score-bucket]` in photo corner, verdict callout with border-left, approve/reject `.btn` row).
 2. Replace `.pending-card`, `.pending-card-title`, `.pending-card-meta` legacy styles.
 3. Migrate bridge aliases used in `.pending-*` styles.
+4. Consider adding `window.getDistrictLayerVisible()` / `window.getCommuteLayerVisible()` to sync the overlay pills initial state (now available from Wave 3 map.js additions).
+5. The AI depth section (score breakdown, risks, strengths) removed in Wave 3 can be surfaced here as a "Debug view" toggle on approved listings if needed.
 
 ## Final bridge-alias cleanup (Wave 5+)
 
