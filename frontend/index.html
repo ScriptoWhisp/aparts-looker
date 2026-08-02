@@ -6,68 +6,36 @@
 <title>ApartsLooker — Tallinn</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
+  /* ── Bridge aliases: legacy var names → Nocturne tokens ──
+     The component styles below still use --bg, --surface, etc.
+     These mappings let them keep working while tokens.css drives the palette.
+     Wave 2/3/4 will migrate component styles to use the canonical names. */
   :root {
-    --bg: #0a0a0f;
-    --surface: #13131a;
-    --surface-2: #1e1e2e;
-    --border: #2d2d44;
-    --text: #e2e8f0;
-    --text-muted: #94a3b8;
-    --blue: #3b82f6;
-    --green: #10b981;
-    --amber: #f59e0b;
-    --red: #ef4444;
-    --font-mono: "IBM Plex Mono", monospace;
-    --font-sans: "Space Grotesk", system-ui, sans-serif;
-    --radius: 6px;
-    --shadow: 0 1px 3px rgba(0,0,0,0.4);
-  }
-  *, *::before, *::after { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; height: 100%; }
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--font-sans);
-    font-size: 14px;
-    line-height: 1.5;
-    -webkit-font-smoothing: antialiased;
+    --bg:         var(--color-canvas);
+    --surface:    var(--color-sunken);
+    --surface-2:  var(--color-surface);
+    --border:     var(--color-border);
+    --text:       var(--color-text);
+    --text-muted: var(--color-text-secondary);
+    --blue:       var(--color-accent-400);
+    --green:      #4fb98d;  /* score-85 / approved colour */
+    --amber:      #c98b52;  /* score-40 / pending colour */
+    --red:        #c4635f;  /* score-0  / rejected colour */
+    --font-mono:  "JetBrains Mono", ui-monospace, Menlo, monospace;
+    --font-sans:  "Inter", system-ui, sans-serif;
+    --radius:     var(--radius-sm);
+    --shadow:     var(--shadow-sm);
   }
   a { color: var(--blue); }
 
-  /* ---------- Header ---------- */
-  .header {
-    height: 48px;
-    background: #0a0a0f;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0 16px;
-    border-bottom: 1px solid var(--border);
-    position: sticky;
-    top: 0;
-    /* Above map's filter-pills/district-toggle (z=1000) and Leaflet controls
-       so nothing overlays the sticky header when the page scrolls. */
-    z-index: 2500;
-  }
-  .app-title {
-    font-family: var(--font-sans);
-    font-weight: 600;
-    font-size: 18px;
-    color: var(--text);
-  }
-  .header-right { display: flex; align-items: center; gap: 12px; }
-  .header-action-btn {
-    background: var(--surface-2); color: var(--text);
-    border: 1px solid var(--border); border-radius: var(--radius);
-    padding: 6px 12px; font-size: 12px; font-family: var(--font-mono);
-    cursor: pointer; transition: background 0.15s;
-  }
-  .header-action-btn:hover:not(:disabled) { background: var(--border); }
-  .header-action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  /* ---------- Header + Tab Nav ----------
+     Header structure and .tab-nav are defined in tokens.css (Wave 1).
+     Toast remains here since it is transient UI, not persistent chrome. */
   .toast {
     position: fixed; top: 60px; right: 16px; z-index: 9999;
     background: var(--surface-2); color: var(--text);
@@ -77,26 +45,6 @@
   }
   .toast-error { border-color: var(--red); color: var(--red); }
   .toast-ok { border-color: var(--green); color: var(--green); }
-  .tab-nav { display: flex; gap: 0; }
-  .tab-nav button {
-    display: inline-flex;
-    align-items: center;
-    background: transparent;
-    color: var(--text-muted);
-    padding: 8px 16px;
-    border: none;
-    border-bottom: 2px solid transparent;
-    cursor: pointer;
-    font-family: var(--font-sans);
-    font-size: 14px;
-    font-weight: 500;
-    transition: color 0.15s;
-  }
-  .tab-nav button:hover { color: var(--text); }
-  .tab-nav button.active {
-    color: var(--text);
-    border-bottom: 2px solid var(--blue);
-  }
 
   /* ---------- Tab sections ---------- */
   section[id^="tab-"] { display: none; }
@@ -1255,22 +1203,34 @@
 </head>
 <body>
 
-<div class="header">
-  <span class="app-title">ApartsLooker</span>
-  <div class="header-right">
-    <nav class="tab-nav">
-      <button data-tab="overview" class="active">Overview</button>
-      <button data-tab="detail">Detail</button>
-      <button data-tab="pending">Pending</button>
-      <button data-tab="rejected">Rejected</button>
-      <button data-tab="settings">Settings</button>
-    </nav>
-    <button id="tg-silence-btn" class="header-action-btn" title="Pause Telegram notifications">🔔 Telegram</button>
-    <button id="backfill-commute-btn" class="header-action-btn" title="Recompute drive time to Bolt HQ for all listings with coordinates">⏱ Backfill commutes</button>
-    <button id="backfill-cost-btn" class="header-action-btn" title="Recompute monthly cost-of-ownership for all listings with price + area">💶 Backfill costs</button>
-    <button id="clear-all-btn" class="header-action-btn" style="border-color:rgba(239,68,68,0.4);color:var(--red);" title="Delete all listings and reset seen-ID set">🗑 Clear all</button>
+<header class="header">
+  <!-- Brand -->
+  <div class="app-brand">
+    <div class="app-brand-dot"></div>
+    <span class="app-brand-name">Aparts Looker</span>
   </div>
-</div>
+
+  <!-- Tab navigation -->
+  <nav class="tab-nav">
+    <button data-tab="overview" class="active">Overview</button>
+    <button data-tab="detail">Detail</button>
+    <button data-tab="pending">
+      Pending
+      <span class="tab-pending-count" id="tab-pending-count"></span>
+    </button>
+    <button data-tab="rejected">Rejected</button>
+    <button data-tab="settings">Settings</button>
+  </nav>
+
+  <!-- Right section: scrape info + action buttons -->
+  <div class="header-right">
+    <span class="header-scrape-info" id="header-scrape-info"></span>
+    <button id="tg-silence-btn" class="header-action-btn" title="Pause Telegram notifications">TG</button>
+    <button id="backfill-commute-btn" class="header-action-btn" title="Recompute drive time to Bolt HQ for all listings with coordinates">Commutes</button>
+    <button id="backfill-cost-btn" class="header-action-btn" title="Recompute monthly cost-of-ownership for all listings with price + area">Costs</button>
+    <button id="clear-all-btn" class="header-action-btn" style="border-color:var(--status-rejected-border);color:var(--status-rejected-text);" title="Delete all listings and reset seen-ID set">Clear all</button>
+  </div>
+</header>
 
 <main>
   <!-- ===== OVERVIEW TAB ===== -->
@@ -1425,11 +1385,35 @@
     return n.toLocaleString("et-EE", {maximumFractionDigits: 0}) + " €";
   };
 
+  /* scoreColor / scoreBucket are also defined in ui.js (Wave 1 design system).
+     This copy here ensures they are available before ui.js loads, and uses the
+     canonical Nocturne score ramp colours from tokens.css. */
   window.scoreColor = function(score) {
-    if (score >= 75) return "#10b981";
-    if (score >= 50) return "#f59e0b";
-    return "#ef4444";
+    score = Number(score) || 0;
+    if (score >= 85) return "#4fb98d";
+    if (score >= 75) return "#7fbf7a";
+    if (score >= 60) return "#c9b455";
+    if (score >= 40) return "#c98b52";
+    return "#c4635f";
   };
+
+  window.scoreBucket = window.scoreBucket || function(score) {
+    score = Number(score) || 0;
+    if (score >= 85) return "great";
+    if (score >= 75) return "good";
+    if (score >= 60) return "ok";
+    if (score >= 40) return "poor";
+    return "bad";
+  };
+
+  /* Update the Pending tab count badge */
+  function _updatePendingBadge() {
+    var badge = document.getElementById("tab-pending-count");
+    if (!badge) return;
+    var n = (window.state.pending || []).length;
+    badge.textContent = n;
+    badge.classList.toggle("visible", n > 0);
+  }
 
   window.commuteTier = function(mins) {
     if (mins == null) return null;
@@ -1469,6 +1453,7 @@
     }
     if (window.rebuildDistrictChips) window.rebuildDistrictChips();
     _updateFilterCount();
+    _updatePendingBadge();
     window.renderApp();
     _handleDeepLink();
   };
