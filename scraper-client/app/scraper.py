@@ -22,6 +22,7 @@ import threading
 import time
 from datetime import datetime, timezone
 from typing import Optional
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import requests as http
 from fastapi import FastAPI, Request
@@ -49,6 +50,14 @@ _SETTINGS_SCHEMA = {
     "interval_hours":       {"type": float, "env": "CHECK_INTERVAL_HOURS",  "default": 2.0},
     "max_listings_default": {"type": int,   "env": "SCRAPER_MAX_LISTINGS",  "default": 0},
     "auto_scrape_enabled":  {"type": bool,  "env": "SCRAPER_AUTO_ENABLED",  "default": True},
+    # Hard filters — injected into the kv.ee search URL as query params BEFORE
+    # fetching, so kv.ee itself returns pre-filtered results. Zero = disabled
+    # (URL's own filters, if any, still apply). Non-zero = force this value.
+    # The backend keeps the same filters as a belt-and-suspenders safety net.
+    "max_price_eur":        {"type": int,   "env": "MAX_PRICE_EUR",         "default": 0},
+    "min_rooms":            {"type": int,   "env": "MIN_ROOMS",             "default": 0},
+    "min_images":           {"type": int,   "env": "MIN_IMAGES",            "default": 0},
+    "min_area_sqm":         {"type": int,   "env": "MIN_AREA_SQM",          "default": 0},
 }
 
 
@@ -102,8 +111,58 @@ def _persist_settings() -> None:
 
 
 _settings = _load_settings()
-# Push the initial URL into kv_scraper module state so first-run uses the current value.
-kv_scraper.KV_SEARCH_URL = _settings["kv_search_url"]
+
+
+# kv.ee query-param names for the four hard filters we push into the URL.
+# Verified against a live kv.ee search URL on 2026-08-02. If kv.ee ever
+# renames these, override in the URL string itself instead of hoping this
+# stays in sync — the settings-hint UI text points users at kv.ee's own
+# search form to grab a fresh URL.
+_KV_QUERY_PARAMS = {
+    "max_price_eur":  "price_max",
+    "min_rooms":      "rooms_min",
+    "min_images":     "nr_of_photos_from",
+    "min_area_sqm":   "size_from",
+}
+
+
+def _build_effective_search_url() -> str:
+    """Return the kv.ee search URL with the scraper's hard filters injected.
+
+    Zero-valued settings are treated as "don't touch this param" so the base
+    URL's own query stays intact. Non-zero settings OVERRIDE whatever the
+    base URL has — that lets the user tune limits from the UI without
+    hand-editing the URL every time.
+
+    Returns the raw kv_search_url if nothing to inject or the URL is empty.
+    """
+    base = _settings.get("kv_search_url") or ""
+    if not base:
+        return ""
+    active = {
+        _KV_QUERY_PARAMS[key]: str(int(_settings[key]))
+        for key in _KV_QUERY_PARAMS
+        if int(_settings.get(key, 0) or 0) > 0
+    }
+    if not active:
+        return base
+    try:
+        parsed = urlparse(base)
+        params = parse_qs(parsed.query, keep_blank_values=True)
+        for name, value in active.items():
+            params[name] = [value]
+        new_query = urlencode(params, doseq=True)
+        return urlunparse(parsed._replace(query=new_query))
+    except Exception:
+        logging.getLogger("scraper").exception(
+            "Failed to inject filters into %s — falling back to raw URL", base
+        )
+        return base
+
+
+# Push the effective URL (base + filter overrides) into kv_scraper module state
+# so first-run uses the current values.
+kv_scraper.KV_SEARCH_URL = _build_effective_search_url()
 
 
 # ---------------------------------------------------------------------------
@@ -148,7 +207,9 @@ def run_once(max_listings: int = 0) -> int:
     """
     # Push the live setting into kv_scraper before every run so settings edits
     # take effect immediately (kv_scraper reads its module-level KV_SEARCH_URL).
-    kv_scraper.KV_SEARCH_URL = _settings["kv_search_url"]
+    # Effective URL = base kv_search_url with our hard-filter query params injected.
+    kv_scraper.KV_SEARCH_URL = _build_effective_search_url()
+    log.info("Scrape URL for this run: %s", kv_scraper.KV_SEARCH_URL)
 
     urls = fetch_listing_urls()
     total = len(urls)
@@ -393,6 +454,28 @@ INDEX_HTML = """<!DOCTYPE html>
           <input id="set-auto" type="checkbox">
           <label for="set-auto">Auto-scrape enabled</label>
         </div>
+
+        <div class="settings-row">
+          <label class="settings-label" for="set-max-price">Max price (EUR)</label>
+          <input id="set-max-price" type="number" min="0" step="1000" max="10000000">
+          <div class="settings-hint">Injected as <code>price_max</code> into the kv.ee URL. 0 = keep whatever the URL has.</div>
+        </div>
+        <div class="settings-row">
+          <label class="settings-label" for="set-min-rooms">Min rooms</label>
+          <input id="set-min-rooms" type="number" min="0" step="1" max="20">
+          <div class="settings-hint">Injected as <code>rooms_min</code>. 0 = keep URL default.</div>
+        </div>
+        <div class="settings-row">
+          <label class="settings-label" for="set-min-images">Min images</label>
+          <input id="set-min-images" type="number" min="0" step="1" max="50">
+          <div class="settings-hint">Injected as <code>nr_of_photos_from</code>. 0 = keep URL default.</div>
+        </div>
+        <div class="settings-row">
+          <label class="settings-label" for="set-min-area">Min area (m²)</label>
+          <input id="set-min-area" type="number" min="0" step="1" max="1000">
+          <div class="settings-hint">Injected as <code>size_from</code>. 0 = keep URL default.</div>
+        </div>
+
         <button id="settings-save" class="settings-save">Save settings</button>
         <div class="settings-err" id="settings-err"></div>
       </div>
@@ -516,6 +599,10 @@ INDEX_HTML = """<!DOCTYPE html>
     const setInterval_ = document.getElementById('set-interval');
     const setDefaultMax = document.getElementById('set-default-max');
     const setAuto = document.getElementById('set-auto');
+    const setMaxPrice = document.getElementById('set-max-price');
+    const setMinRooms = document.getElementById('set-min-rooms');
+    const setMinImages = document.getElementById('set-min-images');
+    const setMinArea = document.getElementById('set-min-area');
     const settingsSave = document.getElementById('settings-save');
     const settingsErr = document.getElementById('settings-err');
 
@@ -532,6 +619,10 @@ INDEX_HTML = """<!DOCTYPE html>
         setInterval_.value = d.interval_hours;
         setDefaultMax.value = d.max_listings_default;
         setAuto.checked = !!d.auto_scrape_enabled;
+        setMaxPrice.value = d.max_price_eur || 0;
+        setMinRooms.value = d.min_rooms || 0;
+        setMinImages.value = d.min_images || 0;
+        setMinArea.value = d.min_area_sqm || 0;
       } catch (e) {}
     }
 
@@ -543,6 +634,10 @@ INDEX_HTML = """<!DOCTYPE html>
         interval_hours: parseFloat(setInterval_.value),
         max_listings_default: parseInt(setDefaultMax.value || '0', 10),
         auto_scrape_enabled: !!setAuto.checked,
+        max_price_eur: parseInt(setMaxPrice.value || '0', 10),
+        min_rooms: parseInt(setMinRooms.value || '0', 10),
+        min_images: parseInt(setMinImages.value || '0', 10),
+        min_area_sqm: parseInt(setMinArea.value || '0', 10),
       };
       try {
         const r = await fetch('/settings', {
@@ -651,6 +746,18 @@ async def post_settings(request: Request):
         if k == "kv_search_url" and new_val and not new_val.startswith(("http://", "https://")):
             errors.append("kv_search_url must start with http:// or https://")
             continue
+        if k == "max_price_eur" and (new_val < 0 or new_val > 10_000_000):
+            errors.append("max_price_eur must be in [0, 10000000]")
+            continue
+        if k == "min_rooms" and (new_val < 0 or new_val > 20):
+            errors.append("min_rooms must be in [0, 20]")
+            continue
+        if k == "min_images" and (new_val < 0 or new_val > 50):
+            errors.append("min_images must be in [0, 50]")
+            continue
+        if k == "min_area_sqm" and (new_val < 0 or new_val > 1000):
+            errors.append("min_area_sqm must be in [0, 1000]")
+            continue
         _settings[k] = new_val
         applied[k] = new_val
 
@@ -659,9 +766,13 @@ async def post_settings(request: Request):
 
     _persist_settings()
 
-    # Hot-apply URL to kv_scraper
-    if "kv_search_url" in applied:
-        kv_scraper.KV_SEARCH_URL = _settings["kv_search_url"]
+    # Hot-apply URL to kv_scraper. Rebuild the effective URL whenever the base
+    # URL or any of the four hard filters changed — kv_scraper reads
+    # module-level KV_SEARCH_URL on the next fetch, so the change lands
+    # immediately without waiting for the scheduler tick.
+    if applied.keys() & ({"kv_search_url", *_KV_QUERY_PARAMS.keys()}):
+        kv_scraper.KV_SEARCH_URL = _build_effective_search_url()
+        log.info("Effective search URL updated: %s", kv_scraper.KV_SEARCH_URL)
 
     # If interval changed, reschedule the next auto-scrape from now.
     if "interval_hours" in applied and applied["interval_hours"] != prev_interval:

@@ -32,10 +32,15 @@ _SCHEMA = {
     "cost_heating_rate":   ("COST_HEATING_RATE",   float, "cost", "Heating €/m² (year avg)","Central district heating",   0, 5),
     "cost_utilities_base": ("COST_UTILITIES_BASE", float, "cost", "Utilities baseline €/mo","Electricity + water flat",    0, 500),
 
-    # ---- Search / ingest filters ----
-    "max_price_eur":       ("MAX_PRICE_EUR",       int,   "filter", "Max price (EUR)",     "Listings above this are dropped",    0, 10_000_000),
-    "min_rooms":           ("MIN_ROOMS",           int,   "filter", "Min rooms",           "Listings with fewer rooms are dropped", 0, 20),
-    "min_images":          ("MIN_IMAGES",          int,   "filter", "Min images",          "Fewer photos = likely inactive/scam",   0, 50),
+    # ---- Search / ingest filters (SAFETY-NET only) ----
+    # Primary filtering happens on the scraper — it injects these as query
+    # params into the kv.ee search URL (price_max / rooms_min / nr_of_photos_from)
+    # so we don't fetch listings we're just going to reject. Backend enforcement
+    # here is defense-in-depth in case the scraper's URL misfires. Set matching
+    # values on the scraper's UI at http://<mini-pc>:8002 for anything > 0.
+    "max_price_eur":       ("MAX_PRICE_EUR",       int,   "filter", "Max price EUR (safety net)", "Primary filter is on the scraper — this is a backstop", 0, 10_000_000),
+    "min_rooms":           ("MIN_ROOMS",           int,   "filter", "Min rooms (safety net)",     "Primary filter is on the scraper — this is a backstop", 0, 20),
+    "min_images":          ("MIN_IMAGES",          int,   "filter", "Min images (safety net)",    "Primary filter is on the scraper — this is a backstop", 0, 50),
 
     # ---- Telegram delivery ----
     "telegram_min_score_photo": ("TELEGRAM_MIN_SCORE_PHOTO", int, "telegram", "Photo card threshold", "Score ≥ this: full photo card", 0, 100),

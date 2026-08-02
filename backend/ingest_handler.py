@@ -465,23 +465,29 @@ def process_ingest_batch(listing_dicts: list[dict]) -> dict:
         # Mark as seen by appending the object ID (mirrors the original agent_job behaviour).
         state["seen_listing_ids"].append(listing.id)
 
-        # Apply VPS-side filters (D-02 — config stays on VPS).
-        if listing.price_eur and listing.price_eur > config.MAX_PRICE_EUR:
-            log.info(
-                "Skipping %s — price %s > max %s",
-                listing.id, listing.price_eur, config.MAX_PRICE_EUR,
+        # Safety-net filters. Primary filtering now lives on the scraper (it
+        # injects these into the kv.ee search URL as query params). If ANY of
+        # these trigger, the scraper's URL is out of sync with backend settings
+        # or a listing slipped through — log at WARNING so we notice.
+        if listing.price_eur and config.MAX_PRICE_EUR and listing.price_eur > config.MAX_PRICE_EUR:
+            log.warning(
+                "SAFETY-NET filter — price %s > max %s for %s. "
+                "Scraper URL is not enforcing price_max — update scraper settings.",
+                listing.price_eur, config.MAX_PRICE_EUR, listing.id,
             )
             continue
-        if listing.rooms and listing.rooms < config.MIN_ROOMS:
-            log.info(
-                "Skipping %s — rooms %s < min %s",
-                listing.id, listing.rooms, config.MIN_ROOMS,
+        if listing.rooms and config.MIN_ROOMS and listing.rooms < config.MIN_ROOMS:
+            log.warning(
+                "SAFETY-NET filter — rooms %s < min %s for %s. "
+                "Scraper URL is not enforcing rooms_min — update scraper settings.",
+                listing.rooms, config.MIN_ROOMS, listing.id,
             )
             continue
-        if listing.image_count < config.MIN_IMAGES:
-            log.info(
-                "Skipping %s — only %d images (min %d), likely inactive",
-                listing.id, listing.image_count, config.MIN_IMAGES,
+        if config.MIN_IMAGES and listing.image_count < config.MIN_IMAGES:
+            log.warning(
+                "SAFETY-NET filter — only %d images (min %d) for %s. "
+                "Scraper URL is not enforcing nr_of_photos_from — update scraper settings.",
+                listing.image_count, config.MIN_IMAGES, listing.id,
             )
             continue
 
