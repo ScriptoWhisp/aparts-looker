@@ -111,19 +111,13 @@
       if (window.refreshMapPins) window.refreshMapPins();
     });
 
-    /* Districts toggle */
+    /* Districts toggle — uses window.toggleDistrictLayer() exposed by map.js */
     var districtBtn = document.getElementById("ov-district-toggle");
     if (districtBtn) {
       districtBtn.addEventListener("click", function () {
-        /* Mirror the existing district-toggle logic from map.js.
-           The map module watches #district-toggle (old ID) — we proxy a click to it
-           if it exists, otherwise toggle directly via the exposed state. */
-        var oldBtn = document.getElementById("district-toggle");
-        if (oldBtn) {
-          oldBtn.click();
-          districtBtn.classList.toggle("active-layer", oldBtn.classList.contains("active"));
-          districtBtn.classList.toggle("inactive", !oldBtn.classList.contains("active"));
-        }
+        var nowVisible = window.toggleDistrictLayer ? window.toggleDistrictLayer() : false;
+        districtBtn.classList.toggle("active-layer", nowVisible);
+        districtBtn.classList.toggle("inactive", !nowVisible);
       });
     }
 

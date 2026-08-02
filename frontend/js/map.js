@@ -56,22 +56,32 @@
       });
     });
 
-    // Wire Districts toggle button
+    // Wire legacy district toggle button (old ID, may not exist in Wave 2+ layout)
     var districtToggleBtn = document.getElementById("district-toggle");
     if (districtToggleBtn) {
       districtToggleBtn.addEventListener("click", function () {
-        districtsVisible = !districtsVisible;
+        window.toggleDistrictLayer();
         districtToggleBtn.classList.toggle("active", districtsVisible);
-        if (districtLayer) {
-          if (districtsVisible) {
-            districtLayer.addTo(map);
-            districtLayer.bringToBack();
-          } else {
-            map.removeLayer(districtLayer);
-          }
-        }
       });
     }
+  };
+
+  /* ================================================================
+     window.toggleDistrictLayer — show/hide the district price heat layer.
+     Exposed so Wave 2 overlay controls can call it without touching map.js internals.
+     Returns the new visibility state (boolean).
+     ================================================================ */
+  window.toggleDistrictLayer = function () {
+    districtsVisible = !districtsVisible;
+    if (districtLayer && map) {
+      if (districtsVisible) {
+        districtLayer.addTo(map);
+        districtLayer.bringToBack();
+      } else {
+        map.removeLayer(districtLayer);
+      }
+    }
+    return districtsVisible;
   };
 
   /* ================================================================
