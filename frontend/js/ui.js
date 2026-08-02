@@ -2,13 +2,42 @@
  * ui.js — KPI strip, score distribution SVG chart, price vs score scatter SVG, activity feed.
  *
  * Exposes: window.renderKpiStrip, window.renderScoreDistribution,
- *          window.renderPriceScatter, window.renderActivityFeed
- * Reads: window.state, window.fmtEur, window.scoreColor, window.openDetailPanel
+ *          window.renderPriceScatter, window.renderActivityFeed,
+ *          window.scoreColor, window.scoreBucket
+ * Reads: window.state, window.fmtEur, window.openDetailPanel
  *
  * All DOM writes use .textContent or createElementNS for SVG — never innerHTML with listing data.
  */
 (function () {
   "use strict";
+
+  /* ── Score helpers (Wave 1 design system) ──────────────────────────────────
+   *
+   * window.scoreBucket(score) → "bad" | "poor" | "ok" | "good" | "great"
+   *   Maps a 0-100 score to a named bucket that corresponds to the --score-*
+   *   CSS tokens and the data-score-bucket attribute on .score-badge elements.
+   *
+   * window.scoreColor(score) → CSS hex colour string
+   *   Returns the fill colour for map pins, SVG bars, legacy inline styles.
+   *   Wave 2+ should prefer .score-badge[data-score-bucket] for non-SVG uses.
+   */
+  window.scoreBucket = function (score) {
+    score = Number(score) || 0;
+    if (score >= 85) return "great";
+    if (score >= 75) return "good";
+    if (score >= 60) return "ok";
+    if (score >= 40) return "poor";
+    return "bad";
+  };
+
+  window.scoreColor = function (score) {
+    score = Number(score) || 0;
+    if (score >= 85) return "#4fb98d";
+    if (score >= 75) return "#7fbf7a";
+    if (score >= 60) return "#c9b455";
+    if (score >= 40) return "#c98b52";
+    return "#c4635f";
+  };
 
   /* SVG namespace constant */
   var SVG_NS = "http://www.w3.org/2000/svg";
