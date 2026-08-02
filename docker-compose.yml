@@ -17,7 +17,9 @@ services:
     # No ports: exposed — only reachable inside the compose network.
 
   app:
-    build: ./app
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     restart: unless-stopped
     env_file: .env
     depends_on:

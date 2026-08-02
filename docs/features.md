@@ -119,7 +119,7 @@
 **What it does:** Static HTML/CSS/JS served by FastAPI's `StaticFiles`. Tabs: Overview, Detail, Comparison, Pending, Settings.
 
 **Nuances:**
-- No framework — vanilla JS modules (`app/static/js/*.js`). Started as a single big `index.html`; split into `detail-panel.js`, `map.js`, `ui.js`, `comparison.js` during Phase 5.
+- No framework — vanilla JS modules (`frontend/js/*.js`). Started as a single big `index.html`; split into `detail-panel.js`, `map.js`, `ui.js`, `comparison.js` during Phase 5.
 - Cache-control middleware serves HTML/JS/CSS with `no-store` so browser doesn't hold stale copies during rapid frontend iteration.
 - Design is functional but ugly. See `design-brief.md` for the redesign brief.
 - Uses `escapeHtml()` for every user/scraped string in DOM writes and Leaflet tooltips — XSS safety.
@@ -128,7 +128,7 @@
 
 ## 11. Backend Architecture
 
-**What it does:** FastAPI + uvicorn (sync) + APScheduler for periodic checks. 6 route modules under `app/routes_*.py`, `main.py` is a 77-LoC composition root.
+**What it does:** FastAPI + uvicorn (sync) + APScheduler for periodic checks. 6 route modules under `backend/routes_*.py`, `main.py` is a 77-LoC composition root.
 
 **Nuances:**
 - Sync (not async) — matches the existing HTTP client + scheduler ecosystem. Async would fight SQLAlchemy patterns for no throughput benefit at one user.

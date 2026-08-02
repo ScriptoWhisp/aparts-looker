@@ -69,7 +69,7 @@ He probably wants:
 ## Constraints
 
 - **Vanilla HTML/CSS/JS only.** No React, no Vue, no build step. Leaflet is fine. Small utility libs are fine (Chart.js, tiny CSS libs). No enormous frameworks.
-- The current file layout is: `app/static/index.html`, `app/static/js/*.js` (comparison, detail-panel, map, ui), one CSS file inside `index.html` `<style>` block. A redesign that keeps this shape is easier to land than one that requires restructuring.
+- The current file layout is: `frontend/index.html`, `frontend/js/*.js` (comparison, detail-panel, map, ui), one CSS file inside `index.html` `<style>` block. A redesign that keeps this shape is easier to land than one that requires restructuring.
 - Estonian real-estate context: prices in EUR, area in m², district names in Estonian (Mustamäe, Kesklinn, Nõmme, Kalamaja, etc.). Verdicts and negotiation briefs are in Russian (Daniel's native language) — the design must handle Cyrillic gracefully.
 - The current implementation uses `escapeHtml()` for every string written into DOM/tooltips. Preserve that discipline — no `innerHTML` with user/scraped strings.
 - No backend changes proposed. Design should assume the existing API shapes (see the `docs/features.md` inventory for what data each screen already has).

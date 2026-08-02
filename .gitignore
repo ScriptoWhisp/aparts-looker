@@ -21,10 +21,10 @@ __pycache__/
 .ruff_cache/
 
 # Runtime data (per-deployment state, not source; lives in Docker volume on prod)
-app/data/*.json
-app/data/*.json.pre-pg7
-app/data/*.db
-app/data/*.sqlite*
+backend/data/*.json
+backend/data/*.json.pre-pg7
+backend/data/*.db
+backend/data/*.sqlite*
 
 # GSD tooling infrastructure (managed by npm; not project code)
 .claude/.gsd-profile
