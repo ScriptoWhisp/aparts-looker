@@ -766,6 +766,290 @@
   }
 
   /* ================================================================
+     Private: _buildSignalGrid — option B: 5-column signal grid (all items at once)
+     Columns: Finance / Quality / Location / Building fund / Risk
+     Each column highlights with a tinted panel if it has any flag items.
+     ================================================================ */
+
+  /* Map FULL_CHECKLIST section IDs → 5 display columns */
+  var SIGNAL_GRID_COLUMNS = [
+    {label: "Finance",       sections: ["s01","s04","s06","s07"]},
+    {label: "Quality",       sections: ["s09","s10","s15","s11","s12"]},
+    {label: "Location",      sections: ["s16","s14"]},
+    {label: "Building fund", sections: ["s03","s05"]},
+    {label: "Risk",          sections: ["s02","s08","s13"]}
+  ];
+
+  function _buildSignalGrid(entry, onChecklistChange) {
+    var clData = window.state.checklists[entry.id] || {};
+    var manualChecklist = clData.manual_checklist || {};
+    var aiFills = entry.ai_checklist_fills || {};
+    var entryChecklist = entry.checklist || {};
+
+    /* Build a flat map: storageKey → effective status */
+    function _getStatus(storageKey) {
+      var manual = manualChecklist[storageKey];
+      if (manual) return manual;
+      /* AI value from entry.checklist */
+      var aiV = entryChecklist[storageKey];
+      if (aiV && typeof aiV === "object") aiV = aiV.result;
+      if (aiV === "pass") aiV = "ok";
+      if (aiV === "fail") aiV = "issue";
+      if (aiV) return aiV;
+      return null; /* unknown */
+    }
+
+    /* Build a map of sectionId → items array from FULL_CHECKLIST */
+    var sectionMap = {};
+    (window.FULL_CHECKLIST || []).forEach(function (sec) {
+      sectionMap[sec.id] = sec.items || [];
+    });
+
+    /* Count totals */
+    var totalOk = 0, totalUnknown = 0, totalFlags = 0;
+    SIGNAL_GRID_COLUMNS.forEach(function (col) {
+      col.sections.forEach(function (secId) {
+        (sectionMap[secId] || []).forEach(function (it) {
+          var sk = it.id.startsWith("ai__") ? it.id.slice(4) : it.id;
+          var s = _getStatus(sk);
+          if (s === "ok") totalOk++;
+          else if (s === "issue") totalFlags++;
+          else totalUnknown++;
+        });
+      });
+    });
+    var totalItems = totalOk + totalUnknown + totalFlags;
+
+    /* Card */
+    var card = document.createElement("div");
+    card.className = "dm-checklist-card";
+
+    /* Header */
+    var head = document.createElement("div");
+    head.className = "dm-checklist-head";
+    var headTitle = document.createElement("span");
+    headTitle.className = "dm-checklist-title";
+    headTitle.textContent = "Checklist";
+    head.appendChild(headTitle);
+    card.appendChild(head);
+
+    /* Summary bar */
+    var barWrap = document.createElement("div");
+    barWrap.className = "dm-checklist-bar-wrap";
+
+    var countLabel = document.createElement("span");
+    countLabel.className = "dm-checklist-count-label";
+    countLabel.textContent = totalItems + " checks";
+    barWrap.appendChild(countLabel);
+
+    var bar = document.createElement("div");
+    bar.className = "dm-checklist-bar";
+    if (totalItems > 0) {
+      var okSeg = document.createElement("span");
+      okSeg.className = "dm-bar-ok";
+      okSeg.style.width = ((totalOk / totalItems) * 100).toFixed(1) + "%";
+      bar.appendChild(okSeg);
+      var unknownSeg = document.createElement("span");
+      unknownSeg.className = "dm-bar-unknown";
+      unknownSeg.style.width = ((totalUnknown / totalItems) * 100).toFixed(1) + "%";
+      bar.appendChild(unknownSeg);
+      var flagSeg = document.createElement("span");
+      flagSeg.className = "dm-bar-flags";
+      flagSeg.style.width = ((totalFlags / totalItems) * 100).toFixed(1) + "%";
+      bar.appendChild(flagSeg);
+    }
+    barWrap.appendChild(bar);
+
+    var statOk = document.createElement("span");
+    statOk.className = "dm-checklist-stat dm-checklist-stat-ok";
+    statOk.textContent = totalOk + " ok";
+    barWrap.appendChild(statOk);
+
+    var statUnknown = document.createElement("span");
+    statUnknown.className = "dm-checklist-stat dm-checklist-stat-unknown";
+    statUnknown.textContent = totalUnknown + " unknown";
+    barWrap.appendChild(statUnknown);
+
+    var statFlags = document.createElement("span");
+    statFlags.className = "dm-checklist-stat dm-checklist-stat-flags";
+    statFlags.textContent = totalFlags + " flags";
+    barWrap.appendChild(statFlags);
+
+    card.appendChild(barWrap);
+
+    /* 5-column grid */
+    var grid = document.createElement("div");
+    grid.className = "dm-checklist-grid";
+
+    /* Tooltip element (singleton) */
+    var tooltip = null;
+    function _showTooltip(text, targetEl) {
+      if (!text) return;
+      if (!tooltip) {
+        tooltip = document.createElement("div");
+        tooltip.className = "dm-cl-tooltip";
+        document.body.appendChild(tooltip);
+      }
+      tooltip.textContent = text;
+      tooltip.style.opacity = "1";
+      var rect = targetEl.getBoundingClientRect();
+      var top = rect.top - tooltip.offsetHeight - 8;
+      if (top < 8) top = rect.bottom + 8;
+      tooltip.style.left = Math.min(rect.left, window.innerWidth - 290) + "px";
+      tooltip.style.top = top + "px";
+    }
+    function _hideTooltip() {
+      if (tooltip) tooltip.style.opacity = "0";
+    }
+
+    SIGNAL_GRID_COLUMNS.forEach(function (col) {
+      /* Gather all items for this column */
+      var colItems = [];
+      col.sections.forEach(function (secId) {
+        (sectionMap[secId] || []).forEach(function (it) {
+          colItems.push(it);
+        });
+      });
+
+      /* Determine if column has any flags */
+      var hasFlag = colItems.some(function (it) {
+        var sk = it.id.startsWith("ai__") ? it.id.slice(4) : it.id;
+        return _getStatus(sk) === "issue";
+      });
+
+      var colEl = document.createElement("div");
+      colEl.className = "dm-checklist-col" + (hasFlag ? " dm-col-flagged" : "");
+
+      var colHdr = document.createElement("div");
+      colHdr.className = "dm-checklist-col-header";
+      colHdr.textContent = col.label;
+      colEl.appendChild(colHdr);
+
+      var colBody = document.createElement("div");
+      colBody.className = "dm-checklist-col-body";
+
+      if (colItems.length === 0) {
+        var noItems = document.createElement("div");
+        noItems.className = "dm-cl-row";
+        noItems.style.color = "var(--color-text-muted)";
+        noItems.style.fontSize = "11px";
+        noItems.textContent = "no items";
+        colBody.appendChild(noItems);
+      }
+
+      colItems.forEach(function (it) {
+        var sk = it.id.startsWith("ai__") ? it.id.slice(4) : it.id;
+        var status = _getStatus(sk);
+        var row = document.createElement("div");
+        row.className = "dm-cl-row";
+        if (status === "issue") row.classList.add("dm-cl-flagged");
+
+        var glyph = document.createElement("span");
+        glyph.className = "dm-cl-glyph";
+
+        if (status === "ok") {
+          glyph.textContent = "✓";
+          glyph.style.color = "var(--score-85)";
+        } else if (status === "issue") {
+          glyph.textContent = "✕";
+          glyph.style.color = "var(--score-0)";
+        } else if (status === "warning") {
+          glyph.textContent = "!";
+          glyph.style.color = "var(--score-40)";
+          row.classList.add("dm-cl-warning");
+        } else {
+          glyph.textContent = "?";
+          glyph.style.color = "var(--color-text-muted)";
+        }
+
+        var label = document.createElement("span");
+        label.className = "dm-cl-label";
+        label.textContent = it.text;
+
+        row.appendChild(glyph);
+        row.appendChild(label);
+
+        /* Hover tooltip: show AI reason from aiFills or entry.checklist */
+        var tooltipText = aiFills[sk] || "";
+        if (!tooltipText && entryChecklist[sk]) {
+          var cv = entryChecklist[sk];
+          if (typeof cv === "object" && cv.reason) tooltipText = cv.reason;
+        }
+        if (tooltipText || status) {
+          row.addEventListener("mouseenter", function () {
+            var tip = tooltipText || (status === "ok" ? "OK" : status === "issue" ? "Flagged" : "Unknown");
+            _showTooltip(tip, row);
+          });
+          row.addEventListener("mouseleave", _hideTooltip);
+        }
+
+        /* Click cycles manual state: null → ok → issue → null */
+        row.style.cursor = "pointer";
+        row.title = "Click to toggle: unchecked → ok → issue";
+        row.addEventListener("click", function () {
+          var cur = _getStatus(sk);
+          var next = cur === null ? "ok" : cur === "ok" ? "issue" : null;
+
+          var localCl = window.state.checklists[entry.id];
+          if (!localCl) { window.state.checklists[entry.id] = {}; localCl = window.state.checklists[entry.id]; }
+          if (!localCl.manual_checklist) localCl.manual_checklist = {};
+
+          if (next === null) {
+            delete localCl.manual_checklist[sk];
+          } else {
+            localCl.manual_checklist[sk] = next;
+          }
+
+          /* Update glyph inline */
+          if (next === "ok") {
+            glyph.textContent = "✓";
+            glyph.style.color = "var(--score-85)";
+            row.classList.remove("dm-cl-flagged");
+          } else if (next === "issue") {
+            glyph.textContent = "✕";
+            glyph.style.color = "var(--score-0)";
+            row.classList.add("dm-cl-flagged");
+          } else {
+            glyph.textContent = "?";
+            glyph.style.color = "var(--color-text-muted)";
+            row.classList.remove("dm-cl-flagged");
+          }
+
+          /* Update flagged column highlight */
+          var stillHasFlag = colItems.some(function (ci) {
+            var csk = ci.id.startsWith("ai__") ? ci.id.slice(4) : ci.id;
+            return _getStatus(csk) === "issue";
+          });
+          colEl.classList.toggle("dm-col-flagged", stillHasFlag);
+
+          if (onChecklistChange) onChecklistChange();
+
+          fetch("/api/listings/" + encodeURIComponent(entry.id) + "/checklist", {
+            method: "PATCH",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({key: sk, value: next === null ? "unknown" : next})
+          }).catch(function (e) { console.error("checklist save error", e); });
+        });
+
+        colBody.appendChild(row);
+      });
+
+      colEl.appendChild(colBody);
+      grid.appendChild(colEl);
+    });
+
+    card.appendChild(grid);
+
+    /* Footer */
+    var foot = document.createElement("div");
+    foot.className = "dm-checklist-foot";
+    foot.textContent = totalItems + " items · grouped by area · hover a row for the AI’s reason";
+    card.appendChild(foot);
+
+    return card;
+  }
+
+  /* ================================================================
      Private: _buildChecklistGroup — one collapsible section
      ================================================================ */
   function _buildChecklistGroup(label, items, listingId, manualChecklist, startOpen, onChange, aiFills) {
