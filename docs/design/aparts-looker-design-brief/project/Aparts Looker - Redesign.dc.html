@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/nocturne-100fe970-75c7-4c88-8e17-757cd5bc954b/styles.css">
+<script src="_ds/nocturne-100fe970-75c7-4c88-8e17-757cd5bc954b/_ds_bundle.js"></script>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+body{margin:0;background:#0f111c;font-family:Inter,system-ui,sans-serif}
+a{color:var(--color-accent)}a:hover{color:var(--color-accent-300)}
+.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(255,255,255,.07);scroll-margin-top:16px}
+.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}
+.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#e9e9ed;color:#161826;border-radius:4px;text-decoration:none}
+.dv-tname{font:600 13px/1.2 Inter,sans-serif;color:#e9e9ed}
+.dv-opts{display:flex;flex-wrap:wrap;gap:32px;align-items:flex-start}
+.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}
+.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(255,255,255,.1);color:#e9e9ed;border-radius:5px;text-decoration:none}
+.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 Inter,sans-serif;color:rgba(233,233,237,.55)}
+.dv-card{max-width:100%;background:#161826;border:1px solid rgba(255,255,255,.09);border-radius:10px;overflow:hidden}
+.dv-opt:target .dv-oid{background:#9184d9;color:#161826}
+.dv-next{margin:22px 0 0;font:12px/1.5 Inter,sans-serif;color:rgba(233,233,237,.5)}
+.mono{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace}
+</style></helmet>
+
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Aparts Looker — system + screens</span></div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="1a"><div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Design system — palette, type, scale, motion</div>
+<div class="dv-card" style="width:1440px;background:#161826;color:#e9e9ed;padding:40px 44px;box-sizing:border-box">
+  <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:6px"><div style="font:500 30px/1 Inter;letter-spacing:-.02em">Foundations</div><div style="font:400 13px/1 Inter;color:#75798c">dark-first · Nocturne tokens + a score scale</div></div>
+  <div style="height:1px;background:linear-gradient(to right,rgba(233,233,237,.16),rgba(233,233,237,.16) 60%,transparent);margin:22px 0 26px"></div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:44px">
+    <div>
+      <div style="font:600 10px/1 Inter;letter-spacing:.1em;text-transform:uppercase;color:#75798c;margin-bottom:14px">Ground &amp; chrome</div>
+      <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px">
+        <div><div style="height:56px;border-radius:6px;background:#0f111c;box-shadow:inset 0 0 0 1px #3f424d"></div><div class="mono" style="font-size:10px;color:#9397ab;margin-top:6px">#0F111C<br><span style="color:#595d6c">canvas</span></div></div>
+        <div><div style="height:56px;border-radius:6px;background:#161826;box-shadow:inset 0 0 0 1px #3f424d"></div><div class="mono" style="font-size:10px;color:#9397ab;margin-top:6px">#161826<br><span style="color:#595d6c">app bg</span></div></div>
+        <div><div style="height:56px;border-radius:6px;background:#1d1f2d"></div><div class="mono" style="font-size:10px;color:#9397ab;margin-top:6px">#1D1F2D<br><span style="color:#595d6c">sunken</span></div></div>
+        <div><div style="height:56px;border-radius:6px;background:#232532"></div><div class="mono" style="font-size:10px;color:#9397ab;margin-top:6px">#232532<br><span style="color:#595d6c">surface</span></div></div>
+        <div><div style="height:56px;border-radius:6px;background:#3f424d"></div><div class="mono" style="font-size:10px;color:#9397ab;margin-top:6px">#3F424D<br><span style="color:#595d6c">border</span></div></div>
+        <div><div style="height:56px;border-radius:6px;background:#9184d9"></div><div class="mono" style="font-size:10px;color:#9397ab;margin-top:6px">#9184D9<br><span style="color:#595d6c">accent</span></div></div>
+      </div>
+      <div style="display:flex;gap:26px;margin-top:16px">
+        <div><span class="mono" style="font-size:11px;color:#e9e9ed">#E9E9ED</span> <span style="font:400 11px Inter;color:#75798c">text</span></div>
+        <div><span class="mono" style="font-size:11px;color:#9397ab">#9397AB</span> <span style="font:400 11px Inter;color:#75798c">secondary</span></div>
+        <div><span class="mono" style="font-size:11px;color:#75798c">#75798C</span> <span style="font:400 11px Inter;color:#75798c">muted / labels</span></div>
+      </div>
+
+      <div style="font:600 10px/1 Inter;letter-spacing:.1em;text-transform:uppercase;color:#75798c;margin:30px 0 12px">Score scale — one ramp, everywhere</div>
+      <div style="display:flex;height:44px;border-radius:6px;overflow:hidden">
+        <div style="flex:1;background:#c4635f;display:flex;align-items:flex-end;padding:6px"><span class="mono" style="font-size:10px;color:#160f0f">0–39</span></div>
+        <div style="flex:1;background:#c98b52;display:flex;align-items:flex-end;padding:6px"><span class="mono" style="font-size:10px;color:#160f0f">40–59</span></div>
+        <div style="flex:1;background:#c9b455;display:flex;align-items:flex-end;padding:6px"><span class="mono" style="font-size:10px;color:#160f0f">60–74</span></div>
+        <div style="flex:1;background:#7fbf7a;display:flex;align-items:flex-end;padding:6px"><span class="mono" style="font-size:10px;color:#0f160f">75–84</span></div>
+        <div style="flex:1;background:#4fb98d;display:flex;align-items:flex-end;padding:6px"><span class="mono" style="font-size:10px;color:#0f160f">85–100</span></div>
+      </div>
+      <div class="mono" style="font-size:10px;color:#75798c;margin-top:6px;display:flex;justify-content:space-between"><span>#C4635F</span><span>#C98B52</span><span>#C9B455</span><span>#7FBF7A</span><span>#4FB98D</span></div>
+      <div style="font:400 11.5px/1.5 Inter;color:#9397ab;margin-top:10px;max-width:520px">Chroma sits at the accent's level, not above it — the ramp reads as information, not alarm. Score colour is used as a 2px left rule, a pin fill, a dial arc and a numeral. Never as a card background.</div>
+
+      <div style="font:600 10px/1 Inter;letter-spacing:.1em;text-transform:uppercase;color:#75798c;margin:28px 0 12px">Status</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <span style="font:500 11px Inter;padding:4px 9px;border-radius:5px;background:rgba(201,139,82,.15);color:#d9a473;box-shadow:inset 0 0 0 1px rgba(201,139,82,.3)">pending</span>
+        <span style="font:500 11px Inter;padding:4px 9px;border-radius:5px;background:rgba(79,185,141,.14);color:#6fc9a3;box-shadow:inset 0 0 0 1px rgba(79,185,141,.28)">approved</span>
+        <span style="font:500 11px Inter;padding:4px 9px;border-radius:5px;background:rgba(196,99,95,.14);color:#d4827e;box-shadow:inset 0 0 0 1px rgba(196,99,95,.28)">rejected</span>
+        <span style="font:500 11px Inter;padding:4px 9px;border-radius:5px;background:rgba(122,155,214,.14);color:#93aee0;box-shadow:inset 0 0 0 1px rgba(122,155,214,.28)">viewing scheduled</span>
+        <span style="font:500 11px Inter;padding:4px 9px;border-radius:5px;background:rgba(233,233,237,.06);color:#75798c;box-shadow:inset 0 0 0 1px rgba(233,233,237,.1)">viewed</span>
+      </div>
+    </div>
+
+    <div>
+      <div style="font:600 10px/1 Inter;letter-spacing:.1em;text-transform:uppercase;color:#75798c;margin-bottom:14px">Type — Inter + JetBrains Mono for numerals</div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:baseline;gap:16px"><span class="mono" style="font-size:10px;color:#595d6c;width:110px">display / 40 · 500</span><span class="mono" style="font-size:40px;font-weight:500;letter-spacing:-.03em;color:#e9e9ed">239 000 €</span></div>
+        <div style="display:flex;align-items:baseline;gap:16px"><span class="mono" style="font-size:10px;color:#595d6c;width:110px">title / 20 · 500</span><span style="font:500 20px Inter;letter-spacing:-.015em">Mustamäe tee 143 — 3 tuba</span></div>
+        <div style="display:flex;align-items:baseline;gap:16px"><span class="mono" style="font-size:10px;color:#595d6c;width:110px">body / 14 · 400</span><span style="font:400 14px Inter;color:#cfd3e5">Хорошая цена за м², но фонд слабый — торг обязателен.</span></div>
+        <div style="display:flex;align-items:baseline;gap:16px"><span class="mono" style="font-size:10px;color:#595d6c;width:110px">meta / 12 · 400</span><span style="font:400 12px Inter;color:#9397ab">70,4 m² · 1974 · energiaklass D · Mustamäe</span></div>
+        <div style="display:flex;align-items:baseline;gap:16px"><span class="mono" style="font-size:10px;color:#595d6c;width:110px">label / 10 · 600</span><span style="font:600 10px Inter;letter-spacing:.1em;text-transform:uppercase;color:#75798c">Building fund</span></div>
+      </div>
+      <div style="font:400 11.5px/1.5 Inter;color:#9397ab;margin-top:12px;max-width:520px">Five roles, no more. Cyrillic runs through Inter without a fallback swap; every number that can be compared column-to-column (price, €/m², score, dates) is Mono with <span class="mono">tabular-nums</span>.</div>
+
+      <div style="font:600 10px/1 Inter;letter-spacing:.1em;text-transform:uppercase;color:#75798c;margin:28px 0 12px">Spacing — 4-based</div>
+      <div style="display:flex;align-items:flex-end;gap:10px">
+        <div style="text-align:center"><div style="width:4px;height:4px;background:#9184d9"></div><div class="mono" style="font-size:10px;color:#75798c;margin-top:6px">4</div></div>
+        <div style="text-align:center"><div style="width:8px;height:8px;background:#9184d9"></div><div class="mono" style="font-size:10px;color:#75798c;margin-top:6px">8</div></div>
+        <div style="text-align:center"><div style="width:12px;height:12px;background:#9184d9"></div><div class="mono" style="font-size:10px;color:#75798c;margin-top:6px">12</div></div>
+        <div style="text-align:center"><div style="width:16px;height:16px;background:#9184d9"></div><div class="mono" style="font-size:10px;color:#75798c;margin-top:6px">16</div></div>
+        <div style="text-align:center"><div style="width:24px;height:24px;background:#9184d9"></div><div class="mono" style="font-size:10px;color:#75798c;margin-top:6px">24</div></div>
+        <div style="text-align:center"><div style="width:32px;height:32px;background:#9184d9"></div><div class="mono" style="font-size:10px;color:#75798c;margin-top:6px">32</div></div>
+        <div style="text-align:center"><div style="width:48px;height:48px;background:#9184d9"></div><div class="mono" style="font-size:10px;color:#75798c;margin-top:6px">48</div></div>
+        <div style="font:400 11.5px/1.5 Inter;color:#9397ab;padding-bottom:16px">Card padding 16. Gap between cards 12. Page gutter 24. Radius 8 (4 on chips, 14 on the hero).</div>
+      </div>
+
+      <div style="font:600 10px/1 Inter;letter-spacing:.1em;text-transform:uppercase;color:#75798c;margin:28px 0 12px">Icons &amp; motion</div>
+      <div style="display:flex;gap:28px">
+        <div style="font:400 11.5px/1.6 Inter;color:#9397ab;max-width:250px"><span style="color:#e9e9ed">Phosphor, 16px, weight “regular”</span>, currentColor only — one library, no emoji in the UI chrome. Score, status and flags carry meaning through colour + shape, never through an emoji.</div>
+        <div style="font:400 11.5px/1.6 Inter;color:#9397ab;max-width:280px"><span style="color:#e9e9ed">120 ms opacity, 160 ms transform</span>, <span class="mono" style="font-size:11px">cubic-bezier(.2,.7,.3,1)</span>. Accordions animate height only. No bounce, no spring, nothing loops. <span class="mono" style="font-size:11px">prefers-reduced-motion</span> kills all of it.</div>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<div class="dv-opt" id="1b"><div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>Overview — 1440×900</div>
+<div class="dv-card" style="width:1440px;height:900px;background:#161826;color:#e9e9ed;display:flex;flex-direction:column;overflow:hidden">
+  <div style="height:48px;flex:none;display:flex;align-items:center;gap:24px;padding:0 20px;box-shadow:inset 0 -1px 0 #292b31">
+    <div style="display:flex;align-items:center;gap:8px"><div style="width:8px;height:8px;border-radius:2px;background:#9184d9"></div><span style="font:500 13px Inter;letter-spacing:-.01em">Aparts Looker</span></div>
+    <div style="display:flex;gap:2px">
+      <span style="font:500 13px Inter;padding:6px 10px;border-radius:6px;background:rgba(145,132,217,.14);color:#b5abfc">Overview</span>
+      <span style="font:400 13px Inter;padding:6px 10px;color:#9397ab">Detail</span>
+      <span style="font:400 13px Inter;padding:6px 10px;color:#9397ab;display:flex;align-items:center;gap:6px">Pending <span class="mono" style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(201,139,82,.18);color:#d9a473">6</span></span>
+      <span style="font:400 13px Inter;padding:6px 10px;color:#9397ab">Compare</span>
+      <span style="font:400 13px Inter;padding:6px 10px;color:#9397ab">Settings</span>
+    </div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:14px">
+      <span class="mono" style="font-size:11px;color:#595d6c">scraped 12 min ago · 4 new</span>
+      <span class="btn btn-primary" style="font-size:12px;padding:5px 11px;color:var(--color-accent-400)">Refresh</span>
+    </div>
+  </div>
+
+  <div style="flex:1;display:grid;grid-template-columns:1fr 372px;gap:12px;padding:16px 20px 0;min-height:0;box-sizing:border-box">
+    <div style="display:flex;flex-direction:column;gap:12px;min-height:0">
+      <div style="flex:1;position:relative;border-radius:8px;overflow:hidden;background:#12141f;box-shadow:inset 0 0 0 1px #292b31;min-height:0">
+        <svg viewBox="0 0 900 460" preserveAspectRatio="xMidYMid slice" style="position:absolute;inset:0;width:100%;height:100%">
+          <rect width="900" height="460" fill="#12141f"></rect>
+          <g stroke="#232532" stroke-width="1" fill="none">
+            <path d="M0 120 L900 96"></path><path d="M0 250 L900 232"></path><path d="M0 372 L900 356"></path>
+            <path d="M180 0 L206 460"></path><path d="M420 0 L440 460"></path><path d="M660 0 L672 460"></path>
+          </g>
+          <path d="M120 60 L330 48 L360 190 L150 210 Z" fill="#4fb98d" fill-opacity=".07" stroke="#4fb98d" stroke-opacity=".25"></path>
+          <path d="M360 190 L575 176 L600 330 L385 344 Z" fill="#9184d9" fill-opacity=".1" stroke="#9184d9" stroke-opacity=".35"></path>
+          <path d="M150 210 L360 190 L385 344 L172 360 Z" fill="#c9b455" fill-opacity=".06" stroke="#c9b455" stroke-opacity=".2"></path>
+          <path d="M600 330 L800 316 L820 440 L620 452 Z" fill="#c4635f" fill-opacity=".06" stroke="#c4635f" stroke-opacity=".2"></path>
+          <ellipse cx="470" cy="250" rx="255" ry="150" fill="none" stroke="#b5abfc" stroke-opacity=".45" stroke-width="1.5" stroke-dasharray="5 6"></ellipse>
+          <text x="152" y="86" fill="#75798c" font-family="Inter" font-size="11" letter-spacing="1.4">KALAMAJA</text>
+          <text x="392" y="216" fill="#9397ab" font-family="Inter" font-size="11" letter-spacing="1.4">KESKLINN</text>
+          <text x="182" y="240" fill="#75798c" font-family="Inter" font-size="11" letter-spacing="1.4">MUSTAMÄE</text>
+          <text x="630" y="358" fill="#75798c" font-family="Inter" font-size="11" letter-spacing="1.4">NÕMME</text>
+        </svg>
+        <div style="position:absolute;left:224px;top:126px;width:34px;height:34px;border-radius:50%;background:#4fb98d;box-shadow:0 0 0 5px rgba(79,185,141,.2),0 4px 12px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center"><span class="mono" style="font-size:13px;font-weight:500;color:#0f160f">91</span></div>
+        <div style="position:absolute;left:392px;top:206px;width:30px;height:30px;border-radius:50%;background:#7fbf7a;box-shadow:0 0 0 4px rgba(127,191,122,.16);display:flex;align-items:center;justify-content:center"><span class="mono" style="font-size:12px;color:#0f160f">82</span></div>
+        <div style="position:absolute;left:300px;top:290px;width:28px;height:28px;border-radius:50%;background:#c9b455;box-shadow:0 0 0 4px rgba(201,180,85,.14);display:flex;align-items:center;justify-content:center"><span class="mono" style="font-size:12px;color:#160f0f">67</span></div>
+        <div style="position:absolute;left:540px;top:170px;width:26px;height:26px;border-radius:50%;background:#c98b52;opacity:.85;display:flex;align-items:center;justify-content:center"><span class="mono" style="font-size:11px;color:#160f0f">54</span></div>
+        <div style="position:absolute;left:632px;top:330px;width:26px;height:26px;border-radius:50%;background:#c4635f;opacity:.8;display:flex;align-items:center;justify-content:center"><span class="mono" style="font-size:11px;color:#160f0f">38</span></div>
+        <div style="position:absolute;left:470px;top:300px;width:28px;height:28px;border-radius:50%;background:#7fbf7a;box-shadow:0 0 0 4px rgba(127,191,122,.16);display:flex;align-items:center;justify-content:center"><span class="mono" style="font-size:12px;color:#0f160f">78</span></div>
+        <div style="position:absolute;left:16px;top:16px;display:flex;gap:6px">
+          <span style="font:500 12px Inter;padding:5px 11px;border-radius:6px;background:#232532;color:#e9e9ed;box-shadow:0 0 0 1px #3f424d">All <span class="mono" style="color:#75798c">24</span></span>
+          <span style="font:400 12px Inter;padding:5px 11px;border-radius:6px;background:rgba(35,37,50,.7);color:#9397ab">Approved <span class="mono">9</span></span>
+          <span style="font:400 12px Inter;padding:5px 11px;border-radius:6px;background:rgba(35,37,50,.7);color:#9397ab">Pending <span class="mono">6</span></span>
+        </div>
+        <div style="position:absolute;right:16px;top:16px;display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+          <span style="font:400 12px Inter;padding:5px 11px;border-radius:6px;background:rgba(35,37,50,.75);color:#9397ab;box-shadow:0 0 0 1px #292b31">Districts €/m²</span>
+          <span style="font:400 12px Inter;padding:5px 11px;border-radius:6px;background:rgba(145,132,217,.16);color:#b5abfc;box-shadow:0 0 0 1px rgba(145,132,217,.4)">30-min commute</span>
+        </div>
+        <div style="position:absolute;left:16px;bottom:16px;padding:10px 12px;border-radius:8px;background:rgba(22,24,38,.9);box-shadow:0 0 0 1px #292b31">
+          <div style="font:600 9.5px Inter;letter-spacing:.1em;text-transform:uppercase;color:#75798c;margin-bottom:7px">District €/m² · quartile</div>
+          <div style="display:flex;gap:3px">
+            <div style="width:38px;height:6px;background:#4fb98d;opacity:.55"></div><div style="width:38px;height:6px;background:#c9b455;opacity:.5"></div><div style="width:38px;height:6px;background:#c98b52;opacity:.5"></div><div style="width:38px;height:6px;background:#c4635f;opacity:.5"></div>
+          </div>
+          <div class="mono" style="font-size:10px;color:#75798c;margin-top:5px;display:flex;justify-content:space-between;width:158px"><span>2 100</span><span>4 900 €</span></div>
+        </div>
+      </div>
+
+      <div style="flex:none;display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div style="background:#1d1f2d;border-radius:8px;box-shadow:inset 0 0 0 1px #292b31;padding:14px 16px 12px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font:500 13px Inter">Where the scores land</div><span class="mono" style="font-size:10.5px;color:#75798c">median 61 · n=24</span></div>
+          <div style="display:flex;align-items:flex-end;gap:4px;height:96px;margin-top:14px">
+            <div style="flex:1;height:14%;background:#c4635f;border-radius:2px 2px 0 0;opacity:.85"></div>
+            <div style="flex:1;height:26%;background:#c4635f;border-radius:2px 2px 0 0;opacity:.85"></div>
+            <div style="flex:1;height:40%;background:#c98b52;border-radius:2px 2px 0 0;opacity:.85"></div>
+            <div style="flex:1;height:62%;background:#c98b52;border-radius:2px 2px 0 0;opacity:.85"></div>
+            <div style="flex:1;height:100%;background:#c9b455;border-radius:2px 2px 0 0;opacity:.85"></div>
+            <div style="flex:1;height:74%;background:#c9b455;border-radius:2px 2px 0 0;opacity:.85"></div>
+            <div style="flex:1;height:48%;background:#7fbf7a;border-radius:2px 2px 0 0"></div>
+            <div style="flex:1;height:30%;background:#7fbf7a;border-radius:2px 2px 0 0"></div>
+            <div style="flex:1;height:18%;background:#4fb98d;border-radius:2px 2px 0 0"></div>
+            <div style="flex:1;height:8%;background:#4fb98d;border-radius:2px 2px 0 0"></div>
+          </div>
+          <div style="height:1px;background:#3f424d;margin-top:2px"></div>
+          <div class="mono" style="font-size:10px;color:#75798c;margin-top:5px;display:flex;justify-content:space-between"><span>0</span><span>25</span><span>50</span><span style="color:#9397ab">75 · approve line</span><span>100</span></div>
+        </div>
+        <div style="background:#1d1f2d;border-radius:8px;box-shadow:inset 0 0 0 1px #292b31;padding:14px 16px 12px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font:500 13px Inter">Is a good score expensive?</div><span class="mono" style="font-size:10.5px;color:#75798c">price × score</span></div>
+          <div style="position:relative;height:96px;margin-top:14px;box-shadow:inset 1px -1px 0 #3f424d">
+            <div style="position:absolute;left:0;right:0;top:34%;height:1px;background:repeating-linear-gradient(to right,#3f424d 0 4px,transparent 4px 9px)"></div>
+            <span class="mono" style="position:absolute;right:2px;top:calc(34% - 14px);font-size:9.5px;color:#75798c">budget 265k</span>
+            <div style="position:absolute;left:12%;top:62%;width:9px;height:9px;border-radius:50%;background:#c4635f"></div>
+            <div style="position:absolute;left:22%;top:44%;width:9px;height:9px;border-radius:50%;background:#c98b52"></div>
+            <div style="position:absolute;left:30%;top:70%;width:9px;height:9px;border-radius:50%;background:#c98b52"></div>
+            <div style="position:absolute;left:41%;top:52%;width:9px;height:9px;border-radius:50%;background:#c9b455"></div>
+            <div style="position:absolute;left:48%;top:26%;width:9px;height:9px;border-radius:50%;background:#c9b455"></div>
+            <div style="position:absolute;left:57%;top:58%;width:10px;height:10px;border-radius:50%;background:#7fbf7a"></div>
+            <div style="position:absolute;left:66%;top:40%;width:10px;height:10px;border-radius:50%;background:#7fbf7a"></div>
+            <div style="position:absolute;left:74%;top:66%;width:11px;height:11px;border-radius:50%;background:#4fb98d;box-shadow:0 0 0 4px rgba(79,185,141,.18)"></div>
+            <div style="position:absolute;left:86%;top:22%;width:9px;height:9px;border-radius:50%;background:#4fb98d;opacity:.6"></div>
+            <div style="position:absolute;left:30%;top:6%;padding:6px 8px;border-radius:var(--radius-md);background:var(--color-surface);box-shadow:var(--shadow-md);white-space:nowrap"><div style="font:500 11px Inter">Mustamäe tee 143</div><div class="mono" style="font-size:10px;color:#9397ab">239 000 € · 3 394 €/m² · 82</div></div>
+          </div>
+          <div class="mono" style="font-size:10px;color:#75798c;margin-top:5px;display:flex;justify-content:space-between"><span>score 30 →</span><span>100</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:12px;min-height:0">
+      <div style="border-radius:14px;overflow:hidden;background:#232532;box-shadow:0 0 0 1px rgba(79,185,141,.35),0 10px 30px rgba(0,0,0,.5)">
+        <div style="position:relative;height:150px;background:linear-gradient(150deg,#2a2d3d,#191b28)">
+          <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:400 11px Inter;color:#4a4d5c">photo</div>
+          <div style="position:absolute;left:12px;top:12px;font:600 9.5px Inter;letter-spacing:.12em;text-transform:uppercase;color:#4fb98d;background:rgba(22,24,38,.75);padding:4px 8px;border-radius:5px">Best today</div>
+          <div style="position:absolute;right:12px;bottom:12px;display:flex;align-items:baseline;gap:4px;background:rgba(22,24,38,.8);padding:5px 10px;border-radius:6px"><span class="mono" style="font-size:22px;font-weight:500;color:#4fb98d">91</span><span class="mono" style="font-size:10px;color:#75798c">/100</span></div>
+        </div>
+        <div style="padding:14px 16px 16px">
+          <div style="font:500 17px Inter;letter-spacing:-.015em">Vana-Kalamaja 21 — 2 tuba</div>
+          <div style="font:400 12px Inter;color:#9397ab;margin-top:3px">Kalamaja · 54,2 m² · 1932 · renoveeritud</div>
+          <div style="display:flex;align-items:baseline;gap:10px;margin-top:12px">
+            <span class="mono" style="font-size:28px;font-weight:500;letter-spacing:-.02em">198 500 €</span>
+            <span class="mono" style="font-size:12px;color:#75798c">3 662 €/m²</span>
+            <span class="mono" style="font-size:11px;color:#6fc9a3;margin-left:auto">−6% vs district</span>
+          </div>
+          <div style="margin-top:12px;padding:10px 12px;border-radius:8px;background:#1d1f2d;border-left:2px solid #4fb98d">
+            <div style="font:400 13px/1.5 Inter;color:#cfd3e5">Редкий метраж в Kalamaja, дом после ремонта, фонд здоровый. Смотреть на этой неделе.</div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:14px">
+            <span style="flex:1;text-align:center;font:500 12.5px Inter;padding:8px;border-radius:var(--radius-md);border:1px solid var(--color-accent);color:var(--color-accent-400)">Open detail</span>
+            <span style="flex:1;text-align:center;font:500 12.5px Inter;padding:8px;border-radius:7px;background:rgba(122,155,214,.14);color:#93aee0">Schedule viewing</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#1d1f2d;border-radius:8px;box-shadow:inset 0 0 0 1px #292b31;padding:14px 16px">
+        <div style="font:600 9.5px Inter;letter-spacing:.1em;text-transform:uppercase;color:#75798c">This week</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:12px">
+          <div><div class="mono" style="font-size:24px;font-weight:500">18</div><div style="font:400 11px Inter;color:#75798c">new listings</div></div>
+          <div><div class="mono" style="font-size:24px;font-weight:500;color:#d9a473">6</div><div style="font:400 11px Inter;color:#75798c">awaiting you</div></div>
+          <div><div class="mono" style="font-size:24px;font-weight:500;color:#93aee0">2</div><div style="font:400 11px Inter;color:#75798c">viewings booked</div></div>
+        </div>
+      </div>
+
+      <div style="flex:1;background:#1d1f2d;border-radius:8px;box-shadow:inset 0 0 0 1px #292b31;padding:14px 0 6px;min-height:0;display:flex;flex-direction:column">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;padding:0 16px 10px"><div style="font:600 9.5px Inter;letter-spacing:.1em;text-transform:uppercase;color:#75798c">Next up</div><span style="font:400 11px Inter;color:#75798c">approved · by score</span></div>
+        <div style="display:flex;flex-direction:column">
+          <div style="display:flex;align-items:center;gap:11px;padding:9px 16px;border-left:2px solid #7fbf7a;background:rgba(255,255,255,.02)">
+            <span class="mono" style="font-size:14px;color:#7fbf7a;width:22px">82</span>
+            <div style="flex:1;min-width:0"><div style="font:400 13px Inter;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Mustamäe tee 143</div><div class="mono" style="font-size:10.5px;color:#75798c">239 000 € · 70,4 m²</div></div>
+            <span style="font:400 10.5px Inter;color:#93aee0">2. aug</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:11px;padding:9px 16px;border-left:2px solid #7fbf7a">
+            <span class="mono" style="font-size:14px;color:#7fbf7a;width:22px">78</span>
+            <div style="flex:1;min-width:0"><div style="font:400 13px Inter;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Sõpruse pst 202</div><div class="mono" style="font-size:10.5px;color:#75798c">215 000 € · 65,0 m²</div></div>
+            <span style="font:400 10.5px Inter;color:#75798c">viewed</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:11px;padding:9px 16px;border-left:2px solid #c9b455">
+            <span class="mono" style="font-size:14px;color:#c9b455;width:22px">71</span>
+            <div style="flex:1;min-width:0"><div style="font:400 13px Inter;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Endla 84</div><div class="mono" style="font-size:10.5px;color:#75798c">228 000 € · 62,3 m²</div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:11px;padding:9px 16px;border-left:2px solid #c9b455">
+            <span class="mono" style="font-size:14px;color:#c9b455;width:22px">67</span>
+            <div style="flex:1;min-width:0"><div style="font:400 13px Inter;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Akadeemia tee 46</div><div class="mono" style="font-size:10.5px;color:#75798c">189 000 € · 58,1 m²</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style="height:16px;flex:none"></div>
+</div></div>
+
+<div class="dv-opt" id="1c"><div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>Detail — option A: verdict band, checklist as collapsible groups</div>
+<div class="dv-card" style="width:1440px;height:900px;background:#161826;color:#e9e9ed;display:flex;flex-direction:column;overflow:hidden">
+  <div style="height:48px;flex:none;display:flex;align-items:center;gap:24px;padding:0 20px;box-shadow:inset 0 -1px 0 #292b31">
+    <div style="display:flex;align-items:center;gap:8px"><div style="width:8px;height:8px;border-radius:2px;background:#9184d9"></div><span style="font:500 13px Inter">Aparts Looker</span></div>
+    <div style="display:flex;gap:2px">
+      <span style="font:400 13px Inter;padding:6px 10px;color:#9397ab">Overview</span>
+      <span style="font:500 13px Inter;padding:6px 10px;border-radius:6px;background:rgba(145,132,217,.14);color:#b5abfc">Detail</span>
+      <span style="font:400 13px Inter;padding:6px 10px;color:#9397ab;display:flex;align-items:center;gap:6px">Pending <span class="mono" style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(201,139,82,.18);color:#d9a473">6</span></span>
+      <span style="font:400 13px Inter;padding:6px 10px;color:#9397ab">Compare</span>
+      <span style="font:400 13px Inter;padding:6px 10px;color:#9397ab">Settings</span>
+    </div>
+  </div>
+  <div style="flex:1;display:grid;grid-template-columns:284px 1fr;min-height:0">
+    <div style="box-shadow:inset -1px 0 0 #292b31;display:flex;flex-direction:column;min-height:0">
+      <div style="padding:12px;flex:none"><div style="height:30px;border-radius:7px;background:#1d1f2d;box-shadow:inset 0 0 0 1px #292b31;display:flex;align-items:center;padding:0 10px;font:400 12px Inter;color:#595d6c">Filter 15 listings…</div></div>
+      <div style="flex:1;overflow:hidden;display:flex;flex-direction:column">
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-left:2px solid #4fb98d;background:rgba(145,132,217,.1)">
+          <span class="mono" style="font-size:15px;color:#4fb98d;width:24px">91</span>
+          <div style="flex:1;min-width:0"><div style="font:500 13px Inter;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Vana-Kalamaja 21</div><div class="mono" style="font-size:10.5px;color:#75798c">198 500 € · 54,2 m²</div></div>
+          <span style="width:6px;height:6px;border-radius:50%;background:#93aee0"></span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-left:2px solid #7fbf7a">
+          <span class="mono" style="font-size:15px;color:#7fbf7a;width:24px">82</span>
+          <div style="flex:1;min-width:0"><div style="font:400 13px Inter;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Mustamäe tee 143</div><div class="mono" style="font-size:10.5px;color:#75798c">239 000 € · 70,4 m²</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-left:2px solid #7fbf7a">
+          <span class="mono" style="font-size:15px;color:#7fbf7a;width:24px">78</span>
+          <div style="flex:1;min-width:0"><div style="font:400 13px Inter;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Sõpruse pst 202</div><div class="mono" style="font-size:10.5px;color:#75798c">215 000 € · 65,0 m²</div></div>
+          <span style="font:400 10px Inter;color:#595d6c">viewed</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-left:2px solid #c9b455">
+          <span class="mono" style="font-size:15px;color:#c9b455;width:24px">71</span>
+          <div style="flex:1;min-width:0"><div style="font:400 13px Inter;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Endla 84</div><div class="mono" style="font-size:10.5px;color:#75798c">228 000 € · 62,3 m²</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-left:2px solid #c9b455">
+          <span class="mono" style="font-size:15px;color:#c9b455;width:24px">67</span>
+          <div style="flex:1;min-width:0"><div style="font:400 13px Inter;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Akadeemia tee 46</div><div class="mono" style="font-size:10.5px;color:#75798c">189 000 € · 58,1 m²</div></div>
+        </div>
+        <div style="padding:14px 12px 6px;font:600 9.5px Inter;letter-spacing:.1em;text-transform:uppercase;color:#595d6c">Pending · 6</div>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-left:2px solid #c98b52;opacity:.75">
+          <span class="mono" style="font-size:15px;color:#c98b52;width:24px">58</span>
+          <div style="flex:1;min-width:0"><div style="font:400 13px Inter;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Tammsaare tee 91</div><div class="mono" style="font-size:10.5px;color:#75798c">176 000 € · 51,0 m²</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-left:2px solid #c98b52;opacity:.75">
+          <span class="mono" style="font-size:15px;color:#c98b52;width:24px">52</span>
+          <div style="flex:1;min-width:0"><div style="font:400 13px Inter;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Paldiski mnt 114</div><div class="mono" style="font-size:10.5px;color:#75798c">168 000 € · 47,8 m²</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="min-height:0;overflow:hidden;display:flex;flex-direction:column">
+      <div style="flex:none;display:grid;grid-template-columns:300px 1fr;gap:12px;padding:16px 20px 0">
+        <div style="height:184px;border-radius:10px;background:linear-gradient(150deg,#2a2d3d,#191b28);position:relative;display:flex;align-items:center;justify-content:center;font:400 11px Inter;color:#4a4d5c">photo 1 / 14
+          <div style="position:absolute;left:10px;bottom:10px;display:flex;gap:4px"><span style="width:22px;height:3px;border-radius:2px;background:#e9e9ed"></span><span style="width:22px;height:3px;border-radius:2px;background:rgba(233,233,237,.25)"></span><span style="width:22px;height:3px;border-radius:2px;background:rgba(233,233,237,.25)"></span></div>
+        </div>
+        <div style="display:flex;flex-direction:column">
+          <div style="display:flex;align-items:flex-start;gap:14px">
+            <div style="flex:1">
+              <div style="display:flex;align-items:center;gap:8px"><span style="font:500 11px Inter;padding:3px 8px;border-radius:5px;background:rgba(79,185,141,.14);color:#6fc9a3">approved</span><span style="font:400 11px Inter;color:#75798c">·</span><span class="mono" style="font-size:11px;color:#93aee0">viewing 5. aug 17:30</span></div>
+              <div style="font:500 26px Inter;letter-spacing:-.02em;margin-top:8px">Mustamäe tee 143</div>
+              <div style="font:400 13px Inter;color:#9397ab;margin-top:2px">Mustamäe · 3 tuba · 4/5 korrus · 1974 · energiaklass D</div>
+            </div>
+            <div style="display:flex;gap:8px">
+              <span style="font:500 12.5px Inter;padding:7px 12px;border-radius:var(--radius-md);border:1px solid var(--color-accent);color:var(--color-accent-400)">Mark viewed</span>
+              <span style="font:500 12.5px Inter;padding:7px 12px;border-radius:7px;background:rgba(233,233,237,.06);color:#cfd3e5">kv.ee ↗</span>
+            </div>
+          </div>
+          <div style="display:flex;gap:0;margin-top:auto;padding-top:14px">
+            <div style="padding-right:26px"><div class="mono" style="font-size:34px;font-weight:500;letter-spacing:-.025em;line-height:1">239 000 €</div><div class="mono" style="font-size:11px;color:#75798c;margin-top:5px">3 394 €/m² · −4% vs Mustamäe</div></div>
+            <div style="padding:0 26px;box-shadow:inset 1px 0 0 #292b31"><div class="mono" style="font-size:34px;font-weight:500;letter-spacing:-.025em;line-height:1">70,4</div><div class="mono" style="font-size:11px;color:#75798c;margin-top:5px">m² · 3 tuba</div></div>
+            <div style="padding:0 26px;box-shadow:inset 1px 0 0 #292b31"><div class="mono" style="font-size:34px;font-weight:500;letter-spacing:-.025em;line-height:1;color:#7fbf7a">82</div><div class="mono" style="font-size:11px;color:#75798c;margin-top:5px">score · top 15%</div></div>
+            <div style="padding:0 0 0 26px;box-shadow:inset 1px 0 0 #292b31"><div class="mono" style="font-size:34px;font-weight:500;letter-spacing:-.025em;line-height:1">1 043 €</div><div class="mono" style="font-size:11px;color:#75798c;margin-top:5px">monthly, all-in</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="flex:none;margin:14px 20px 0;padding:14px 16px;border-radius:10px;background:#1d1f2d;border-left:2px solid #7fbf7a;display:flex;gap:18px;align-items:flex-start">
+        <div style="flex:1"><div style="font:600 9.5px Inter;letter-spacing:.1em;text-transform:uppercase;color:#75798c;margin-bottom:6px">Вердикт</div><div style="font:400 15px/1.55 Inter;color:#e9e9ed;max-width:760px">Цена ниже района на 4%, планировка удачная, но фонд собирает всего 0,32 €/м² — крыша не заложена. Торг от 228 000 оправдан.</div></div>
+        <div style="display:flex;gap:7px;flex:none;padding-top:14px">
+          <span style="font:500 11.5px Inter;padding:6px 10px;border-radius:6px;background:rgba(196,99,95,.13);color:#d4827e">3 flags</span>
+          <span style="font:500 11.5px Inter;padding:6px 10px;border-radius:6px;background:rgba(233,233,237,.05);color:#9397ab">5 unknown</span>
+          <span style="font:500 11.5px Inter;padding:6px 10px;border-radius:6px;background:rgba(79,185,141,.11);color:#6fc9a3">32 ok</span>
+        </div>
+      </div>
+
+      <div style="flex:1;min-height:0;display:grid;grid-template-columns:1fr 340px;gap:12px;padding:12px 20px 16px">
+        <div style="background:#1d1f2d;border-radius:10px;box-shadow:inset 0 0 0 1px #292b31;padding:14px 0 0;overflow:hidden;display:flex;flex-direction:column">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:0 16px 12px"><div style="font:500 14px Inter">Checklist</div><span style="font:400 11.5px Inter;color:#75798c">flags first · expand all</span></div>
+          <div style="display:flex;flex-direction:column;gap:1px">
+            <div style="padding:10px 16px;background:rgba(196,99,95,.06);box-shadow:inset 2px 0 0 #c4635f;display:flex;align-items:center;gap:10px">
+              <span style="font:500 13px Inter;flex:1">Building fund <span style="color:#75798c;font-weight:400">· remont, laen, kogumine</span></span>
+              <span style="display:flex;gap:3px"><span style="width:7px;height:7px;border-radius:2px;background:#c4635f"></span><span style="width:7px;height:7px;border-radius:2px;background:#c4635f"></span><span style="width:7px;height:7px;border-radius:2px;background:#595d6c"></span><span style="width:7px;height:7px;border-radius:2px;background:#4fb98d"></span><span style="width:7px;height:7px;border-radius:2px;background:#4fb98d"></span><span style="width:7px;height:7px;border-radius:2px;background:#4fb98d"></span><span style="width:7px;height:7px;border-radius:2px;background:#4fb98d"></span></span>
+              <span class="mono" style="font-size:10.5px;color:#75798c;width:56px;text-align:right">2 flags</span>
+              <span style="color:#75798c;font-size:11px">▾</span>
+            </div>
+            <div style="padding:4px 16px 12px 26px;display:flex;flex-direction:column;gap:0">
+              <div style="display:flex;gap:10px;align-items:baseline;padding:5px 0"><span style="color:#c4635f;font-size:11px;width:12px">✕</span><span style="font:400 13px Inter;flex:1;color:#cfd3e5">Remondifond 0,32 €/m² — alla soovitatava 0,60</span><span class="mono" style="font-size:11px;color:#75798c">−8 pts</span></div>
+              <div style="display:flex;gap:10px;align-items:baseline;padding:5px 0"><span style="color:#c4635f;font-size:11px;width:12px">✕</span><span style="font:400 13px Inter;flex:1;color:#cfd3e5">Katus vahetamata (1974), KÜ kavas puudub</span><span class="mono" style="font-size:11px;color:#75798c">−6 pts</span></div>
+              <div style="display:flex;gap:10px;align-items:baseline;padding:5px 0"><span style="color:#75798c;font-size:11px;width:12px">?</span><span style="font:400 13px Inter;flex:1;color:#9397ab">KÜ laenujääk — andmed puuduvad</span><span class="mono" style="font-size:11px;color:#595d6c">ask broker</span></div>
+              <div style="display:flex;gap:10px;align-items:baseline;padding:5px 0"><span style="color:#4fb98d;font-size:11px;width:12px">✓</span><span style="font:400 13px Inter;flex:1;color:#9397ab">Küte renoveeritud 2019 · trepikoda korras · 4 more</span></div>
+            </div>
+            <div style="padding:10px 16px;box-shadow:inset 2px 0 0 #c98b52;display:flex;align-items:center;gap:10px">
+              <span style="font:500 13px Inter;flex:1">Risk <span style="color:#75798c;font-weight:400">· õiguslik, naabrid, müügiajalugu</span></span>
+              <span style="display:flex;gap:3px"><span style="width:7px;height:7px;border-radius:2px;background:#c98b52"></span><span style="width:7px;height:7px;border-radius:2px;background:#595d6c"></span><span style="width:7px;height:7px;border-radius:2px;background:#595d6c"></span><span style="width:7px;height:7px;border-radius:2px;background:#4fb98d"></span><span style="width:7px;height:7px;border-radius:2px;background:#4fb98d"></span><span style="width:7px;height:7px;border-radius:2px;background:#4fb98d"></span></span>
+              <span class="mono" style="font-size:10.5px;color:#75798c;width:56px;text-align:right">1 flag</span><span style="color:#75798c;font-size:11px">▸</span>
+            </div>
+            <div style="padding:10px 16px;box-shadow:inset 2px 0 0 #4fb98d;display:flex;align-items:center;gap:10px">
+              <span style="font:500 13px Inter;flex:1">Finance <span style="color:#75798c;font-weight:400">· hind, €/m², laenuvõime</span></span>
+              <span style="display:flex;gap:3px"><span style="width:7px;height:7px;border-radius:2px;background:#4fb98d"></span><span style="width:7px;height:7px;border-radius:2px;background:#4fb98d"></span><span style="width:7px;height:7px;border-radius:2px;background:#4fb98d"></span><span style="width:7px;height:7px;border-radius:2px;background:#4fb98d"></span><span style="width:7px;height:7px;border-radius:2px;background:#4fb98d"></span><span style="width:7px;height:7px;border-radius:2px;background:#7fbf7a"></span><span style="width:7px;height:7px;border-radius:2px;background:#4fb98d"></span><span style="width:7px;height:7px;border-radius:2px;background:#4fb98d"></span></span>
+              <span class="mono" style="font-size:10.5px;color:#75798c;width:56px;text-align:right">8 ok</span><span style="color:#75798c;font-size:11px">▸</span>
+            </div>
+            <div style="padding:10px 16px;box-shadow:inset 2px 0 0 #4fb98d;display:flex;align-items:center;gap:10px">
+              <span style="font:500 13px Inter;flex:1">Quality <span style="color:#75798c;font-weight:400">· seisukord, aknad, plaan</span></span>
+              <span style="display:flex;gap:3px"><span style="width:7px;height:7px;border-radius:2px;background:#4fb98d"></span><span style="width:7px;height:7px;border-radius:2px;background:#4fb98d"></span><span style="width:7px;height:7px;border-radius:2px;background:#595d6c"></span><span style="width:7px;height:7px;border-radius:2px;background:#4fb98d"></span><span style="width:7px;height:7px;border-radius:2px;background:#4fb98d"></span><span style="width:7px;height:7px;border-radius:2px;background:#4fb98d"></span><span style="width:7px;height:7px;border-radius:2px;background:#4fb98d"></span><span style="width:7px;height:7px;border-radius:2px;background:#4fb98d"></span><span style="width:7px;height:7px;border-radius:2px;background:#4fb98d"></span></span>
+              <span class="mono" style="font-size:10.5px;color:#75798c;width:56px;text-align:right">1 unknown</span><span style="color:#75798c;font-size:11px">▸</span>
+            </div>
+            <div style="padding:10px 16px;box-shadow:inset 2px 0 0 #4fb98d;display:flex;align-items:center;gap:10px">
+              <span style="font:500 13px Inter;flex:1">Location <span style="color:#75798c;font-weight:400">· ühistransport, kool, müra</span></span>
+              <span style="display:flex;gap:3px"><span style="width:7px;height:7px;border-radius:2px;background:#4fb98d"></span><span style="width:7px;height:7px;border-radius:2px;background:#4fb98d"></span><span style="width:7px;height:7px;border-radius:2px;background:#4fb98d"></span><span style="width:7px;height:7px;border-radius:2px;background:#7fbf7a"></span><span style="width:7px;height:7px;border-radius:2px;background:#595d6c"></span><span style="width:7px;height:7px;border-radius:2px;background:#4fb98d"></span><span style="width:7px;height:7px;border-radius:2px;background:#4fb98d"></span><span style="width:7px;height:7px;border-radius:2px;background:#4fb98d"></span><span style="width:7px;height:7px;border-radius:2px;background:#4fb98d"></span><span style="width:7px;height:7px;border-radius:2px;background:#4fb98d"></span></span>
+              <span class="mono" style="font-size:10.5px;color:#75798c;width:56px;text-align:right">10 ok</span><span style="color:#75798c;font-size:11px">▸</span>
+            </div>
+          </div>
+          <div style="margin-top:auto;padding:10px 16px;font:400 11.5px Inter;color:#595d6c;box-shadow:inset 0 1px 0 #292b31">40 items · groups open on flags, collapse on ok</div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:12px;min-height:0">
+          <div style="background:#1d1f2d;border-radius:10px;box-shadow:inset 0 0 0 1px #292b31;padding:14px 16px">
+            <div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font:600 9.5px Inter;letter-spacing:.1em;text-transform:uppercase;color:#75798c">Cost of ownership</div><span class="mono" style="font-size:16px;font-weight:500">1 043 €<span style="font-size:10px;color:#75798c">/kuu</span></span></div>
+            <div style="display:flex;height:6px;border-radius:3px;overflow:hidden;margin-top:12px"><div style="width:62%;background:#9184d9"></div><div style="width:17%;background:#7972a9"></div><div style="width:12%;background:#5c5783"></div><div style="width:9%;background:#423e5d"></div></div>
+            <div style="display:flex;flex-direction:column;gap:5px;margin-top:10px">
+              <div style="display:flex;justify-content:space-between"><span style="font:400 12px Inter;color:#9397ab">Laen 2,1% · 30a</span><span class="mono" style="font-size:12px">648 €</span></div>
+              <div style="display:flex;justify-content:space-between"><span style="font:400 12px Inter;color:#9397ab">Küte (talv, keskm.)</span><span class="mono" style="font-size:12px">178 €</span></div>
+              <div style="display:flex;justify-content:space-between"><span style="font:400 12px Inter;color:#9397ab">KÜ + remondifond</span><span class="mono" style="font-size:12px">124 €</span></div>
+              <div style="display:flex;justify-content:space-between"><span style="font:400 12px Inter;color:#9397ab">Vesi, elekter, kindlustus</span><span class="mono" style="font-size:12px">93 €</span></div>
+            </div>
+          </div>
+          <div style="background:#1d1f2d;border-radius:10px;box-shadow:inset 0 0 0 1px #292b31;padding:14px 16px;flex:1;min-height:0;overflow:hidden">
+            <div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font:600 9.5px Inter;letter-spacing:.1em;text-transform:uppercase;color:#75798c">Negotiation</div><span style="font:400 11px Inter;color:#595d6c">regenerate</span></div>
+            <div style="display:flex;align-items:baseline;gap:8px;margin-top:10px"><span class="mono" style="font-size:22px;font-weight:500;color:#b5abfc">225–231k</span><span class="mono" style="font-size:11px;color:#75798c">target · ask 239k</span></div>
+            <div style="height:4px;border-radius:2px;background:#292b31;margin-top:10px;position:relative"><div style="position:absolute;left:24%;width:26%;height:100%;border-radius:2px;background:#9184d9"></div><div style="position:absolute;left:82%;width:2px;height:100%;background:#e9e9ed"></div></div>
+            <div style="font:400 13px/1.55 Inter;color:#cfd3e5;margin-top:12px">Аргументы: крыша не в плане ремонта, фонд 0,32 €/м², квартира в продаже 41 день, соседняя сделка на Mustamäe tee 139 — 3 210 €/м².</div>
+            <div style="display:flex;gap:8px;margin-top:12px"><span style="font:500 12px Inter;padding:6px 11px;border-radius:6px;border:1px solid #9184d9;color:#b5abfc">Draft broker email</span><span style="font:500 12px Inter;padding:6px 11px;border-radius:6px;background:rgba(233,233,237,.06);color:#cfd3e5">KÜ · price history</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<div class="dv-opt" id="1d"><div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a>Detail — option B: checklist as a signal grid (all 40 at once)</div>
+<div class="dv-card" style="width:920px;height:640px;background:#161826;color:#e9e9ed;padding:20px;box-sizing:border-box;overflow:hidden">
+  <div style="display:flex;align-items:baseline;gap:12px"><div style="font:500 18px Inter">Same screen, checklist region swapped</div><span style="font:400 12px Inter;color:#75798c">nothing hidden — density instead of disclosure</span></div>
+  <div style="margin-top:16px;background:#1d1f2d;border-radius:10px;box-shadow:inset 0 0 0 1px #292b31;padding:16px">
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px">
+      <span style="font:500 13px Inter">40 checks</span>
+      <span style="flex:1;height:6px;border-radius:3px;overflow:hidden;display:flex"><span style="width:80%;background:#4fb98d"></span><span style="width:12.5%;background:#595d6c"></span><span style="width:7.5%;background:#c4635f"></span></span>
+      <span class="mono" style="font-size:11px;color:#6fc9a3">32 ok</span><span class="mono" style="font-size:11px;color:#75798c">5 unknown</span><span class="mono" style="font-size:11px;color:#d4827e">3 flags</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px">
+      <div><div style="font:600 9.5px Inter;letter-spacing:.1em;text-transform:uppercase;color:#75798c;padding-bottom:8px;box-shadow:inset 0 -1px 0 #292b31">Finance</div>
+        <div style="display:flex;flex-direction:column;gap:1px;margin-top:6px">
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#4fb98d;font-size:10px">✓</span><span style="font:400 12px Inter;color:#9397ab">Hind vs eelarve</span></div>
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#4fb98d;font-size:10px">✓</span><span style="font:400 12px Inter;color:#9397ab">€/m² vs piirkond</span></div>
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#4fb98d;font-size:10px">✓</span><span style="font:400 12px Inter;color:#9397ab">Sissemakse 20%</span></div>
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#4fb98d;font-size:10px">✓</span><span style="font:400 12px Inter;color:#9397ab">Kuumakse &lt; 35%</span></div>
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#4fb98d;font-size:10px">✓</span><span style="font:400 12px Inter;color:#9397ab">Notar + riigilõiv</span></div>
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#7fbf7a;font-size:10px">✓</span><span style="font:400 12px Inter;color:#9397ab">Turuaeg 41 p</span></div>
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#4fb98d;font-size:10px">✓</span><span style="font:400 12px Inter;color:#9397ab">Hinnalangus −3%</span></div>
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#4fb98d;font-size:10px">✓</span><span style="font:400 12px Inter;color:#9397ab">Edasimüügiväärtus</span></div>
+        </div></div>
+      <div><div style="font:600 9.5px Inter;letter-spacing:.1em;text-transform:uppercase;color:#75798c;padding-bottom:8px;box-shadow:inset 0 -1px 0 #292b31">Quality</div>
+        <div style="display:flex;flex-direction:column;gap:1px;margin-top:6px">
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#4fb98d;font-size:10px">✓</span><span style="font:400 12px Inter;color:#9397ab">Aknad 2016</span></div>
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#4fb98d;font-size:10px">✓</span><span style="font:400 12px Inter;color:#9397ab">Santehnika</span></div>
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#75798c;font-size:10px">?</span><span style="font:400 12px Inter;color:#75798c">Elektrisüsteem</span></div>
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#4fb98d;font-size:10px">✓</span><span style="font:400 12px Inter;color:#9397ab">Planeering</span></div>
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#4fb98d;font-size:10px">✓</span><span style="font:400 12px Inter;color:#9397ab">Rõdu 5 m²</span></div>
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#4fb98d;font-size:10px">✓</span><span style="font:400 12px Inter;color:#9397ab">Panipaik</span></div>
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#4fb98d;font-size:10px">✓</span><span style="font:400 12px Inter;color:#9397ab">Korrus 4/5</span></div>
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#4fb98d;font-size:10px">✓</span><span style="font:400 12px Inter;color:#9397ab">Lift puudub</span></div>
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#4fb98d;font-size:10px">✓</span><span style="font:400 12px Inter;color:#9397ab">Küte 2019</span></div>
+        </div></div>
+      <div><div style="font:600 9.5px Inter;letter-spacing:.1em;text-transform:uppercase;color:#75798c;padding-bottom:8px;box-shadow:inset 0 -1px 0 #292b31">Location</div>
+        <div style="display:flex;flex-direction:column;gap:1px;margin-top:6px">
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#4fb98d;font-size:10px">✓</span><span style="font:400 12px Inter;color:#9397ab">Bolt HQ 22 min</span></div>
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#4fb98d;font-size:10px">✓</span><span style="font:400 12px Inter;color:#9397ab">Trollid 3, 7</span></div>
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#4fb98d;font-size:10px">✓</span><span style="font:400 12px Inter;color:#9397ab">Kauplus 200 m</span></div>
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#7fbf7a;font-size:10px">✓</span><span style="font:400 12px Inter;color:#9397ab">Park 600 m</span></div>
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#75798c;font-size:10px">?</span><span style="font:400 12px Inter;color:#75798c">Müratase</span></div>
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#4fb98d;font-size:10px">✓</span><span style="font:400 12px Inter;color:#9397ab">Parkimine tasuta</span></div>
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#4fb98d;font-size:10px">✓</span><span style="font:400 12px Inter;color:#9397ab">Kool 1,1 km</span></div>
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#4fb98d;font-size:10px">✓</span><span style="font:400 12px Inter;color:#9397ab">Piirkonna trend</span></div>
+        </div></div>
+      <div style="padding:10px;margin:-10px;border-radius:8px;background:rgba(196,99,95,.06);box-shadow:inset 0 0 0 1px rgba(196,99,95,.22)"><div style="font:600 9.5px Inter;letter-spacing:.1em;text-transform:uppercase;color:#d4827e;padding-bottom:8px;box-shadow:inset 0 -1px 0 rgba(196,99,95,.25)">Building fund</div>
+        <div style="display:flex;flex-direction:column;gap:1px;margin-top:6px">
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#c4635f;font-size:10px">✕</span><span style="font:400 12px Inter;color:#e9e9ed">Fond 0,32 €/m²</span></div>
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#c4635f;font-size:10px">✕</span><span style="font:400 12px Inter;color:#e9e9ed">Katus vahetamata</span></div>
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#75798c;font-size:10px">?</span><span style="font:400 12px Inter;color:#75798c">Laenujääk</span></div>
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#4fb98d;font-size:10px">✓</span><span style="font:400 12px Inter;color:#9397ab">Võlgnevused 0</span></div>
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#4fb98d;font-size:10px">✓</span><span style="font:400 12px Inter;color:#9397ab">Trepikoda korras</span></div>
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#4fb98d;font-size:10px">✓</span><span style="font:400 12px Inter;color:#9397ab">Juhatus aktiivne</span></div>
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#4fb98d;font-size:10px">✓</span><span style="font:400 12px Inter;color:#9397ab">Fassaad 2021</span></div>
+        </div></div>
+      <div><div style="font:600 9.5px Inter;letter-spacing:.1em;text-transform:uppercase;color:#75798c;padding-bottom:8px;box-shadow:inset 0 -1px 0 #292b31">Risk</div>
+        <div style="display:flex;flex-direction:column;gap:1px;margin-top:6px">
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#c98b52;font-size:10px">!</span><span style="font:400 12px Inter;color:#e9e9ed">Müük 2× 2023</span></div>
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#4fb98d;font-size:10px">✓</span><span style="font:400 12px Inter;color:#9397ab">Kinnistusraamat</span></div>
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#75798c;font-size:10px">?</span><span style="font:400 12px Inter;color:#75798c">Naabrid</span></div>
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#75798c;font-size:10px">?</span><span style="font:400 12px Inter;color:#75798c">Servituudid</span></div>
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#4fb98d;font-size:10px">✓</span><span style="font:400 12px Inter;color:#9397ab">Hüpoteek puudub</span></div>
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#4fb98d;font-size:10px">✓</span><span style="font:400 12px Inter;color:#9397ab">Omanik 1</span></div>
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#4fb98d;font-size:10px">✓</span><span style="font:400 12px Inter;color:#9397ab">Üleandmine 1 kuu</span></div>
+          <div style="display:flex;gap:7px;align-items:baseline;padding:3px 0"><span style="color:#4fb98d;font-size:10px">✓</span><span style="font:400 12px Inter;color:#9397ab">Maakler litsents</span></div>
+        </div></div>
+    </div>
+    <div style="font:400 11.5px/1.5 Inter;color:#75798c;margin-top:14px;max-width:820px">Every item is on screen; the eye finds the flagged column because it is the only one with a tinted panel. Hovering a row reveals the AI's one-line reason in a popover — no click, no accordion. Trade-off vs <a class="dv-oid" href="#1c">1c</a>: five columns of 12px text is more to scan, but nothing is ever hidden and the shape of the listing is legible in one glance.</div>
+  </div>
+</div></div>
+
+<div class="dv-opt" id="1e"><div class="dv-olabel"><a class="dv-oid" href="#1e">1e</a>Pending — 1440×900</div>
+<div class="dv-card" style="width:1440px;height:900px;background:#161826;color:#e9e9ed;display:flex;flex-direction:column;overflow:hidden">
+  <div style="height:48px;flex:none;display:flex;align-items:center;gap:24px;padding:0 20px;box-shadow:inset 0 -1px 0 #292b31">
+    <div style="display:flex;align-items:center;gap:8px"><div style="width:8px;height:8px;border-radius:2px;background:#9184d9"></div><span style="font:500 13px Inter">Aparts Looker</span></div>
+    <div style="display:flex;gap:2px">
+      <span style="font:400 13px Inter;padding:6px 10px;color:#9397ab">Overview</span>
+      <span style="font:400 13px Inter;padding:6px 10px;color:#9397ab">Detail</span>
+      <span style="font:500 13px Inter;padding:6px 10px;border-radius:6px;background:rgba(145,132,217,.14);color:#b5abfc;display:flex;align-items:center;gap:6px">Pending <span class="mono" style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(201,139,82,.2);color:#d9a473">6</span></span>
+      <span style="font:400 13px Inter;padding:6px 10px;color:#9397ab">Compare</span>
+      <span style="font:400 13px Inter;padding:6px 10px;color:#9397ab">Settings</span>
+    </div>
+  </div>
+  <div style="flex:1;padding:24px 20px;min-height:0;overflow:hidden">
+    <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:4px"><div style="font:500 22px Inter;letter-spacing:-.02em">Approval queue</div><span style="font:400 13px Inter;color:#75798c">6 listings · sorted by score · <span style="color:#9397ab">j/k to move, a approve, r reject</span></span></div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:18px">
+
+      <div style="background:#1d1f2d;border-radius:10px;box-shadow:inset 0 0 0 1px #292b31,0 0 0 1px rgba(127,191,122,.25);overflow:hidden;display:flex;flex-direction:column">
+        <div style="height:132px;background:linear-gradient(150deg,#2a2d3d,#191b28);position:relative;display:flex;align-items:center;justify-content:center;font:400 11px Inter;color:#4a4d5c">photo
+          <span class="mono" style="position:absolute;right:10px;top:10px;font-size:16px;font-weight:500;color:#0f160f;background:#7fbf7a;padding:2px 8px;border-radius:5px">79</span></div>
+        <div style="padding:14px 16px;display:flex;flex-direction:column;flex:1">
+          <div style="font:500 15px Inter">Telliskivi 60a — 2 tuba</div>
+          <div style="font:400 11.5px Inter;color:#75798c;margin-top:2px">Kalamaja · 48,6 m² · 1958 · 2/4</div>
+          <div style="display:flex;align-items:baseline;gap:8px;margin-top:10px"><span class="mono" style="font-size:22px;font-weight:500">183 000 €</span><span class="mono" style="font-size:11px;color:#75798c">3 765 €/m²</span></div>
+          <div style="font:400 13px/1.5 Inter;color:#cfd3e5;margin-top:10px;border-left:2px solid #7fbf7a;padding-left:10px">Дом кирпичный, район растёт. Кухня требует ремонта — заложи 12k.</div>
+          <div style="display:flex;gap:7px;margin-top:auto;padding-top:14px">
+            <span class="btn" style="flex:1;padding:8px;border-color:#4fb98d;color:#6fc9a3">Approve</span>
+            <span class="btn btn-secondary" style="flex:1;padding:8px;color:var(--color-neutral-400)">Reject</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#1d1f2d;border-radius:10px;box-shadow:inset 0 0 0 1px #292b31;overflow:hidden;display:flex;flex-direction:column">
+        <div style="height:132px;background:linear-gradient(150deg,#2a2d3d,#191b28);position:relative;display:flex;align-items:center;justify-content:center;font:400 11px Inter;color:#4a4d5c">photo
+          <span class="mono" style="position:absolute;right:10px;top:10px;font-size:16px;font-weight:500;color:#160f0f;background:#c9b455;padding:2px 8px;border-radius:5px">64</span></div>
+        <div style="padding:14px 16px;display:flex;flex-direction:column;flex:1">
+          <div style="font:500 15px Inter">Tammsaare tee 91 — 2 tuba</div>
+          <div style="font:400 11.5px Inter;color:#75798c;margin-top:2px">Mustamäe · 51,0 m² · 1979 · 9/9</div>
+          <div style="display:flex;align-items:baseline;gap:8px;margin-top:10px"><span class="mono" style="font-size:22px;font-weight:500">176 000 €</span><span class="mono" style="font-size:11px;color:#75798c">3 451 €/m²</span></div>
+          <div style="font:400 13px/1.5 Inter;color:#cfd3e5;margin-top:10px;border-left:2px solid #c9b455;padding-left:10px">Последний этаж без ремонта крыши — риск. Цена соответствует району.</div>
+          <div style="display:flex;gap:7px;margin-top:auto;padding-top:14px">
+            <span class="btn" style="flex:1;padding:8px;border-color:#4fb98d;color:#6fc9a3">Approve</span>
+            <span class="btn btn-secondary" style="flex:1;padding:8px;color:var(--color-neutral-400)">Reject</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#1d1f2d;border-radius:10px;box-shadow:inset 0 0 0 1px #292b31;overflow:hidden;display:flex;flex-direction:column;position:relative">
+        <div style="height:132px;background:linear-gradient(150deg,#2a2d3d,#191b28);position:relative;display:flex;align-items:center;justify-content:center;font:400 11px Inter;color:#4a4d5c">photo
+          <span class="mono" style="position:absolute;right:10px;top:10px;font-size:16px;font-weight:500;color:#160f0f;background:#c98b52;padding:2px 8px;border-radius:5px">52</span></div>
+        <div style="padding:14px 16px;display:flex;flex-direction:column;flex:1;opacity:.25">
+          <div style="font:500 15px Inter">Paldiski mnt 114 — 2 tuba</div>
+          <div style="font:400 11.5px Inter;color:#75798c;margin-top:2px">Põhja-Tallinn · 47,8 m² · 1968</div>
+          <div style="display:flex;align-items:baseline;gap:8px;margin-top:10px"><span class="mono" style="font-size:22px;font-weight:500">168 000 €</span></div>
+        </div>
+        <div style="position:absolute;left:0;right:0;bottom:0;top:132px;background:rgba(22,24,38,.92);padding:16px;display:flex;flex-direction:column">
+          <div style="font:500 13px Inter">Reject — why?</div>
+          <div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:12px">
+            <span style="font:400 12px Inter;padding:6px 11px;border-radius:6px;background:rgba(233,233,237,.05);color:#cfd3e5;box-shadow:inset 0 0 0 1px #3f424d">Price</span>
+            <span style="font:500 12px Inter;padding:6px 11px;border-radius:6px;background:rgba(196,99,95,.15);color:#d4827e;box-shadow:inset 0 0 0 1px rgba(196,99,95,.4)">Location</span>
+            <span style="font:400 12px Inter;padding:6px 11px;border-radius:6px;background:rgba(233,233,237,.05);color:#cfd3e5;box-shadow:inset 0 0 0 1px #3f424d">Condition</span>
+            <span style="font:400 12px Inter;padding:6px 11px;border-radius:6px;background:rgba(233,233,237,.05);color:#cfd3e5;box-shadow:inset 0 0 0 1px #3f424d">Other</span>
+          </div>
+          <div style="font:400 11.5px/1.5 Inter;color:#75798c;margin-top:12px">Future listings on Paldiski mnt will be scored down. Undo for 8s.</div>
+          <div style="margin-top:auto;display:flex;gap:7px"><span style="flex:1;text-align:center;font:500 12.5px Inter;padding:8px;border-radius:7px;border:1px solid #c4635f;color:#d4827e">Confirm reject</span><span style="font:500 12.5px Inter;padding:8px 12px;border-radius:7px;color:#9397ab">Cancel</span></div>
+        </div>
+      </div>
+
+      <div style="background:#1d1f2d;border-radius:10px;box-shadow:inset 0 0 0 1px #292b31;overflow:hidden;display:flex;flex-direction:column">
+        <div style="height:132px;background:linear-gradient(150deg,#2a2d3d,#191b28);position:relative;display:flex;align-items:center;justify-content:center;font:400 11px Inter;color:#4a4d5c">photo
+          <span class="mono" style="position:absolute;right:10px;top:10px;font-size:16px;font-weight:500;color:#160f0f;background:#c98b52;padding:2px 8px;border-radius:5px">49</span></div>
+        <div style="padding:14px 16px;display:flex;flex-direction:column;flex:1">
+          <div style="font:500 15px Inter">Pärnu mnt 238 — 3 tuba</div>
+          <div style="font:400 11.5px Inter;color:#75798c;margin-top:2px">Kesklinn · 66,4 m² · 1962 · 1/5</div>
+          <div style="display:flex;align-items:baseline;gap:8px;margin-top:10px"><span class="mono" style="font-size:22px;font-weight:500">262 000 €</span><span class="mono" style="font-size:11px;color:#d4827e">3 946 €/m²</span></div>
+          <div style="font:400 13px/1.5 Inter;color:#cfd3e5;margin-top:10px;border-left:2px solid #c98b52;padding-left:10px">Первый этаж на шумной магистрали, цена на верхней границе бюджета.</div>
+          <div style="display:flex;gap:7px;margin-top:auto;padding-top:14px">
+            <span class="btn" style="flex:1;padding:8px;border-color:#4fb98d;color:#6fc9a3">Approve</span>
+            <span class="btn btn-secondary" style="flex:1;padding:8px;color:var(--color-neutral-400)">Reject</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#1d1f2d;border-radius:10px;box-shadow:inset 0 0 0 1px #292b31;overflow:hidden;display:flex;flex-direction:column">
+        <div style="height:132px;background:linear-gradient(150deg,#2a2d3d,#191b28);position:relative;display:flex;align-items:center;justify-content:center;font:400 11px Inter;color:#4a4d5c">photo
+          <span class="mono" style="position:absolute;right:10px;top:10px;font-size:16px;font-weight:500;color:#160f0f;background:#c98b52;padding:2px 8px;border-radius:5px">47</span></div>
+        <div style="padding:14px 16px;display:flex;flex-direction:column;flex:1">
+          <div style="font:500 15px Inter">Kadaka tee 78 — 2 tuba</div>
+          <div style="font:400 11.5px Inter;color:#75798c;margin-top:2px">Mustamäe · 44,1 m² · 1971 · 5/5</div>
+          <div style="display:flex;align-items:baseline;gap:8px;margin-top:10px"><span class="mono" style="font-size:22px;font-weight:500">159 000 €</span><span class="mono" style="font-size:11px;color:#75798c">3 605 €/m²</span></div>
+          <div style="font:400 13px/1.5 Inter;color:#cfd3e5;margin-top:10px;border-left:2px solid #c98b52;padding-left:10px">Метраж ниже цели, но фонд сильный. Как запасной вариант.</div>
+          <div style="display:flex;gap:7px;margin-top:auto;padding-top:14px">
+            <span class="btn" style="flex:1;padding:8px;border-color:#4fb98d;color:#6fc9a3">Approve</span>
+            <span class="btn btn-secondary" style="flex:1;padding:8px;color:var(--color-neutral-400)">Reject</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#1d1f2d;border-radius:10px;box-shadow:inset 0 0 0 1px #292b31;overflow:hidden;display:flex;flex-direction:column">
+        <div style="height:132px;background:linear-gradient(150deg,#2a2d3d,#191b28);position:relative;display:flex;align-items:center;justify-content:center;font:400 11px Inter;color:#4a4d5c">photo
+          <span class="mono" style="position:absolute;right:10px;top:10px;font-size:16px;font-weight:500;color:#160f0f;background:#c4635f;padding:2px 8px;border-radius:5px">38</span></div>
+        <div style="padding:14px 16px;display:flex;flex-direction:column;flex:1">
+          <div style="font:500 15px Inter">Nõmme tee 12 — 4 tuba</div>
+          <div style="font:400 11.5px Inter;color:#75798c;margin-top:2px">Nõmme · 92,0 m² · 1939 · maja</div>
+          <div style="display:flex;align-items:baseline;gap:8px;margin-top:10px"><span class="mono" style="font-size:22px;font-weight:500">289 000 €</span><span class="mono" style="font-size:11px;color:#d4827e">üle eelarve</span></div>
+          <div style="font:400 13px/1.5 Inter;color:#cfd3e5;margin-top:10px;border-left:2px solid #c4635f;padding-left:10px">Выше бюджета на 24k, печное отопление. Вряд ли твой вариант.</div>
+          <div style="display:flex;gap:7px;margin-top:auto;padding-top:14px">
+            <span class="btn" style="flex:1;padding:8px;border-color:#4fb98d;color:#6fc9a3">Approve</span>
+            <span class="btn btn-secondary" style="flex:1;padding:8px;color:var(--color-neutral-400)">Reject</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<div class="dv-opt" id="1f"><div class="dv-olabel"><a class="dv-oid" href="#1f">1f</a>Settings — 1440×900</div>
+<div class="dv-card" style="width:1440px;height:900px;background:#161826;color:#e9e9ed;display:flex;flex-direction:column;overflow:hidden">
+  <div style="height:48px;flex:none;display:flex;align-items:center;gap:24px;padding:0 20px;box-shadow:inset 0 -1px 0 #292b31">
+    <div style="display:flex;align-items:center;gap:8px"><div style="width:8px;height:8px;border-radius:2px;background:#9184d9"></div><span style="font:500 13px Inter">Aparts Looker</span></div>
+    <div style="display:flex;gap:2px">
+      <span style="font:400 13px Inter;padding:6px 10px;color:#9397ab">Overview</span><span style="font:400 13px Inter;padding:6px 10px;color:#9397ab">Detail</span><span style="font:400 13px Inter;padding:6px 10px;color:#9397ab">Pending</span><span style="font:400 13px Inter;padding:6px 10px;color:#9397ab">Compare</span>
+      <span style="font:500 13px Inter;padding:6px 10px;border-radius:6px;background:rgba(145,132,217,.14);color:#b5abfc">Settings</span>
+    </div>
+    <span class="btn btn-primary" style="margin-left:auto;font-size:12px;padding:5px 11px;color:var(--color-accent-400)">Save</span>
+  </div>
+  <div style="flex:1;display:grid;grid-template-columns:200px 1fr;min-height:0">
+    <div style="padding:24px 12px;box-shadow:inset -1px 0 0 #292b31;display:flex;flex-direction:column;gap:2px">
+      <span style="font:500 13px Inter;padding:7px 10px;border-radius:6px;background:rgba(145,132,217,.12);color:#b5abfc">Buyer profile</span>
+      <span style="font:400 13px Inter;padding:7px 10px;color:#9397ab">Scoring &amp; AI</span>
+      <span style="font:400 13px Inter;padding:7px 10px;color:#9397ab">Cost model</span>
+      <span style="font:400 13px Inter;padding:7px 10px;color:#9397ab">Telegram</span>
+      <span style="font:400 13px Inter;padding:7px 10px;color:#9397ab">Scraper</span>
+    </div>
+    <div style="padding:28px 32px;overflow:hidden">
+      <div style="font:500 22px Inter;letter-spacing:-.02em">Buyer profile</div>
+      <div style="font:400 13px Inter;color:#75798c;margin-top:4px;max-width:620px">These values feed every score. Change one and the queue re-scores on the next scrape.</div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-top:28px;max-width:1040px">
+        <div style="display:flex;flex-direction:column;gap:20px">
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font:400 13px Inter;color:#cfd3e5">Budget ceiling</span><span class="mono" style="font-size:14px;color:#b5abfc">265 000 €</span></div>
+            <div style="height:4px;border-radius:2px;background:#292b31;margin-top:10px;position:relative"><div style="width:64%;height:100%;border-radius:2px;background:#9184d9"></div><div style="position:absolute;left:64%;top:-4px;width:12px;height:12px;border-radius:50%;background:#e9e9ed;margin-left:-6px"></div></div>
+            <div class="mono" style="font-size:10px;color:#595d6c;margin-top:6px;display:flex;justify-content:space-between"><span>120k</span><span>350k</span></div>
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font:400 13px Inter;color:#cfd3e5">Minimum area</span><span class="mono" style="font-size:14px;color:#b5abfc">55 m²</span></div>
+            <div style="height:4px;border-radius:2px;background:#292b31;margin-top:10px;position:relative"><div style="width:38%;height:100%;border-radius:2px;background:#9184d9"></div><div style="position:absolute;left:38%;top:-4px;width:12px;height:12px;border-radius:50%;background:#e9e9ed;margin-left:-6px"></div></div>
+          </div>
+          <div>
+            <div style="font:400 13px Inter;color:#cfd3e5;margin-bottom:9px">Rooms</div>
+            <div style="display:inline-flex;border-radius:7px;overflow:hidden;box-shadow:inset 0 0 0 1px #3f424d">
+              <span style="font:400 12.5px Inter;padding:7px 15px;color:#9397ab">1</span>
+              <span style="font:500 12.5px Inter;padding:7px 15px;background:rgba(145,132,217,.16);color:#b5abfc">2</span>
+              <span style="font:500 12.5px Inter;padding:7px 15px;background:rgba(145,132,217,.16);color:#b5abfc">3</span>
+              <span style="font:400 12.5px Inter;padding:7px 15px;color:#9397ab">4+</span>
+            </div>
+          </div>
+          <div>
+            <div style="font:400 13px Inter;color:#cfd3e5;margin-bottom:9px">Districts</div>
+            <div style="display:flex;flex-wrap:wrap;gap:7px">
+              <span style="font:500 12px Inter;padding:6px 11px;border-radius:6px;background:rgba(145,132,217,.16);color:#b5abfc;box-shadow:inset 0 0 0 1px rgba(145,132,217,.4)">Kalamaja ✕</span>
+              <span style="font:500 12px Inter;padding:6px 11px;border-radius:6px;background:rgba(145,132,217,.16);color:#b5abfc;box-shadow:inset 0 0 0 1px rgba(145,132,217,.4)">Mustamäe ✕</span>
+              <span style="font:500 12px Inter;padding:6px 11px;border-radius:6px;background:rgba(145,132,217,.16);color:#b5abfc;box-shadow:inset 0 0 0 1px rgba(145,132,217,.4)">Kesklinn ✕</span>
+              <span style="font:400 12px Inter;padding:6px 11px;border-radius:6px;color:#75798c;box-shadow:inset 0 0 0 1px #3f424d">+ add</span>
+            </div>
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font:400 13px Inter;color:#cfd3e5">Max commute to Bolt HQ</span><span class="mono" style="font-size:14px;color:#b5abfc">30 min</span></div>
+            <div style="height:4px;border-radius:2px;background:#292b31;margin-top:10px;position:relative"><div style="width:50%;height:100%;border-radius:2px;background:#9184d9"></div><div style="position:absolute;left:50%;top:-4px;width:12px;height:12px;border-radius:50%;background:#e9e9ed;margin-left:-6px"></div></div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div style="background:#1d1f2d;border-radius:10px;box-shadow:inset 0 0 0 1px #292b31;padding:16px">
+            <div style="font:600 9.5px Inter;letter-spacing:.1em;text-transform:uppercase;color:#75798c">Weights — must total 100</div>
+            <div style="display:flex;flex-direction:column;gap:11px;margin-top:14px">
+              <div><div style="display:flex;justify-content:space-between"><span style="font:400 12.5px Inter;color:#cfd3e5">Finance</span><span class="mono" style="font-size:12px">30</span></div><div style="height:3px;background:#292b31;margin-top:6px"><div style="width:30%;height:100%;background:#9184d9"></div></div></div>
+              <div><div style="display:flex;justify-content:space-between"><span style="font:400 12.5px Inter;color:#cfd3e5">Quality</span><span class="mono" style="font-size:12px">25</span></div><div style="height:3px;background:#292b31;margin-top:6px"><div style="width:25%;height:100%;background:#9184d9"></div></div></div>
+              <div><div style="display:flex;justify-content:space-between"><span style="font:400 12.5px Inter;color:#cfd3e5">Location</span><span class="mono" style="font-size:12px">20</span></div><div style="height:3px;background:#292b31;margin-top:6px"><div style="width:20%;height:100%;background:#9184d9"></div></div></div>
+              <div><div style="display:flex;justify-content:space-between"><span style="font:400 12.5px Inter;color:#cfd3e5">Building fund</span><span class="mono" style="font-size:12px">15</span></div><div style="height:3px;background:#292b31;margin-top:6px"><div style="width:15%;height:100%;background:#9184d9"></div></div></div>
+              <div><div style="display:flex;justify-content:space-between"><span style="font:400 12.5px Inter;color:#cfd3e5">Risk</span><span class="mono" style="font-size:12px">10</span></div><div style="height:3px;background:#292b31;margin-top:6px"><div style="width:10%;height:100%;background:#9184d9"></div></div></div>
+            </div>
+          </div>
+          <div style="background:#1d1f2d;border-radius:10px;box-shadow:inset 0 0 0 1px #292b31;padding:16px">
+            <div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font:400 13px Inter;color:#cfd3e5">Telegram alert threshold</div><div style="font:400 11.5px Inter;color:#75798c;margin-top:3px">≈4 cards a week at this level</div></div><span class="mono" style="font-size:20px;font-weight:500;color:#7fbf7a">75</span></div>
+            <div style="height:6px;border-radius:3px;margin-top:14px;background:linear-gradient(to right,#c4635f,#c98b52,#c9b455,#7fbf7a,#4fb98d);position:relative;opacity:.75"><div style="position:absolute;left:75%;top:-4px;width:3px;height:14px;border-radius:2px;background:#e9e9ed"></div></div>
+          </div>
+          <div style="background:#1d1f2d;border-radius:10px;box-shadow:inset 0 0 0 1px #292b31;padding:16px;display:flex;justify-content:space-between;align-items:center">
+            <div><div style="font:400 13px Inter;color:#cfd3e5">Learn from rejections</div><div style="font:400 11.5px Inter;color:#75798c;margin-top:3px">Down-weight what looks like the 14 you rejected</div></div>
+            <span style="width:36px;height:20px;border-radius:10px;background:rgba(145,132,217,.35);position:relative;flex:none"><span style="position:absolute;right:2px;top:2px;width:16px;height:16px;border-radius:50%;background:#b5abfc"></span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<div class="dv-opt" id="1g"><div class="dv-olabel"><a class="dv-oid" href="#1g">1g</a>Mobile — Pending &amp; Detail, 375×812</div>
+<div style="display:flex;gap:20px">
+<div class="dv-card" style="width:375px;height:812px;background:#161826;color:#e9e9ed;display:flex;flex-direction:column;overflow:hidden">
+  <div style="height:44px;flex:none;display:flex;align-items:flex-end;justify-content:space-between;padding:0 18px 6px"><span class="mono" style="font-size:12px;color:#9397ab">21:14</span><span class="mono" style="font-size:11px;color:#75798c">▮▮▮</span></div>
+  <div style="padding:8px 16px 12px;display:flex;align-items:baseline;justify-content:space-between"><span style="font:500 20px Inter;letter-spacing:-.02em">Queue</span><span class="mono" style="font-size:12px;color:#d9a473">6 waiting</span></div>
+  <div style="flex:1;overflow:hidden;padding:0 16px;display:flex;flex-direction:column;gap:12px">
+    <div style="background:#1d1f2d;border-radius:12px;box-shadow:inset 0 0 0 1px #292b31;overflow:hidden">
+      <div style="height:150px;background:linear-gradient(150deg,#2a2d3d,#191b28);position:relative;display:flex;align-items:center;justify-content:center;font:400 11px Inter;color:#4a4d5c">photo
+        <span class="mono" style="position:absolute;right:10px;top:10px;font-size:17px;font-weight:500;color:#0f160f;background:#7fbf7a;padding:3px 9px;border-radius:6px">79</span></div>
+      <div style="padding:14px 16px">
+        <div style="font:500 16px Inter">Telliskivi 60a</div>
+        <div style="font:400 12px Inter;color:#75798c;margin-top:2px">Kalamaja · 48,6 m² · 2 tuba · 1958</div>
+        <div style="display:flex;align-items:baseline;gap:8px;margin-top:10px"><span class="mono" style="font-size:24px;font-weight:500">183 000 €</span><span class="mono" style="font-size:11px;color:#75798c">3 765 €/m²</span></div>
+        <div style="font:400 13.5px/1.5 Inter;color:#cfd3e5;margin-top:12px;border-left:2px solid #7fbf7a;padding-left:10px">Дом кирпичный, район растёт. Кухня требует ремонта — заложи 12k.</div>
+        <div style="display:flex;gap:8px;margin-top:16px">
+          <span style="flex:1;text-align:center;font:500 14px Inter;padding:13px;border-radius:9px;border:1px solid #4fb98d;color:#6fc9a3">Approve</span>
+          <span style="flex:1;text-align:center;font:500 14px Inter;padding:13px;border-radius:9px;background:rgba(233,233,237,.05);color:#9397ab">Reject</span>
+        </div>
+      </div>
+    </div>
+    <div style="background:#1d1f2d;border-radius:12px;box-shadow:inset 0 0 0 1px #292b31;overflow:hidden">
+      <div style="height:150px;background:linear-gradient(150deg,#2a2d3d,#191b28);position:relative;display:flex;align-items:center;justify-content:center;font:400 11px Inter;color:#4a4d5c">photo
+        <span class="mono" style="position:absolute;right:10px;top:10px;font-size:17px;font-weight:500;color:#160f0f;background:#c9b455;padding:3px 9px;border-radius:6px">64</span></div>
+      <div style="padding:14px 16px 4px">
+        <div style="font:500 16px Inter">Tammsaare tee 91</div>
+        <div style="font:400 12px Inter;color:#75798c;margin-top:2px">Mustamäe · 51,0 m² · 2 tuba · 1979</div>
+        <div style="display:flex;align-items:baseline;gap:8px;margin-top:10px"><span class="mono" style="font-size:24px;font-weight:500">176 000 €</span></div>
+      </div>
+    </div>
+  </div>
+  <div style="height:64px;flex:none;display:flex;align-items:center;justify-content:space-around;box-shadow:inset 0 1px 0 #292b31;padding-bottom:10px">
+    <span style="font:400 11px Inter;color:#75798c">Overview</span><span style="font:400 11px Inter;color:#75798c">Detail</span><span style="font:500 11px Inter;color:#b5abfc">Pending</span><span style="font:400 11px Inter;color:#75798c">Settings</span>
+  </div>
+</div>
+
+<div class="dv-card" style="width:375px;height:812px;background:#161826;color:#e9e9ed;display:flex;flex-direction:column;overflow:hidden">
+  <div style="height:44px;flex:none;display:flex;align-items:flex-end;justify-content:space-between;padding:0 18px 6px"><span class="mono" style="font-size:12px;color:#9397ab">21:16</span><span class="mono" style="font-size:11px;color:#75798c">▮▮▮</span></div>
+  <div style="height:190px;flex:none;background:linear-gradient(150deg,#2a2d3d,#191b28);position:relative;display:flex;align-items:center;justify-content:center;font:400 11px Inter;color:#4a4d5c">photo 1 / 14
+    <span style="position:absolute;left:16px;top:14px;font:400 13px Inter;color:#cfd3e5">‹ Back</span></div>
+  <div style="flex:1;overflow:hidden;padding:16px;display:flex;flex-direction:column;gap:14px">
+    <div>
+      <div style="display:flex;align-items:center;gap:8px"><span style="font:500 11px Inter;padding:3px 8px;border-radius:5px;background:rgba(79,185,141,.14);color:#6fc9a3">approved</span><span class="mono" style="font-size:11px;color:#93aee0">5. aug 17:30</span></div>
+      <div style="font:500 20px Inter;letter-spacing:-.015em;margin-top:8px">Mustamäe tee 143</div>
+      <div style="font:400 12px Inter;color:#9397ab;margin-top:2px">Mustamäe · 3 tuba · 4/5 · 1974</div>
+    </div>
+    <div style="display:flex;gap:0">
+      <div style="flex:1"><div class="mono" style="font-size:22px;font-weight:500;letter-spacing:-.02em">239k €</div><div class="mono" style="font-size:10px;color:#75798c;margin-top:3px">3 394 €/m²</div></div>
+      <div style="flex:1;box-shadow:inset 1px 0 0 #292b31;padding-left:14px"><div class="mono" style="font-size:22px;font-weight:500;letter-spacing:-.02em">70,4</div><div class="mono" style="font-size:10px;color:#75798c;margin-top:3px">m²</div></div>
+      <div style="flex:1;box-shadow:inset 1px 0 0 #292b31;padding-left:14px"><div class="mono" style="font-size:22px;font-weight:500;letter-spacing:-.02em;color:#7fbf7a">82</div><div class="mono" style="font-size:10px;color:#75798c;margin-top:3px">score</div></div>
+    </div>
+    <div style="padding:12px 14px;border-radius:10px;background:#1d1f2d;border-left:2px solid #7fbf7a;font:400 14px/1.55 Inter;color:#cfd3e5">Цена ниже района на 4%, но фонд собирает 0,32 €/м². Торг от 228 000 оправдан.</div>
+    <div style="display:flex;gap:8px">
+      <span style="flex:1;height:6px;border-radius:3px;background:#4fb98d;opacity:.8"></span><span style="width:34px;height:6px;border-radius:3px;background:#595d6c"></span><span style="width:22px;height:6px;border-radius:3px;background:#c4635f"></span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:1px">
+      <div style="display:flex;align-items:center;gap:10px;padding:13px 12px;border-radius:8px;background:rgba(196,99,95,.07);box-shadow:inset 2px 0 0 #c4635f"><span style="font:500 14px Inter;flex:1">Building fund</span><span class="mono" style="font-size:12px;color:#d4827e">2 flags</span><span style="color:#75798c">›</span></div>
+      <div style="display:flex;align-items:center;gap:10px;padding:13px 12px"><span style="font:400 14px Inter;flex:1;color:#cfd3e5">Risk</span><span class="mono" style="font-size:12px;color:#d9a473">1 flag</span><span style="color:#75798c">›</span></div>
+      <div style="display:flex;align-items:center;gap:10px;padding:13px 12px"><span style="font:400 14px Inter;flex:1;color:#cfd3e5">Finance</span><span class="mono" style="font-size:12px;color:#75798c">8 ok</span><span style="color:#75798c">›</span></div>
+      <div style="display:flex;align-items:center;gap:10px;padding:13px 12px"><span style="font:400 14px Inter;flex:1;color:#cfd3e5">Quality · Location</span><span class="mono" style="font-size:12px;color:#75798c">19 ok</span><span style="color:#75798c">›</span></div>
+    </div>
+  </div>
+  <div style="flex:none;padding:12px 16px 22px;box-shadow:inset 0 1px 0 #292b31;display:flex;gap:8px">
+    <span style="flex:1;text-align:center;font:500 14px Inter;padding:14px;border-radius:9px;border:1px solid #9184d9;color:#b5abfc">Mark viewed</span>
+    <span style="text-align:center;font:500 14px Inter;padding:14px 16px;border-radius:9px;background:rgba(233,233,237,.05);color:#cfd3e5">kv.ee ↗</span>
+  </div>
+</div>
+</div></div>
+
+<div class="dv-opt" id="1h"><div class="dv-olabel"><a class="dv-oid" href="#1h">1h</a>Empty states — first run, empty queue</div>
+<div style="display:flex;gap:20px">
+<div class="dv-card" style="width:560px;height:340px;background:#161826;color:#e9e9ed;display:flex;align-items:center;justify-content:center;padding:32px;box-sizing:border-box">
+  <div style="max-width:400px">
+    <div style="display:flex;gap:5px;margin-bottom:20px"><span style="width:30px;height:4px;border-radius:2px;background:#292b31"></span><span style="width:30px;height:4px;border-radius:2px;background:#292b31"></span><span style="width:30px;height:4px;border-radius:2px;background:#9184d9"></span></div>
+    <div style="font:500 19px Inter;letter-spacing:-.015em">Queue is empty</div>
+    <div style="font:400 13.5px/1.6 Inter;color:#9397ab;margin-top:8px">Everything scraped in the last 2 hours scored below your Telegram threshold of 75. Next scrape at 22:40.</div>
+    <div style="display:flex;gap:8px;margin-top:18px"><span style="font:500 12.5px Inter;padding:8px 13px;border-radius:var(--radius-md);border:1px solid var(--color-accent);color:var(--color-accent-400)">Lower threshold to 65</span><span style="font:500 12.5px Inter;padding:8px 13px;border-radius:7px;background:rgba(233,233,237,.05);color:#cfd3e5">Run scrape now</span></div>
+  </div>
+</div>
+<div class="dv-card" style="width:560px;height:340px;background:#161826;color:#e9e9ed;display:flex;align-items:center;justify-content:center;padding:32px;box-sizing:border-box">
+  <div style="max-width:410px">
+    <div style="font:600 9.5px Inter;letter-spacing:.1em;text-transform:uppercase;color:#75798c">First run</div>
+    <div style="font:500 19px Inter;letter-spacing:-.015em;margin-top:8px">No listings yet</div>
+    <div style="font:400 13.5px/1.6 Inter;color:#9397ab;margin-top:8px">The scraper on the mini PC hasn't posted anything. Two things to check before the first batch lands.</div>
+    <div style="display:flex;flex-direction:column;gap:1px;margin-top:16px">
+      <div style="display:flex;gap:10px;align-items:center;padding:9px 0"><span style="color:#4fb98d;font-size:11px">✓</span><span style="font:400 13px Inter;color:#cfd3e5;flex:1">Buyer profile saved</span><span class="mono" style="font-size:11px;color:#595d6c">265k · 55 m² · 3 districts</span></div>
+      <div style="display:flex;gap:10px;align-items:center;padding:9px 0;box-shadow:inset 0 1px 0 #232532"><span style="color:#c98b52;font-size:11px">!</span><span style="font:400 13px Inter;color:#cfd3e5;flex:1">Scraper last posted</span><span class="mono" style="font-size:11px;color:#d9a473">never</span></div>
+      <div style="display:flex;gap:10px;align-items:center;padding:9px 0;box-shadow:inset 0 1px 0 #232532"><span style="color:#4fb98d;font-size:11px">✓</span><span style="font:400 13px Inter;color:#cfd3e5;flex:1">Telegram bot connected</span><span class="mono" style="font-size:11px;color:#595d6c">@aparts_bot</span></div>
+    </div>
+  </div>
+</div>
+</div></div>
+
+</div>
+<p class="dv-next">Next: “pick <a class="dv-oid" href="#1c">1c</a>, kill the accordion” · “more chart variants” · “write the CSS variables file”</p>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}"></script>
+</body>
+</html>
