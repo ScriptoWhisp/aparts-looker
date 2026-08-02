@@ -1,0 +1,523 @@
+/*
+ * tokens.css — Single source of truth for the Aparts Looker design system.
+ *
+ * Layer 1: Nocturne design system tokens (color ramps, type, spacing, radius, shadow).
+ * Layer 2: Aparts Looker-specific aliases + score ramp + status tokens.
+ * Layer 3: Base resets, typography, utility classes (.card, .btn, .tag, .score-badge, etc.)
+ *
+ * Typography fonts (Inter + JetBrains Mono) are loaded via Google Fonts <link> in index.html.
+ * This file only declares the token variables — it does NOT import fonts itself.
+ */
+
+/* ============================================================
+   ROOT TOKENS
+   ============================================================ */
+:root {
+  /* ── Nocturne ground colours ── */
+  --color-bg:      #161826; /* app bg — Nocturne canonical */
+  --color-surface: #232532; /* elevated surface */
+  --color-divider: color-mix(in srgb, #e9e9ed 16%, transparent);
+
+  /* ── Nocturne tonal ramps ── */
+  --color-neutral-100: #f3f5fe;
+  --color-neutral-200: #e4e7f5;
+  --color-neutral-300: #cfd3e5;
+  --color-neutral-400: #b2b6ca;
+  --color-neutral-500: #9397ab;
+  --color-neutral-600: #75798c;
+  --color-neutral-700: #595d6c;
+  --color-neutral-800: #3f424d;
+  --color-neutral-900: #292b31;
+
+  --color-accent:      #9184d9;
+  --color-accent-100:  #f5f4ff;
+  --color-accent-200:  #e7e5fe;
+  --color-accent-300:  #d2cefd;
+  --color-accent-400:  #b5abfc;
+  --color-accent-500:  #968ae0;
+  --color-accent-600:  #796cbf;
+  --color-accent-700:  #5d5294;
+  --color-accent-800:  #423a6a;
+  --color-accent-900:  #2b2741;
+
+  --color-accent-2:     #a7a1db;
+  --color-accent-2-100: #f5f4ff;
+  --color-accent-2-200: #e7e5fe;
+  --color-accent-2-300: #d2cefd;
+  --color-accent-2-400: #b5afe8;
+  --color-accent-2-500: #9690c9;
+  --color-accent-2-600: #7972a9;
+  --color-accent-2-700: #5c5783;
+  --color-accent-2-800: #423e5d;
+  --color-accent-2-900: #2b293a;
+
+  /* ── Nocturne typography ── */
+  --font-heading:        "Inter", system-ui, sans-serif;
+  --font-heading-weight: 500;
+  --font-body:           "Inter", system-ui, sans-serif;
+
+  /* ── Nocturne elevation shadows (dark-tuned) ── */
+  --shadow-sm: 0 0 0 1px #3f424d;
+  --shadow-md: 0 0 0 1px #595d6c, 0 6px 18px rgba(0,0,0,0.55);
+  --shadow-lg: 0 0 0 1px #9397ab, 0 16px 40px rgba(0,0,0,0.65);
+
+  /* ── Aparts Looker colour aliases ── */
+  /* These are the concrete roles consumed throughout the UI. */
+  --color-canvas:         #0f111c; /* deepest background — behind the app */
+  --color-app-bg:         #161826; /* page/body background (= --color-bg) */
+  --color-sunken:         #1d1f2d; /* inset wells, chart areas, card fills */
+  --color-border:         #3f424d; /* visible borders (= --color-neutral-800) */
+  --color-hairline:       #292b31; /* thin dividers (= --color-neutral-900) */
+  --color-text:           #e9e9ed; /* primary text */
+  --color-text-secondary: #9397ab; /* secondary / placeholder text */
+  --color-text-muted:     #75798c; /* labels, kickers, timestamps */
+  --color-accent-tint:    rgba(145, 132, 217, 0.14); /* nav active pill bg */
+
+  /* ── Score ramp (information signal — never flood fill) ── */
+  --score-0:  #c4635f; /*  0–39  bad */
+  --score-40: #c98b52; /* 40–59  poor */
+  --score-60: #c9b455; /* 60–74  ok */
+  --score-75: #7fbf7a; /* 75–84  good */
+  --score-85: #4fb98d; /* 85–100 great */
+
+  /* ── Status pill tokens ── */
+  --status-pending-bg:     rgba(201, 139, 82, 0.15);
+  --status-pending-text:   #d9a473;
+  --status-pending-border: rgba(201, 139, 82, 0.30);
+
+  --status-approved-bg:     rgba(79, 185, 141, 0.14);
+  --status-approved-text:   #6fc9a3;
+  --status-approved-border: rgba(79, 185, 141, 0.28);
+
+  --status-rejected-bg:     rgba(196, 99, 95, 0.14);
+  --status-rejected-text:   #d4827e;
+  --status-rejected-border: rgba(196, 99, 95, 0.28);
+
+  --status-viewing-bg:     rgba(122, 155, 214, 0.14);
+  --status-viewing-text:   #93aee0;
+  --status-viewing-border: rgba(122, 155, 214, 0.28);
+
+  --status-viewed-bg:     rgba(233, 233, 237, 0.06);
+  --status-viewed-text:   #75798c;
+  --status-viewed-border: rgba(233, 233, 237, 0.10);
+
+  /* ── Spacing scale (4-based, overrides Nocturne's 0.70× density) ── */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-12: 48px;
+
+  /* ── Radius scale ── */
+  --radius-sm: 4px;  /* chips, tiny pills */
+  --radius-md: 8px;  /* cards, buttons, inputs */
+  --radius-lg: 14px; /* hero, large modals */
+
+  /* ── Motion tokens ── */
+  --transition-fast: 120ms cubic-bezier(0.2, 0.7, 0.3, 1);
+  --transition-med:  160ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+/* Honour user's motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ============================================================
+   BASE RESETS & TYPOGRAPHY
+   ============================================================ */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--color-app-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  line-height: 1.12;
+  letter-spacing: -0.015em;
+  margin: 0 0 var(--space-2);
+}
+
+/* Type scale (matches brief 1a) */
+/* display: 40px 500 — used for large numerals */
+/* title:   20px 500 — listing titles, section heads */
+/* body:    14px 400 — default body text (set on <body> above) */
+/* meta:    12px 400 — secondary info rows */
+/* label:   10px 600 uppercase letterspaced — kickers */
+
+p {
+  margin: 0 0 var(--space-3);
+}
+
+a {
+  color: var(--color-accent);
+  text-underline-offset: 3px;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--color-accent-tint);
+}
+
+/* Mono class — for all numeric/tabular content */
+.mono {
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
+   UTILITY — CARD
+   ============================================================ */
+.card {
+  background: var(--color-sunken);
+  border-radius: var(--radius-md);
+  box-shadow: inset 0 0 0 1px var(--color-hairline);
+  padding: var(--space-3) var(--space-4);
+}
+
+.card-kicker {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.card-title {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: 17px;
+  line-height: 1.2;
+  color: var(--color-text);
+}
+
+/* ============================================================
+   UTILITY — BUTTONS
+   ============================================================ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  text-decoration: none;
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: 13px;
+  line-height: 1.2;
+  color: var(--color-text);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Primary: accent outline + transparent bg */
+.btn-primary {
+  color: var(--color-accent-400);
+  border-color: var(--color-accent);
+}
+.btn-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+.btn-primary:active:not(:disabled) {
+  background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+}
+
+/* Secondary: subtle grey tint */
+.btn-secondary {
+  color: var(--color-text-secondary);
+  border-color: var(--color-divider);
+}
+.btn-secondary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-text) 7%, transparent);
+  color: var(--color-text);
+}
+
+/* Ghost: no border */
+.btn-ghost {
+  color: var(--color-accent);
+  padding-inline: var(--space-1);
+}
+.btn-ghost:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+
+/* ============================================================
+   UTILITY — TAGS (status pills)
+   ============================================================ */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  padding: 4px 9px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+}
+
+.tag-pending {
+  background: var(--status-pending-bg);
+  color: var(--status-pending-text);
+  border-color: var(--status-pending-border);
+}
+
+.tag-approved {
+  background: var(--status-approved-bg);
+  color: var(--status-approved-text);
+  border-color: var(--status-approved-border);
+}
+
+.tag-rejected {
+  background: var(--status-rejected-bg);
+  color: var(--status-rejected-text);
+  border-color: var(--status-rejected-border);
+}
+
+.tag-viewing {
+  background: var(--status-viewing-bg);
+  color: var(--status-viewing-text);
+  border-color: var(--status-viewing-border);
+}
+
+.tag-viewed {
+  background: var(--status-viewed-bg);
+  color: var(--status-viewed-text);
+  border-color: var(--status-viewed-border);
+}
+
+/* ============================================================
+   UTILITY — SCORE BADGE
+   score-badge: the single component for displaying a numeric score.
+   Colour driven by data-score-bucket attribute:
+     bad | poor | ok | good | great  (set by window.scoreBucket())
+   ============================================================ */
+.score-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  color: #fff;
+  flex: 0 0 auto;
+}
+
+.score-badge[data-score-bucket="bad"]   { background: var(--score-0); }
+.score-badge[data-score-bucket="poor"]  { background: var(--score-40); }
+.score-badge[data-score-bucket="ok"]    { background: var(--score-60); }
+.score-badge[data-score-bucket="good"]  { background: var(--score-75); }
+.score-badge[data-score-bucket="great"] { background: var(--score-85); }
+
+/* ============================================================
+   UTILITY — METRIC
+   Large mono number + tiny meta label beneath it.
+   Used in KPI strip, detail hero cells.
+   ============================================================ */
+.metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.metric-value {
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--color-text);
+  line-height: 1;
+}
+
+.metric-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+/* ============================================================
+   UTILITY — LEFT RULE
+   The 2px score-coloured left border applied to sidebar/next-up rows.
+   Set --rule-color inline on the element.
+   ============================================================ */
+.left-rule {
+  border-left: 2px solid var(--rule-color, var(--color-border));
+  padding-left: calc(var(--space-3) - 2px);
+}
+
+/* ============================================================
+   HEADER — 48px sticky nav bar
+   ============================================================ */
+.header {
+  height: 48px;
+  background: var(--color-app-bg);
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  padding: 0 var(--space-6);
+  box-shadow: inset 0 -1px 0 var(--color-hairline);
+  position: sticky;
+  top: 0;
+  z-index: 2500;
+  flex-shrink: 0;
+}
+
+/* Brand mark */
+.app-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.app-brand-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--color-accent);
+  flex-shrink: 0;
+}
+
+.app-brand-name {
+  font-family: var(--font-heading);
+  font-weight: 500;
+  font-size: 13px;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+}
+
+/* Tab navigation */
+.tab-nav {
+  display: flex;
+  gap: 2px;
+  flex: 1;
+}
+
+.tab-nav button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 6px 10px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  white-space: nowrap;
+}
+
+.tab-nav button:hover {
+  color: var(--color-text);
+}
+
+.tab-nav button.active {
+  background: var(--color-accent-tint);
+  color: var(--color-accent-400);
+  font-weight: 500;
+}
+
+/* Pending count badge inside the Pending tab button */
+.tab-pending-count {
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  background: var(--status-pending-bg);
+  color: var(--status-pending-text);
+  border: 1px solid var(--status-pending-border);
+  display: none; /* shown by JS when count > 0 */
+}
+
+.tab-pending-count.visible {
+  display: inline-flex;
+}
+
+/* Header right section */
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.header-scrape-info {
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  font-size: 11px;
+  color: var(--color-neutral-700);
+  white-space: nowrap;
+}
+
+/* Legacy header-action-btn — kept for compatibility, now restyled */
+.header-action-btn {
+  background: transparent;
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 5px 10px;
+  font-size: 12px;
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.header-action-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-text) 7%, transparent);
+  color: var(--color-text);
+}
+
+.header-action-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
