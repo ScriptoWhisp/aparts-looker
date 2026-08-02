@@ -21,7 +21,7 @@ import db
 import brief_generator
 import data_store
 import ingest_handler
-from models import Listing
+from models import Listing, SHORTLIST_VIEWED, SHORTLIST_DROPPED
 
 log = logging.getLogger("app")
 
@@ -226,6 +226,90 @@ def cost_override_reset(listing_id: str) -> dict:
     except SQLAlchemyError:
         log.exception("cost_override_reset failed for %s", listing_id)
         return {"ok": False, "error": "DB error"}
+
+
+@router.post("/api/entry/{listing_id}/viewing-decision")
+async def viewing_decision(listing_id: str, request: Request) -> dict:
+    """Record a post-viewing decision for a listing that has already been marked viewed.
+
+    Body:
+      {"decision": "still-in" | "thinking" | "drop", "reason": "..." (optional)}
+
+    Status transitions:
+      still-in → offer_drafted
+      thinking → thinking
+      drop     → dropped  (reason stored on viewing_history[-1].drop_reason if provided)
+
+    Precondition: listing must have status in (viewed, thinking, offer_drafted, dropped).
+    Calling this on a listing that has not yet been marked viewed (status is
+    pending / approved / viewing_scheduled / rejected) returns 409.
+
+    Returns:
+      200 {"ok": true, "new_status": "..."} on success
+      404 if listing not found
+      409 if listing has not yet been marked viewed
+      422 if decision value is not one of the three allowed strings
+      500 {"ok": false, "error": "..."} on unexpected DB error (never-raise)
+    """
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=400, detail="Body must be a JSON object")
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    decision = body.get("decision", "")
+    reason: Optional[str] = body.get("reason") or None
+
+    _valid_decisions = {"still-in", "thinking", "drop"}
+    if decision not in _valid_decisions:
+        raise HTTPException(
+            status_code=422,
+            detail=f"decision must be one of: {sorted(_valid_decisions)}",
+        )
+
+    # Check existence and status precondition via a single DB read.
+    _permitted_for_decision = SHORTLIST_VIEWED | SHORTLIST_DROPPED
+    try:
+        with db.SessionLocal() as db_:
+            row = db_.get(Listing, listing_id)
+            if row is None:
+                raise HTTPException(status_code=404, detail="Listing not found")
+            if row.status not in _permitted_for_decision:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Cannot record viewing decision before marking viewed",
+                )
+    except HTTPException:
+        raise
+    except SQLAlchemyError:
+        log.exception("viewing_decision status check failed for %s", listing_id)
+        return {"ok": False, "error": "DB error during status check"}
+
+    # Delegate the state transition to the data_store helper (never-raise contract).
+    ok = data_store.set_viewing_decision(listing_id, decision, reason)
+    if not ok:
+        # set_viewing_decision returns False only when the listing is missing or
+        # the status precondition fails — both were already verified above, so this
+        # branch covers unexpected races (e.g. concurrent delete). Log + 500.
+        log.error(
+            "viewing_decision: set_viewing_decision returned False unexpectedly for %s (decision=%r)",
+            listing_id,
+            decision,
+        )
+        return {"ok": False, "error": "Decision could not be applied"}
+
+    # Map decision string → the resulting status (mirrors data_store logic) so the
+    # response body carries new_status without re-reading the row from DB.
+    _decision_to_status = {
+        "still-in": "offer_drafted",
+        "thinking": "thinking",
+        "drop": "dropped",
+    }
+    new_status = _decision_to_status[decision]
+    return {"ok": True, "new_status": new_status}
 
 
 @router.patch("/api/listings/{listing_id}/checklist")
