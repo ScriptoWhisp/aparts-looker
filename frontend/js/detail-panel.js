@@ -31,59 +31,128 @@
 
   /* ================================================================
      window.renderDetailList() — populate sidebar with all listings
+     Wave 3: Nocturne sidebar redesign with filter input, grouped sections,
+     score-colored left rules.
      ================================================================ */
   window.renderDetailList = function () {
     var sidebar = document.getElementById("detail-sidebar");
     if (!sidebar) return;
     while (sidebar.firstChild) sidebar.removeChild(sidebar.firstChild);
 
-    var all = (window.state.properties || []).map(function (e) { return {entry: e, isPending: false, isRejected: false}; })
+    /* --- Filter input --- */
+    var filterWrap = document.createElement("div");
+    filterWrap.className = "detail-sidebar-filter";
+
+    var filterInput = document.createElement("input");
+    filterInput.type = "text";
+    filterInput.className = "detail-sidebar-input";
+    filterInput.id = "sidebar-title-filter";
+    filterInput.setAttribute("autocomplete", "off");
+    filterInput.setAttribute("spellcheck", "false");
+
+    /* Restore previously typed filter if any */
+    if (window._sidebarTitleFilter) filterInput.value = window._sidebarTitleFilter;
+
+    filterInput.addEventListener("input", function () {
+      window._sidebarTitleFilter = filterInput.value;
+      _renderSidebarList(listEl, allItems);
+    });
+
+    filterWrap.appendChild(filterInput);
+    sidebar.appendChild(filterWrap);
+
+    /* --- Scrollable list container --- */
+    var listEl = document.createElement("div");
+    listEl.className = "detail-sidebar-list";
+    sidebar.appendChild(listEl);
+
+    var allItems = (window.state.properties || []).map(function (e) { return {entry: e, isPending: false, isRejected: false}; })
       .concat((window.state.pending || []).map(function (e) { return {entry: e, isPending: true, isRejected: false}; }))
       .concat((window.state.rejected || []).map(function (e) { return {entry: e, isPending: false, isRejected: true}; }));
 
-    /* Apply shared filter state — see window.filterListing in index.html */
+    /* Apply shared filter state */
     if (window.filterListing) {
-      all = all.filter(function (item) {
+      allItems = allItems.filter(function (item) {
         return window.filterListing(item.entry, item.isPending, item.isRejected);
       });
     }
 
-    all.sort(function (a, b) {
+    allItems.sort(function (a, b) {
       var sa = a.entry.score != null ? a.entry.score : -1;
       var sb = b.entry.score != null ? b.entry.score : -1;
       return sb - sa;
     });
 
-    if (all.length === 0) {
+    /* Update placeholder with count */
+    filterInput.placeholder = "Filter " + allItems.length + " listings…";
+
+    _renderSidebarList(listEl, allItems);
+  };
+
+  /* Private: re-render the sidebar list items (called on filter change too) */
+  function _renderSidebarList(listEl, allItems) {
+    while (listEl.firstChild) listEl.removeChild(listEl.firstChild);
+
+    var titleFilter = (window._sidebarTitleFilter || "").toLowerCase().trim();
+
+    var visible = titleFilter
+      ? allItems.filter(function (item) {
+          var title = (item.entry.title || item.entry.name || item.entry.id || "").toLowerCase();
+          return title.indexOf(titleFilter) !== -1;
+        })
+      : allItems;
+
+    if (visible.length === 0) {
       var empty = document.createElement("div");
-      empty.style.cssText = "padding:20px;font-size:12px;color:var(--text-muted);text-align:center;";
+      empty.style.cssText = "padding:20px;font-size:12px;color:var(--color-text-muted);text-align:center;";
       empty.textContent = "No listings match filters";
-      sidebar.appendChild(empty);
+      listEl.appendChild(empty);
       return;
     }
 
-    all.forEach(function (item) {
-      sidebar.appendChild(_buildSidebarItem(item.entry, item.isPending));
-    });
+    /* Split approved/viewed/scheduled vs pending */
+    var approved = visible.filter(function (i) { return !i.isPending && !i.isRejected; });
+    var pending  = visible.filter(function (i) { return i.isPending; });
+    var rejected = visible.filter(function (i) { return i.isRejected; });
 
-    /* Re-select previously active listing if still present */
-    if (currentListingId) {
-      var si = sidebar.querySelector('[data-id="' + currentListingId + '"]');
-      if (si) si.classList.add("active");
+    function renderGroup(label, items, dimmed) {
+      if (items.length === 0) return;
+      var hdr = document.createElement("div");
+      hdr.className = "detail-sidebar-group-header";
+      hdr.textContent = label + " · " + items.length;
+      listEl.appendChild(hdr);
+      items.forEach(function (item) {
+        var row = _buildSidebarItem(item.entry, item.isPending, dimmed);
+        listEl.appendChild(row);
+      });
     }
-  };
+
+    if (approved.length > 0) renderGroup("Approved", approved, false);
+    if (pending.length > 0)  renderGroup("Pending", pending, true);
+    if (rejected.length > 0) renderGroup("Rejected", rejected, true);
+
+    /* Re-select active */
+    if (currentListingId) {
+      var si = listEl.querySelector('[data-id="' + currentListingId + '"]');
+      if (si) {
+        si.classList.add("active");
+        si.scrollIntoView({block: "nearest"});
+      }
+    }
+  }
 
   /* ================================================================
      window.openDetailPanel(listingId) — highlight in sidebar + render main pane
      ================================================================ */
   window.openDetailPanel = function (listingId) {
     var sidebar = document.getElementById("detail-sidebar");
+    /* If sidebar not yet rendered or empty, render it first */
     if (!sidebar || !sidebar.querySelector(".sidebar-item")) {
       window.renderDetailList();
       sidebar = document.getElementById("detail-sidebar");
     }
 
-    /* Highlight sidebar item */
+    /* Highlight sidebar item (may be inside .detail-sidebar-list) */
     if (sidebar) {
       sidebar.querySelectorAll(".sidebar-item").forEach(function (el) {
         el.classList.toggle("active", el.dataset.id === listingId);
@@ -92,6 +161,7 @@
       if (activeItem) activeItem.scrollIntoView({block: "nearest"});
     }
 
+    currentListingId = listingId;
     _renderMainPane(listingId);
   };
 
@@ -113,19 +183,27 @@
   }
 
   /* ================================================================
-     Private: _buildSidebarItem(entry, isPending)
+     Private: _buildSidebarItem(entry, isPending, dimmed)
+     Wave 3 Nocturne redesign: score-colored left rule, mono score,
+     title + price·area meta, status glyph on right.
      ================================================================ */
-  function _buildSidebarItem(entry, isPending) {
+  function _buildSidebarItem(entry, isPending, dimmed) {
+    var scoreColor = window.scoreColor(entry.score || 0);
+
     var item = document.createElement("div");
     item.className = "sidebar-item";
     item.dataset.id = entry.id;
+    item.style.setProperty("--rule-color", scoreColor);
+    if (dimmed) item.style.opacity = "0.75";
 
-    var scoreBadge = document.createElement("span");
-    scoreBadge.className = "si-score";
-    scoreBadge.style.background = window.scoreColor(entry.score || 0);
-    scoreBadge.textContent = entry.score != null ? entry.score : "?";
-    item.appendChild(scoreBadge);
+    /* Left: score numeral */
+    var scoreEl = document.createElement("span");
+    scoreEl.className = "si-score";
+    scoreEl.style.color = scoreColor;
+    scoreEl.textContent = entry.score != null ? String(entry.score) : "?";
+    item.appendChild(scoreEl);
 
+    /* Middle: title + meta */
     var info = document.createElement("div");
     info.className = "si-info";
 
@@ -136,39 +214,43 @@
 
     var meta = document.createElement("div");
     meta.className = "si-meta";
-    var parts = [];
+    var metaParts = [];
     var price = entry.price_eur || entry.price;
-    if (price) parts.push(window.fmtEur(price));
-    if (entry.area_sqm) parts.push(entry.area_sqm + " m²");
-    if (entry.district) parts.push(entry.district);
-    if (entry.energy_class) parts.push("энерг. " + entry.energy_class);
-    meta.textContent = parts.join(" · ");
+    if (price) metaParts.push(window.fmtEur(price));
+    if (entry.area_sqm) metaParts.push(entry.area_sqm + " m²");
+    meta.textContent = metaParts.join(" · ");
     info.appendChild(meta);
-
-    /* Status glyph — append after meta text, hidden when blank (VIEW-01 / T-06-14) */
-    var glyph = statusGlyph(entry);
-    if (glyph) {
-      var glyphSpan = document.createElement("span");
-      glyphSpan.className = "si-status-glyph";
-      glyphSpan.textContent = glyph;
-      info.appendChild(glyphSpan);
-    }
 
     item.appendChild(info);
 
-    /* Issues dot */
+    /* Right: status glyph */
+    var status = entry.status || (isPending ? "pending" : "approved");
+    if (status === "viewing_scheduled") {
+      /* Blue 6×6 dot */
+      var dot = document.createElement("span");
+      dot.className = "si-status-dot";
+      dot.style.color = "var(--status-viewing-text)";
+      dot.title = "Viewing scheduled";
+      item.appendChild(dot);
+    } else if (status === "viewed") {
+      var viewedEl = document.createElement("span");
+      viewedEl.className = "si-status-glyph";
+      viewedEl.textContent = "viewed";
+      item.appendChild(viewedEl);
+    } else if (status === "rejected" || entry.removed) {
+      var rejDot = document.createElement("span");
+      rejDot.className = "si-status-dot";
+      rejDot.style.color = "var(--color-text-muted)";
+      rejDot.style.opacity = "0.5";
+      item.appendChild(rejDot);
+    }
+
+    /* Issues dot (hidden by default, shown by _refreshSidebarIssueDot) */
     var issuesDot = document.createElement("span");
     issuesDot.className = "si-issues-dot";
     issuesDot.id = "si-issues-" + entry.id;
     _refreshSidebarIssueDot(entry.id, issuesDot);
     item.appendChild(issuesDot);
-
-    if (isPending) {
-      var pendingDot = document.createElement("span");
-      pendingDot.className = "si-pending-dot";
-      pendingDot.textContent = "P";
-      item.appendChild(pendingDot);
-    }
 
     item.addEventListener("click", function () {
       window.openDetailPanel(entry.id);

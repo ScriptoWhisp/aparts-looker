@@ -622,44 +622,576 @@
     cursor: pointer;
   }
   .dfb-clear:hover { color: var(--red); border-color: var(--red); }
+  /* ---------- Wave 3: Detail sidebar — 284px Nocturne redesign ---------- */
   .detail-sidebar {
-    width: 22%;
-    min-width: 180px;
-    max-width: 280px;
-    border-right: 1px solid var(--border);
-    overflow-y: auto;
+    width: 284px;
     flex-shrink: 0;
-    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    box-shadow: inset -1px 0 0 var(--color-hairline);
+    background: var(--color-app-bg);
+    overflow: hidden;
   }
-  /* --- Details pane: tight vertical rhythm so more fits without scrolling --- */
+  .detail-sidebar-filter {
+    flex: none;
+    padding: 12px;
+  }
+  .detail-sidebar-input {
+    width: 100%;
+    box-sizing: border-box;
+    height: 30px;
+    border-radius: 7px;
+    background: var(--color-sunken);
+    box-shadow: inset 0 0 0 1px var(--color-hairline);
+    border: none;
+    padding: 0 10px;
+    font: 400 12px Inter, system-ui, sans-serif;
+    color: var(--color-text);
+    outline: none;
+  }
+  .detail-sidebar-input::placeholder { color: var(--color-text-muted); }
+  .detail-sidebar-input:focus { box-shadow: inset 0 0 0 1px var(--color-accent); }
+  .detail-sidebar-list {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+  }
+  .detail-sidebar-group-header {
+    padding: 14px 12px 6px;
+    font: 600 9.5px Inter, system-ui, sans-serif;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    position: sticky;
+    top: 0;
+    background: var(--color-app-bg);
+    z-index: 1;
+  }
+  /* --- Nocturne sidebar rows: score-colored left rule, selected = accent tint --- */
+  .sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-left: 2px solid var(--rule-color, var(--color-border));
+    cursor: pointer;
+    user-select: none;
+    transition: background var(--transition-fast);
+  }
+  .sidebar-item:hover { background: rgba(233,233,237,0.04); }
+  .sidebar-item.active {
+    background: var(--color-accent-tint);
+  }
+  .si-score {
+    flex-shrink: 0;
+    width: 24px;
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 15px;
+    font-weight: 500;
+    line-height: 1;
+    color: var(--rule-color, var(--color-text-muted));
+  }
+  .si-info { flex: 1; min-width: 0; }
+  .si-title {
+    font: 400 13px/1.35 Inter, system-ui, sans-serif;
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 2px;
+  }
+  .sidebar-item.active .si-title { font-weight: 500; }
+  .si-meta {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 10.5px;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .si-status-glyph {
+    flex-shrink: 0;
+    font-size: 10px;
+    color: var(--color-text-muted);
+  }
+  .si-status-dot {
+    flex-shrink: 0;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .si-issues-dot {
+    display: none;
+    flex-shrink: 0;
+    font-size: 9px;
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-weight: 700;
+    background: rgba(196,99,95,0.2);
+    color: var(--score-0);
+    padding: 1px 5px;
+    border-radius: 8px;
+  }
+  .si-pending-dot { display: none; } /* hidden in new design */
+
+  /* --- Details pane: Nocturne main pane --- */
   .detail-main {
     flex: 1;
     overflow-y: auto;
-    padding: 12px 18px 40px;
     min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Wave 3 main pane sections */
+  .dm-hero-row {
+    flex: none;
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 12px;
+    padding: 16px 20px 0;
+  }
+  .dm-photo-card {
+    height: 184px;
+    border-radius: 10px;
+    background: linear-gradient(150deg, #2a2d3d, #191b28);
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font: 400 11px Inter, system-ui, sans-serif;
+    color: #4a4d5c;
+  }
+  .dm-photo-card img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .dm-photo-dots {
+    position: absolute;
+    left: 10px;
+    bottom: 10px;
+    display: flex;
+    gap: 4px;
+    z-index: 1;
+  }
+  .dm-photo-dot {
+    width: 22px;
+    height: 3px;
+    border-radius: 2px;
+    background: rgba(233,233,237,0.25);
+  }
+  .dm-photo-dot.active { background: #e9e9ed; }
+  .dm-header-block {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .dm-status-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .dm-viewing-info {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 11px;
+    color: var(--status-viewing-text);
+  }
+  .dm-title {
+    font: 500 26px/1.1 Inter, system-ui, sans-serif;
+    letter-spacing: -0.02em;
+    margin: 8px 0 0;
+    color: var(--color-text);
+  }
+  .dm-meta-line {
+    font: 400 13px Inter, system-ui, sans-serif;
+    color: var(--color-text-secondary);
+    margin-top: 2px;
+  }
+  .dm-action-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+  }
+  .dm-metric-strip {
+    display: flex;
+    gap: 0;
+    margin-top: auto;
+    padding-top: 14px;
+  }
+  .dm-metric-cell {
+    padding-right: 24px;
+  }
+  .dm-metric-cell + .dm-metric-cell {
+    padding-left: 24px;
+    box-shadow: inset 1px 0 0 var(--color-hairline);
+  }
+  .dm-metric-val {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 34px;
+    font-weight: 500;
+    letter-spacing: -0.025em;
+    line-height: 1;
+  }
+  .dm-metric-meta {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 11px;
+    color: var(--color-text-muted);
+    margin-top: 5px;
+  }
+
+  /* Verdict band */
+  .dm-verdict-band {
+    flex: none;
+    margin: 14px 20px 0;
+    padding: 14px 16px;
+    border-radius: 10px;
+    background: var(--color-sunken);
+    display: flex;
+    gap: 18px;
+    align-items: flex-start;
+    box-shadow: inset 0 0 0 1px var(--color-hairline);
+  }
+  .dm-verdict-content { flex: 1; min-width: 0; }
+  .dm-verdict-kicker {
+    font: 600 9.5px Inter, system-ui, sans-serif;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    margin-bottom: 6px;
+  }
+  .dm-verdict-text {
+    font: 400 15px/1.55 Inter, system-ui, sans-serif;
+    color: var(--color-text);
+    max-width: 760px;
+  }
+  .dm-verdict-tags {
+    display: flex;
+    gap: 7px;
+    flex-shrink: 0;
+    padding-top: 14px;
+    flex-wrap: wrap;
+  }
+
+  /* Main content row */
+  .dm-content-row {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 12px;
+    padding: 12px 20px 16px;
+  }
+  .dm-left-col {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    gap: 12px;
+  }
+  .dm-right-col {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+  }
+
+  /* 5-column signal grid checklist */
+  .dm-checklist-card {
+    background: var(--color-sunken);
+    border-radius: 10px;
+    box-shadow: inset 0 0 0 1px var(--color-hairline);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .dm-checklist-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px 0;
+    flex-shrink: 0;
+  }
+  .dm-checklist-title { font: 500 14px Inter, system-ui, sans-serif; }
+  .dm-checklist-bar-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px 12px;
+    border-bottom: 1px solid var(--color-hairline);
+    flex-shrink: 0;
+  }
+  .dm-checklist-count-label {
+    font: 500 13px Inter, system-ui, sans-serif;
+    flex-shrink: 0;
+  }
+  .dm-checklist-bar {
+    flex: 1;
+    height: 6px;
+    border-radius: 3px;
+    overflow: hidden;
+    display: flex;
+  }
+  .dm-bar-ok { background: var(--score-85); }
+  .dm-bar-unknown { background: var(--color-neutral-700); }
+  .dm-bar-flags { background: var(--score-0); }
+  .dm-checklist-stat { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 11px; }
+  .dm-checklist-stat-ok { color: var(--status-approved-text); }
+  .dm-checklist-stat-unknown { color: var(--color-text-muted); }
+  .dm-checklist-stat-flags { color: var(--status-rejected-text); }
+  .dm-checklist-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 14px;
+    padding: 0 16px;
+    overflow-y: auto;
+    flex: 1;
+  }
+  .dm-checklist-col { padding-top: 0; }
+  .dm-checklist-col-header {
+    font: 600 9.5px Inter, system-ui, sans-serif;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    padding: 12px 0 8px;
+    box-shadow: inset 0 -1px 0 var(--color-hairline);
+    position: sticky;
+    top: 0;
+    background: var(--color-sunken);
+    z-index: 1;
+  }
+  .dm-checklist-col.dm-col-flagged .dm-checklist-col-header {
+    color: var(--status-rejected-text);
+    box-shadow: inset 0 -1px 0 rgba(196,99,95,0.25);
+  }
+  .dm-checklist-col-body {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding-top: 6px;
+    padding-bottom: 12px;
+  }
+  .dm-checklist-col.dm-col-flagged {
+    padding: 10px;
+    margin: -10px;
+    border-radius: var(--radius-md);
+    background: rgba(196,99,95,0.06);
+    box-shadow: inset 0 0 0 1px rgba(196,99,95,0.22);
+  }
+  .dm-cl-row {
+    display: flex;
+    gap: 7px;
+    align-items: baseline;
+    padding: 3px 0;
+    position: relative;
+    cursor: default;
+  }
+  .dm-cl-glyph {
+    font-size: 10px;
+    flex-shrink: 0;
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    line-height: 1.5;
+  }
+  .dm-cl-label {
+    font: 400 12px/1.4 Inter, system-ui, sans-serif;
+    color: var(--color-text-secondary);
+    flex: 1;
+    min-width: 0;
+    word-break: break-word;
+  }
+  .dm-cl-row.dm-cl-flagged .dm-cl-label,
+  .dm-cl-row.dm-cl-warning .dm-cl-label { color: var(--color-text); }
+  .dm-checklist-foot {
+    flex-shrink: 0;
+    padding: 8px 16px 12px;
+    font: 400 11.5px Inter, system-ui, sans-serif;
+    color: var(--color-text-muted);
+    box-shadow: inset 0 1px 0 var(--color-hairline);
+  }
+
+  /* Hover tooltip for checklist rows */
+  .dm-cl-tooltip {
+    position: fixed;
+    z-index: 9000;
+    max-width: 280px;
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+    padding: 10px 12px;
+    font: 400 12px/1.5 Inter, system-ui, sans-serif;
+    color: var(--color-text-secondary);
+    pointer-events: none;
+    transition: opacity 80ms;
+  }
+
+  /* Cost of ownership card (Nocturne) */
+  .dm-coo-card {
+    background: var(--color-sunken);
+    border-radius: 10px;
+    box-shadow: inset 0 0 0 1px var(--color-hairline);
+    padding: 14px 16px;
+    flex-shrink: 0;
+  }
+  .dm-coo-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .dm-coo-kicker {
+    font: 600 9.5px Inter, system-ui, sans-serif;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+  }
+  .dm-coo-total-wrap { display: flex; align-items: baseline; gap: 4px; }
+  .dm-coo-total {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 16px;
+    font-weight: 500;
+  }
+  .dm-coo-total-suffix {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 10px;
+    color: var(--color-text-muted);
+  }
+  .dm-coo-bar-wrap {
+    height: 6px;
+    border-radius: 3px;
+    overflow: hidden;
+    margin-top: 12px;
+    display: flex;
+  }
+  .dm-coo-breakdown {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-top: 10px;
+  }
+  .dm-coo-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .dm-coo-label {
+    font: 400 12px Inter, system-ui, sans-serif;
+    color: var(--color-text-secondary);
+  }
+  .dm-coo-val {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
     font-size: 12px;
   }
-  .detail-main h2 { font-size: 15px !important; margin: 0 !important; }
-  .detail-main .commute-badge { margin: 4px 0 !important; padding: 3px 8px !important; font-size: 11px !important; }
-  .detail-main .detail-fields {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 2px 16px;
-    margin: 8px 0 !important;
+
+  /* Negotiation brief card (Nocturne) */
+  .dm-neg-card {
+    background: var(--color-sunken);
+    border-radius: 10px;
+    box-shadow: inset 0 0 0 1px var(--color-hairline);
+    padding: 14px 16px;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
-  .detail-main .detail-field-row {
-    display: flex; justify-content: space-between; align-items: baseline;
-    padding: 3px 0 !important; border-bottom: 1px dashed rgba(255,255,255,0.04);
+  .dm-neg-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-shrink: 0;
   }
-  .detail-main .detail-field-label { font-size: 10px !important; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-muted) !important; }
-  .detail-main .detail-field-value { font-size: 12px !important; color: var(--text) !important; font-family: var(--font-mono); }
-  /* AI + cost blocks — collapse whitespace around them */
-  .detail-main .ai-block { margin: 10px 0 !important; }
-  .detail-main .ai-verdict { padding: 8px 12px !important; font-size: 13px !important; }
-  .detail-main .coo-card { padding: 10px 14px !important; margin: 10px 0 !important; }
-  .detail-main .coo-total { font-size: 22px !important; }
-  .detail-main .full-checklist { margin-top: 12px !important; }
-  .detail-main .section-label { font-size: 11px !important; margin-bottom: 6px !important; }
+  .dm-neg-kicker {
+    font: 600 9.5px Inter, system-ui, sans-serif;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+  }
+  .dm-neg-regen {
+    font: 400 11px Inter, system-ui, sans-serif;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+  }
+  .dm-neg-regen:hover { color: var(--color-text); }
+  .dm-neg-offer-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-top: 10px;
+    flex-shrink: 0;
+  }
+  .dm-neg-offer {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--color-accent-400);
+  }
+  .dm-neg-offer-meta {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 11px;
+    color: var(--color-text-muted);
+  }
+  .dm-neg-progress {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--color-hairline);
+    margin-top: 10px;
+    position: relative;
+    flex-shrink: 0;
+    overflow: visible;
+  }
+  .dm-neg-progress-fill {
+    position: absolute;
+    height: 100%;
+    border-radius: 2px;
+    background: var(--color-accent);
+  }
+  .dm-neg-progress-ask {
+    position: absolute;
+    top: -2px;
+    width: 2px;
+    height: 8px;
+    background: var(--color-text);
+    border-radius: 1px;
+  }
+  .dm-neg-body {
+    font: 400 13px/1.55 Inter, system-ui, sans-serif;
+    color: var(--color-text-secondary);
+    margin-top: 12px;
+    overflow: hidden;
+    flex: 1;
+  }
+  .dm-neg-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+    flex-shrink: 0;
+  }
+
+  /* KÜ collapsible section */
+  .dm-ku-section {
+    flex-shrink: 0;
+    margin-top: 12px;
+  }
+
+  /* Legacy detail-main overrides: reset heavy !important rules now that pane
+     is Nocturne-native. Keep the identifiers so old CSS doesn't break anything. */
+  .detail-main .ai-block { margin: 10px 0; }
+  .detail-main .ai-verdict { padding: 8px 12px; font-size: 13px; }
+  .detail-main .coo-card { padding: 10px 14px; margin: 10px 0; }
+  .detail-main .coo-total { font-size: 22px; }
+  .detail-main .full-checklist { margin-top: 12px; }
+  .detail-main .section-label { font-size: 11px; margin-bottom: 6px; }
 
   /* --- Sidebar list: bigger tap targets, easier to scan --- */
   .sidebar-item {
