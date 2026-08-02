@@ -306,7 +306,7 @@ def debug_listing(listing_id: str) -> dict:
         f"Floor: {listing_dict.get('floor')}/{listing_dict.get('floor_total')}\n"
         f"Parking: {listing_dict.get('parking')}\n"
         f"Renovation needed (text signals): {listing_dict.get('needs_renovation')}\n"
-        f"Description: {(listing_dict.get('description') or '')[:1500]}"
+        f"Description: {(listing_dict.get('description') or '')[:config.AI_DESCRIPTION_MAX_CHARS]}"
     )
     return {
         "listing_id": listing_id,
