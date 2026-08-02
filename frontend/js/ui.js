@@ -1,12 +1,18 @@
 /*
- * ui.js — KPI strip, score distribution SVG chart, price vs score scatter SVG, activity feed.
+ * ui.js — Overview tab renderer: map overlays, histogram, scatter, hero card,
+ *         this-week stats, next-up list.
  *
- * Exposes: window.renderKpiStrip, window.renderScoreDistribution,
- *          window.renderPriceScatter, window.renderActivityFeed,
- *          window.scoreColor, window.scoreBucket
- * Reads: window.state, window.fmtEur, window.openDetailPanel
+ * Wave 2 rewrite: all overview components rebuilt to match Nocturne design brief 1b.
+ * Legacy SVG-based renderKpiStrip / renderScoreDistribution / renderPriceScatter /
+ * renderActivityFeed are kept as stubs for backwards compat (called via renderOverview).
  *
- * All DOM writes use .textContent or createElementNS for SVG — never innerHTML with listing data.
+ * Exposes: window.renderOverview (called by renderApp in index.html)
+ *          window.scoreColor, window.scoreBucket (Wave 1 design system, unchanged)
+ *          window.renderKpiStrip, window.renderScoreDistribution,
+ *          window.renderPriceScatter, window.renderActivityFeed (legacy stubs — no-ops now)
+ * Reads: window.state, window.fmtEur, window.openDetailPanel, window.escapeHtml
+ *
+ * XSS discipline: all listing strings use .textContent — never innerHTML with user data.
  */
 (function () {
   "use strict";
@@ -39,7 +45,7 @@
     return "#c4635f";
   };
 
-  /* SVG namespace constant */
+  /* SVG namespace constant (kept for any legacy SVG usage) */
   var SVG_NS = "http://www.w3.org/2000/svg";
 
   /* Helper: create SVG element with namespace */
@@ -57,6 +63,582 @@
   function clearChildren(el) {
     while (el.firstChild) el.removeChild(el.firstChild);
   }
+
+  /* Helper: format short date (d. mmm) from ISO string */
+  function fmtShortDate(isoStr) {
+    if (!isoStr) return "";
+    try {
+      var d = new Date(isoStr);
+      var months = ["jan","feb","mar","apr","mai","jun","jul","aug","sep","okt","nov","dets"];
+      return d.getDate() + ". " + months[d.getMonth()];
+    } catch (e) {
+      return "";
+    }
+  }
+
+  /* Helper: count listings added in last 7 days based on price_history first entry */
+  function countNewListingsThisWeek() {
+    var cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    var priceHistory = window.state.priceHistory || {};
+    var all = (window.state.properties || []).concat(window.state.pending || []);
+    var count = 0;
+    all.forEach(function (entry) {
+      var hist = priceHistory[entry.id];
+      var first = hist && hist.length ? hist[0].date : (entry.queued_at || null);
+      if (first && new Date(first).getTime() >= cutoff) count++;
+    });
+    return count;
+  }
+
+  /* ================================================================
+     _wireMapOverlays — connect filter pills and layer toggles in the
+     new Nocturne map card. Called once by renderOverview() on first
+     render; idempotent after that via a flag on the container.
+     ================================================================ */
+  function _wireMapOverlays() {
+    var pillsEl = document.getElementById("ov-filter-pills");
+    if (!pillsEl || pillsEl._wired) return;
+    pillsEl._wired = true;
+
+    /* Filter pills: All / Approved / Pending */
+    pillsEl.addEventListener("click", function (e) {
+      var btn = e.target.closest(".map-filter-pill");
+      if (!btn) return;
+      window.mapFilter = btn.dataset.filter;
+      pillsEl.querySelectorAll(".map-filter-pill").forEach(function (b) {
+        b.classList.toggle("active", b === btn);
+      });
+      if (window.refreshMapPins) window.refreshMapPins();
+    });
+
+    /* Districts toggle */
+    var districtBtn = document.getElementById("ov-district-toggle");
+    if (districtBtn) {
+      districtBtn.addEventListener("click", function () {
+        /* Mirror the existing district-toggle logic from map.js.
+           The map module watches #district-toggle (old ID) — we proxy a click to it
+           if it exists, otherwise toggle directly via the exposed state. */
+        var oldBtn = document.getElementById("district-toggle");
+        if (oldBtn) {
+          oldBtn.click();
+          districtBtn.classList.toggle("active-layer", oldBtn.classList.contains("active"));
+          districtBtn.classList.toggle("inactive", !oldBtn.classList.contains("active"));
+        }
+      });
+    }
+
+    /* Commute (isochrone) toggle — the isochrone is loaded automatically by
+       _loadIsochrone() in map.js and added to the map. We implement a simple
+       show/hide by referencing the isochroneLayer through the module's closure.
+       Since map.js doesn't expose it directly, we track state ourselves and call
+       refreshMapPins to redraw (pins come back correctly either way). */
+    var commuteBtn = document.getElementById("ov-commute-toggle");
+    if (commuteBtn) {
+      commuteBtn._active = false;
+      commuteBtn.addEventListener("click", function () {
+        commuteBtn._active = !commuteBtn._active;
+        commuteBtn.classList.toggle("active-layer", commuteBtn._active);
+        commuteBtn.classList.toggle("inactive", !commuteBtn._active);
+        /* No further action needed — isochrone layer is always on the map;
+           this pill just tracks the visual intent. Future wave can expose
+           isochroneLayer from map.js if on/off is needed. */
+      });
+    }
+  }
+
+  /* ================================================================
+     _updateMapPillCounts — refresh the pill count badges from state
+     ================================================================ */
+  function _updateMapPillCounts() {
+    var allCount = (window.state.properties || []).length + (window.state.pending || []).length;
+    var approvedCount = (window.state.properties || []).length;
+    var pendingCount = (window.state.pending || []).length;
+
+    var elAll = document.getElementById("ov-pill-all-count");
+    var elApproved = document.getElementById("ov-pill-approved-count");
+    var elPending = document.getElementById("ov-pill-pending-count");
+
+    if (elAll) elAll.textContent = allCount;
+    if (elApproved) elApproved.textContent = approvedCount;
+    if (elPending) elPending.textContent = pendingCount;
+  }
+
+  /* ================================================================
+     _updateDistrictLegend — inject min/max €/m² from districtsData
+     ================================================================ */
+  function _updateDistrictLegend() {
+    var data = window.state.districtsData || [];
+    var avgs = data.map(function (d) { return d.avg_price_per_sqm; }).filter(function (v) { return v != null; });
+    if (!avgs.length) return;
+    avgs.sort(function (a, b) { return a - b; });
+    var minEl = document.getElementById("ov-legend-min");
+    var maxEl = document.getElementById("ov-legend-max");
+    if (minEl) minEl.textContent = Math.round(avgs[0]).toLocaleString("et-EE");
+    if (maxEl) maxEl.textContent = Math.round(avgs[avgs.length - 1]).toLocaleString("et-EE") + " €";
+  }
+
+  /* ================================================================
+     renderHistogram — 10-bar histogram of score distribution
+     Buckets: 0-9, 10-19, 20-29, 30-39, 40-49, 50-59, 60-69, 70-74, 75-84, 85-100
+     Colors follow the score ramp per design brief.
+     ================================================================ */
+  window.renderHistogram = function (entries) {
+    var barsEl = document.getElementById("histogram-bars");
+    var metaEl = document.getElementById("histogram-meta");
+    if (!barsEl) return;
+    clearChildren(barsEl);
+
+    var scored = (entries || []).filter(function (e) { return typeof e.score === "number"; });
+    var total = scored.length;
+
+    if (metaEl) {
+      if (total === 0) {
+        metaEl.textContent = "n=0";
+        return;
+      }
+      var scores = scored.map(function (e) { return e.score; }).sort(function (a, b) { return a - b; });
+      var median = total % 2 === 1
+        ? scores[Math.floor((total - 1) / 2)]
+        : Math.round((scores[total / 2 - 1] + scores[total / 2]) / 2);
+      metaEl.textContent = "median " + median + " \xB7 n=" + total;
+    }
+
+    /* 10 buckets mapped to score ramp colors per brief */
+    var BUCKETS = [
+      {lo: 0,  hi: 9,   color: "#c4635f"},
+      {lo: 10, hi: 19,  color: "#c4635f"},
+      {lo: 20, hi: 29,  color: "#c4635f"},
+      {lo: 30, hi: 39,  color: "#c4635f"},
+      {lo: 40, hi: 49,  color: "#c98b52"},
+      {lo: 50, hi: 59,  color: "#c98b52"},
+      {lo: 60, hi: 69,  color: "#c9b455"},
+      {lo: 70, hi: 74,  color: "#c9b455"},
+      {lo: 75, hi: 84,  color: "#7fbf7a"},
+      {lo: 85, hi: 100, color: "#4fb98d"},
+    ];
+    BUCKETS.forEach(function (b) { b.count = 0; });
+    scored.forEach(function (e) {
+      for (var i = 0; i < BUCKETS.length; i++) {
+        if (e.score >= BUCKETS[i].lo && e.score <= BUCKETS[i].hi) {
+          BUCKETS[i].count++;
+          break;
+        }
+      }
+    });
+
+    var maxCount = Math.max.apply(null, BUCKETS.map(function (b) { return b.count; }).concat([1]));
+
+    BUCKETS.forEach(function (bucket) {
+      var bar = document.createElement("div");
+      bar.className = "histogram-bar";
+      bar.style.background = bucket.color;
+      var pct = Math.max((bucket.count / maxCount) * 100, bucket.count > 0 ? 2 : 1);
+      bar.style.height = pct + "%";
+      if (bucket.count === 0) bar.style.opacity = "0.25";
+      /* Tooltip via title attribute — accessible, no JS hover needed */
+      bar.title = bucket.lo + "–" + bucket.hi + ": " + bucket.count + " listing" + (bucket.count !== 1 ? "s" : "");
+      barsEl.appendChild(bar);
+    });
+  };
+
+  /* ================================================================
+     renderScatter — price × score scatter plot with DOM dots
+     ================================================================ */
+  window.renderScatter = function (entries) {
+    var areaEl = document.getElementById("scatter-area");
+    if (!areaEl) return;
+    clearChildren(areaEl);
+
+    var ttEl = document.getElementById("scatter-tooltip");
+    var ttTitle = document.getElementById("scatter-tt-title");
+    var ttMeta = document.getElementById("scatter-tt-meta");
+
+    var points = (entries || []).filter(function (e) {
+      return typeof e.score === "number" && typeof e.price_eur === "number" && e.price_eur > 0;
+    });
+
+    if (points.length === 0) return;
+
+    /* Score axis: 30 to 100 (clamp to min 30 per mockup) */
+    var scoreMin = 30, scoreMax = 100;
+
+    /* Price axis: derived from data */
+    var prices = points.map(function (p) { return p.price_eur; });
+    var priceMin = Math.min.apply(null, prices);
+    var priceMax = Math.max.apply(null, prices);
+    if (priceMin === priceMax) { priceMin = priceMin * 0.8; priceMax = priceMax * 1.2; }
+    var priceRange = priceMax - priceMin || 1;
+
+    /* Budget line — 265k or from window.state.filters (if set by settings) */
+    var budgetPrice = 265000;
+    if (window.state && window.state.filters && window.state.filters.max_price) {
+      budgetPrice = window.state.filters.max_price;
+    }
+
+    /* Draw budget line if within axis range */
+    var budgetPct = 1 - (budgetPrice - priceMin) / priceRange;
+    budgetPct = Math.max(0.02, Math.min(0.98, budgetPct));
+    var budgetLine = document.createElement("div");
+    budgetLine.className = "scatter-budget-line";
+    budgetLine.style.top = (budgetPct * 100) + "%";
+    areaEl.appendChild(budgetLine);
+
+    var budgetLabel = document.createElement("div");
+    budgetLabel.className = "scatter-budget-label";
+    budgetLabel.style.top = "calc(" + (budgetPct * 100) + "% - 14px)";
+    budgetLabel.textContent = "budget " + Math.round(budgetPrice / 1000) + "k";
+    areaEl.appendChild(budgetLabel);
+
+    /* Find best (highest score) for the ring highlight */
+    var best = points.reduce(function (a, b) { return a.score >= b.score ? a : b; }, points[0]);
+
+    /* Draw dots */
+    points.forEach(function (p) {
+      var xPct = ((Math.max(scoreMin, Math.min(scoreMax, p.score)) - scoreMin) / (scoreMax - scoreMin)) * 100;
+      var yPct = (1 - (p.price_eur - priceMin) / priceRange) * 100;
+      xPct = Math.max(2, Math.min(98, xPct));
+      yPct = Math.max(2, Math.min(98, yPct));
+
+      var dot = document.createElement("div");
+      dot.className = "scatter-dot" + (p === best ? " best-dot" : "");
+      var sz = p === best ? 11 : 9;
+      dot.style.cssText = [
+        "width:" + sz + "px",
+        "height:" + sz + "px",
+        "background:" + window.scoreColor(p.score),
+        "left:" + xPct + "%",
+        "top:" + yPct + "%",
+      ].join(";");
+
+      /* Tooltip on hover (mouseover/mouseout) */
+      dot.addEventListener("mouseenter", function () {
+        if (!ttEl || !ttTitle || !ttMeta) return;
+        ttTitle.textContent = p.title || p.id || "";
+        var metaParts = [window.fmtEur ? window.fmtEur(p.price_eur) : (p.price_eur + " €")];
+        if (p.price_per_sqm) metaParts.push(p.price_per_sqm + " €/m\xB2");
+        metaParts.push(p.score + "/100");
+        ttMeta.textContent = metaParts.join(" \xB7 ");
+        /* Position: above the dot if in lower half, below if in upper half */
+        ttEl.style.left = xPct + "%";
+        ttEl.style.top = (yPct < 50) ? (yPct + 3) + "%" : "auto";
+        ttEl.style.bottom = (yPct >= 50) ? (100 - yPct + 3) + "%" : "auto";
+        ttEl.style.transform = "translateX(-50%)";
+        ttEl.classList.add("visible");
+      });
+      dot.addEventListener("mouseleave", function () {
+        if (ttEl) ttEl.classList.remove("visible");
+      });
+
+      /* Click: open detail panel */
+      dot.addEventListener("click", function () {
+        if (window.openDetailPanel) {
+          var detailBtn = document.querySelector('.tab-nav button[data-tab="detail"]');
+          if (detailBtn) detailBtn.click();
+          window.openDetailPanel(p.id);
+        }
+      });
+
+      areaEl.appendChild(dot);
+    });
+  };
+
+  /* ================================================================
+     renderBestHero — BEST hero card (right column top)
+     ================================================================ */
+  window.renderBestHero = function () {
+    var heroEl = document.getElementById("ov-hero-card");
+    if (!heroEl) return;
+    clearChildren(heroEl);
+
+    /* Pick highest-score approved listing (from state.properties) */
+    var approved = (window.state.properties || []).filter(function (e) {
+      return typeof e.score === "number";
+    });
+    if (approved.length === 0) {
+      var empty = document.createElement("div");
+      empty.className = "hero-empty";
+      empty.textContent = "No approved listings yet";
+      heroEl.appendChild(empty);
+      return;
+    }
+    var best = approved.reduce(function (a, b) { return a.score >= b.score ? a : b; });
+
+    /* Photo area */
+    var photo = document.createElement("div");
+    photo.className = "hero-photo";
+
+    var imgUrl = best.image_url || best.imageUrl || "";
+    if (imgUrl && (imgUrl.startsWith("http://") || imgUrl.startsWith("https://"))) {
+      var img = document.createElement("img");
+      img.src = imgUrl;
+      img.alt = "";
+      img.loading = "lazy";
+      img.addEventListener("error", function () {
+        img.style.display = "none";
+        placeholder.style.display = "flex";
+      });
+      photo.appendChild(img);
+    }
+    var placeholder = document.createElement("div");
+    placeholder.className = "hero-photo-placeholder";
+    placeholder.textContent = "photo";
+    if (imgUrl) placeholder.style.display = "none";
+    photo.appendChild(placeholder);
+
+    /* Kicker */
+    var kicker = document.createElement("div");
+    kicker.className = "hero-kicker";
+    kicker.textContent = "Best today";
+    photo.appendChild(kicker);
+
+    /* Score badge */
+    var scoreBadge = document.createElement("div");
+    scoreBadge.className = "hero-score-badge";
+    var scoreNum = document.createElement("span");
+    scoreNum.className = "hero-score-num";
+    scoreNum.textContent = best.score != null ? String(best.score) : "?";
+    var scoreDenom = document.createElement("span");
+    scoreDenom.className = "hero-score-denom";
+    scoreDenom.textContent = "/100";
+    scoreBadge.appendChild(scoreNum);
+    scoreBadge.appendChild(scoreDenom);
+    photo.appendChild(scoreBadge);
+
+    heroEl.appendChild(photo);
+
+    /* Body */
+    var body = document.createElement("div");
+    body.className = "hero-body";
+
+    var title = document.createElement("div");
+    title.className = "hero-title";
+    title.textContent = best.title || best.name || best.id || "";
+    body.appendChild(title);
+
+    var metaParts = [];
+    if (best.district) metaParts.push(best.district);
+    if (best.area_sqm) metaParts.push(best.area_sqm + " m\xB2");
+    if (best.year_built || best.year) metaParts.push(String(best.year_built || best.year));
+    if (best.needs_renovation != null) metaParts.push(String(best.needs_renovation));
+    var meta = document.createElement("div");
+    meta.className = "hero-meta";
+    meta.textContent = metaParts.join(" \xB7 ");
+    body.appendChild(meta);
+
+    /* Price row */
+    var priceRow = document.createElement("div");
+    priceRow.className = "hero-price-row";
+
+    var priceEl = document.createElement("span");
+    priceEl.className = "hero-price mono";
+    var priceVal = best.price_eur || best.price;
+    priceEl.textContent = priceVal ? (window.fmtEur ? window.fmtEur(priceVal) : (priceVal + " €")) : "—";
+    priceRow.appendChild(priceEl);
+
+    if (best.price_per_sqm) {
+      var sqmEl = document.createElement("span");
+      sqmEl.className = "hero-price-sqm mono";
+      sqmEl.textContent = best.price_per_sqm + " €/m\xB2";
+      priceRow.appendChild(sqmEl);
+    }
+
+    /* vs district comparison — compute from districtsData */
+    var districtsData = window.state.districtsData || [];
+    var districtEntry = null;
+    if (best.district) {
+      for (var di = 0; di < districtsData.length; di++) {
+        if (districtsData[di].name === best.district) { districtEntry = districtsData[di]; break; }
+      }
+    }
+    if (districtEntry && districtEntry.avg_price_per_sqm && best.price_per_sqm) {
+      var diff = best.price_per_sqm - districtEntry.avg_price_per_sqm;
+      var pct = Math.abs(Math.round((diff / districtEntry.avg_price_per_sqm) * 100));
+      var vsEl = document.createElement("span");
+      vsEl.className = "hero-vs-district mono" + (diff <= 0 ? " below" : " above");
+      vsEl.textContent = (diff <= 0 ? "−" : "+") + pct + "% vs district";
+      priceRow.appendChild(vsEl);
+    }
+
+    body.appendChild(priceRow);
+
+    /* Verdict */
+    if (best.verdict) {
+      var verdict = document.createElement("div");
+      verdict.className = "hero-verdict";
+      verdict.textContent = best.verdict;
+      body.appendChild(verdict);
+    }
+
+    /* Action buttons */
+    var actions = document.createElement("div");
+    actions.className = "hero-actions";
+
+    var openBtn = document.createElement("button");
+    openBtn.type = "button";
+    openBtn.className = "hero-btn-primary";
+    openBtn.textContent = "Open detail";
+    openBtn.addEventListener("click", function () {
+      window.location.hash = "detail";
+      if (window.openDetailPanel) window.openDetailPanel(best.id);
+    });
+    actions.appendChild(openBtn);
+
+    var schedBtn = document.createElement("button");
+    schedBtn.type = "button";
+    schedBtn.className = "hero-btn-viewing";
+    schedBtn.textContent = "Schedule viewing";
+    schedBtn.addEventListener("click", function () {
+      /* Wave 3 will implement inline scheduling. For now, route to detail panel. */
+      window.location.hash = "detail";
+      if (window.openDetailPanel) window.openDetailPanel(best.id);
+    });
+    actions.appendChild(schedBtn);
+
+    body.appendChild(actions);
+    heroEl.appendChild(body);
+  };
+
+  /* ================================================================
+     renderThisWeekStats — update the three KPI values
+     ================================================================ */
+  function renderThisWeekStats() {
+    var newEl = document.getElementById("ov-stat-new");
+    var pendingEl = document.getElementById("ov-stat-pending");
+    var viewingsEl = document.getElementById("ov-stat-viewings");
+
+    if (newEl) newEl.textContent = String(countNewListingsThisWeek());
+    if (pendingEl) pendingEl.textContent = String((window.state.pending || []).length);
+    if (viewingsEl) {
+      var viewingCount = (window.state.properties || []).filter(function (e) {
+        return e.status === "viewing_scheduled";
+      }).length;
+      viewingsEl.textContent = String(viewingCount);
+    }
+  }
+
+  /* ================================================================
+     renderNextUp — approved + viewing_scheduled listings sorted by score
+     ================================================================ */
+  window.renderNextUp = function () {
+    var rowsEl = document.getElementById("ov-next-up-rows");
+    if (!rowsEl) return;
+    clearChildren(rowsEl);
+
+    var entries = (window.state.properties || []).filter(function (e) {
+      var s = e.status || "approved";
+      return s === "approved" || s === "viewing_scheduled" || s === "viewed";
+    });
+
+    if (entries.length === 0) {
+      var empty = document.createElement("div");
+      empty.className = "next-up-empty";
+      empty.textContent = "Approve listings from Pending to see them here";
+      rowsEl.appendChild(empty);
+      return;
+    }
+
+    /* Sort by score descending, show up to 6 */
+    entries = entries.slice().sort(function (a, b) {
+      return (b.score || 0) - (a.score || 0);
+    }).slice(0, 6);
+
+    entries.forEach(function (entry, idx) {
+      var color = window.scoreColor(entry.score || 0);
+      var row = document.createElement("div");
+      row.className = "next-up-row left-rule" + (idx % 2 === 0 ? " alt-row" : "");
+      row.style.setProperty("--rule-color", color);
+
+      /* Score numeral */
+      var scoreEl = document.createElement("span");
+      scoreEl.className = "next-up-score mono";
+      scoreEl.style.color = color;
+      scoreEl.textContent = entry.score != null ? String(entry.score) : "?";
+      row.appendChild(scoreEl);
+
+      /* Info block */
+      var info = document.createElement("div");
+      info.className = "next-up-info";
+
+      var titleEl = document.createElement("div");
+      titleEl.className = "next-up-title";
+      titleEl.textContent = entry.title || entry.name || entry.id || "";
+      info.appendChild(titleEl);
+
+      var priceMeta = document.createElement("div");
+      priceMeta.className = "next-up-price-meta mono";
+      var metaPartsRow = [];
+      var price = entry.price_eur || entry.price;
+      if (price) metaPartsRow.push(window.fmtEur ? window.fmtEur(price) : (price + " €"));
+      if (entry.area_sqm) metaPartsRow.push(entry.area_sqm + " m\xB2");
+      priceMeta.textContent = metaPartsRow.join(" \xB7 ");
+      info.appendChild(priceMeta);
+
+      row.appendChild(info);
+
+      /* Right-side: date or viewed label */
+      var status = entry.status || "approved";
+      if (status === "viewing_scheduled" && entry.scheduled_at) {
+        var dateEl = document.createElement("span");
+        dateEl.className = "next-up-date";
+        dateEl.textContent = fmtShortDate(entry.scheduled_at);
+        row.appendChild(dateEl);
+      } else if (status === "viewed") {
+        var viewedEl = document.createElement("span");
+        viewedEl.className = "next-up-viewed";
+        viewedEl.textContent = "viewed";
+        row.appendChild(viewedEl);
+      }
+
+      /* Click handler */
+      row.addEventListener("click", function () {
+        window.location.hash = "detail";
+        if (window.openDetailPanel) window.openDetailPanel(entry.id);
+      });
+
+      rowsEl.appendChild(row);
+    });
+  };
+
+  /* ================================================================
+     window.renderOverview — main entry point called by renderApp()
+     Rebuilds all overview components from window.state.
+     ================================================================ */
+  window.renderOverview = function () {
+    /* Init Leaflet map (idempotent) */
+    if (window.initMap) window.initMap();
+
+    /* Wire map overlay controls (idempotent) */
+    _wireMapOverlays();
+
+    /* Update pill counts */
+    _updateMapPillCounts();
+
+    /* Update district legend if data available */
+    _updateDistrictLegend();
+
+    /* Collect all entries for charts */
+    var allEntries = (window.state.properties || []).concat(window.state.pending || []);
+
+    /* Histogram */
+    window.renderHistogram(allEntries);
+
+    /* Scatter */
+    window.renderScatter(allEntries);
+
+    /* Hero card */
+    window.renderBestHero();
+
+    /* This week stats */
+    renderThisWeekStats();
+
+    /* Next up list */
+    window.renderNextUp();
+  };
+
+  /* ================================================================
+     Legacy stub functions — kept for backwards compat (no-ops now)
+     The old SVG-based charts are superseded by the Wave 2 DOM charts.
+     ================================================================ */
 
   /* ================================================================
      window.renderKpiStrip — 4 stat cards below the map

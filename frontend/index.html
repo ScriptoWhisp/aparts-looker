@@ -50,21 +50,516 @@
   section[id^="tab-"] { display: none; }
   section[id^="tab-"].active { display: block; }
 
-  /* ---------- Overview: full-width map ---------- */
-  .map-full {
+  /* ---------- Overview: Nocturne 2-column layout ---------- */
+  .overview-grid {
+    display: grid;
+    grid-template-columns: 1fr 372px;
+    gap: 12px;
+    padding: 16px 20px 16px;
+    min-height: calc(100vh - 48px);
+    box-sizing: border-box;
+    align-items: start;
+  }
+  .overview-left {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+  }
+  .overview-right {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+  }
+
+  /* Map card */
+  .map-card {
     position: relative;
-    margin: 16px;
-    background: var(--surface);
-    border-radius: var(--radius);
-    min-height: 520px;
-    height: calc(100vh - 48px - 32px);
+    flex: none;
+    height: calc(100vh - 48px - 16px - 12px - 148px - 16px);
+    min-height: 360px;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    background: #12141f;
+    box-shadow: inset 0 0 0 1px var(--color-hairline);
   }
   #map-container {
     width: 100%;
     height: 100%;
-    min-height: 520px;
-    border-radius: var(--radius);
+    border-radius: var(--radius-md);
     overflow: hidden;
+  }
+
+  /* Map overlay pills (top-left) */
+  .map-filter-pills {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    z-index: 1000;
+    display: flex;
+    gap: 6px;
+  }
+  .map-filter-pill {
+    font-family: var(--font-body);
+    font-size: 12px;
+    font-weight: 500;
+    padding: 5px 11px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
+  }
+  .map-filter-pill.active {
+    background: var(--color-surface);
+    color: var(--color-text);
+    box-shadow: 0 0 0 1px var(--color-border);
+  }
+  .map-filter-pill:not(.active) {
+    background: rgba(35, 37, 50, 0.7);
+    color: var(--color-text-secondary);
+  }
+  .map-filter-pill:not(.active):hover {
+    background: rgba(35, 37, 50, 0.9);
+    color: var(--color-text);
+  }
+
+  /* Map overlay toggles (top-right) */
+  .map-layer-toggles {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: flex-end;
+  }
+  .map-layer-toggle {
+    font-family: var(--font-body);
+    font-size: 12px;
+    font-weight: 400;
+    padding: 5px 11px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    transition: background var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
+  }
+  .map-layer-toggle.inactive {
+    background: rgba(35, 37, 50, 0.75);
+    color: var(--color-text-secondary);
+    box-shadow: 0 0 0 1px var(--color-hairline);
+  }
+  .map-layer-toggle.active-layer {
+    background: var(--color-accent-tint);
+    color: var(--color-accent-400);
+    box-shadow: 0 0 0 1px rgba(145, 132, 217, 0.4);
+  }
+
+  /* Map legend (bottom-left) */
+  .map-legend {
+    position: absolute;
+    left: 16px;
+    bottom: 16px;
+    z-index: 1000;
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+    background: rgba(22, 24, 38, 0.9);
+    box-shadow: 0 0 0 1px var(--color-hairline);
+  }
+  .map-legend-title {
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    margin-bottom: 7px;
+  }
+  .map-legend-bars {
+    display: flex;
+    gap: 3px;
+  }
+  .map-legend-bar {
+    width: 38px;
+    height: 6px;
+  }
+  .map-legend-labels {
+    display: flex;
+    justify-content: space-between;
+    width: 158px;
+    margin-top: 5px;
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 10px;
+    color: var(--color-text-muted);
+  }
+
+  /* Charts row below map */
+  .overview-charts-row {
+    flex: none;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .overview-chart-card {
+    background: var(--color-sunken);
+    border-radius: var(--radius-md);
+    box-shadow: inset 0 0 0 1px var(--color-hairline);
+    padding: 14px 16px 12px;
+  }
+  .overview-chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 14px;
+  }
+  .overview-chart-title {
+    font-family: var(--font-heading);
+    font-weight: 500;
+    font-size: 13px;
+    color: var(--color-text);
+  }
+  .overview-chart-meta {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 10.5px;
+    color: var(--color-text-muted);
+  }
+
+  /* Histogram bars */
+  .histogram-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    height: 96px;
+  }
+  .histogram-bar {
+    flex: 1;
+    border-radius: 2px 2px 0 0;
+    opacity: 0.85;
+    min-height: 2px;
+    transition: opacity var(--transition-fast);
+  }
+  .histogram-bar:hover { opacity: 1; }
+  .histogram-baseline {
+    height: 1px;
+    background: var(--color-border);
+    margin-top: 2px;
+  }
+  .histogram-axis {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 5px;
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 10px;
+    color: var(--color-text-muted);
+  }
+
+  /* Scatter chart */
+  .scatter-area {
+    position: relative;
+    height: 96px;
+    box-shadow: inset 1px -1px 0 var(--color-border);
+  }
+  .scatter-dot {
+    position: absolute;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+    transform: translate(-50%, -50%);
+  }
+  .scatter-dot:hover { transform: translate(-50%, -50%) scale(1.4); z-index: 10; }
+  .scatter-dot.best-dot { box-shadow: 0 0 0 4px rgba(79, 185, 141, 0.18); }
+  .scatter-budget-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: repeating-linear-gradient(to right, var(--color-border) 0 4px, transparent 4px 9px);
+  }
+  .scatter-budget-label {
+    position: absolute;
+    right: 2px;
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 9.5px;
+    color: var(--color-text-muted);
+  }
+  .scatter-tooltip {
+    position: absolute;
+    z-index: 100;
+    background: var(--color-surface);
+    box-shadow: var(--shadow-md);
+    border-radius: var(--radius-md);
+    padding: 7px 10px;
+    white-space: nowrap;
+    pointer-events: none;
+    display: none;
+  }
+  .scatter-tooltip.visible { display: block; }
+  .scatter-tooltip-title { font-size: 11px; font-weight: 500; color: var(--color-text); }
+  .scatter-tooltip-meta { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 10px; color: var(--color-text-secondary); margin-top: 2px; }
+  .scatter-axis {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 5px;
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 10px;
+    color: var(--color-text-muted);
+  }
+
+  /* BEST hero card */
+  .hero-card {
+    background: var(--color-surface);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: 0 0 0 1px rgba(79, 185, 141, 0.35), 0 10px 30px rgba(0, 0, 0, 0.5);
+    flex: none;
+  }
+  .hero-photo {
+    position: relative;
+    height: 150px;
+    background: linear-gradient(150deg, #2a2d3d, #191b28);
+    overflow: hidden;
+  }
+  .hero-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .hero-photo-placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font: 400 11px Inter, sans-serif;
+    color: #4a4d5c;
+  }
+  .hero-kicker {
+    position: absolute;
+    left: 12px;
+    top: 12px;
+    font: 600 9.5px Inter, sans-serif;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--score-85);
+    background: rgba(22, 24, 38, 0.75);
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+  }
+  .hero-score-badge {
+    position: absolute;
+    right: 12px;
+    bottom: 12px;
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    background: rgba(22, 24, 38, 0.8);
+    padding: 5px 10px;
+    border-radius: 6px;
+  }
+  .hero-score-num {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--score-85);
+  }
+  .hero-score-denom {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 10px;
+    color: var(--color-text-muted);
+  }
+  .hero-body {
+    padding: 14px 16px 16px;
+  }
+  .hero-title {
+    font: 500 17px/1.2 Inter, sans-serif;
+    letter-spacing: -0.015em;
+    color: var(--color-text);
+    margin: 0;
+  }
+  .hero-meta {
+    font: 400 12px Inter, sans-serif;
+    color: var(--color-text-secondary);
+    margin-top: 3px;
+  }
+  .hero-price-row {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-top: 12px;
+  }
+  .hero-price {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 28px;
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    color: var(--color-text);
+  }
+  .hero-price-sqm {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 12px;
+    color: var(--color-text-muted);
+  }
+  .hero-vs-district {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 11px;
+    margin-left: auto;
+  }
+  .hero-vs-district.below { color: var(--status-approved-text); }
+  .hero-vs-district.above { color: var(--score-0); }
+  .hero-verdict {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+    background: var(--color-sunken);
+    border-left: 2px solid var(--score-85);
+    font: 400 13px/1.5 Inter, sans-serif;
+    color: #cfd3e5;
+  }
+  .hero-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 14px;
+  }
+  .hero-btn-primary {
+    flex: 1;
+    text-align: center;
+    font: 500 12.5px Inter, sans-serif;
+    padding: 8px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-accent);
+    color: var(--color-accent-400);
+    background: transparent;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+  }
+  .hero-btn-primary:hover { background: var(--color-accent-tint); }
+  .hero-btn-viewing {
+    flex: 1;
+    text-align: center;
+    font: 500 12.5px Inter, sans-serif;
+    padding: 8px;
+    border-radius: 7px;
+    border: none;
+    background: var(--status-viewing-bg);
+    color: var(--status-viewing-text);
+    cursor: pointer;
+  }
+  .hero-empty {
+    padding: 24px 16px;
+    text-align: center;
+    font: 400 13px Inter, sans-serif;
+    color: var(--color-text-muted);
+  }
+
+  /* This week stats card */
+  .this-week-card {
+    background: var(--color-sunken);
+    border-radius: var(--radius-md);
+    box-shadow: inset 0 0 0 1px var(--color-hairline);
+    padding: 14px 16px;
+    flex: none;
+  }
+  .this-week-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    margin-top: 12px;
+  }
+  .this-week-value {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 24px;
+    font-weight: 500;
+    color: var(--color-text);
+    line-height: 1;
+  }
+  .this-week-value.pending-color { color: var(--status-pending-text); }
+  .this-week-value.viewing-color { color: var(--status-viewing-text); }
+  .this-week-label {
+    font: 400 11px Inter, sans-serif;
+    color: var(--color-text-muted);
+    margin-top: 4px;
+  }
+
+  /* Next up card */
+  .next-up-card {
+    background: var(--color-sunken);
+    border-radius: var(--radius-md);
+    box-shadow: inset 0 0 0 1px var(--color-hairline);
+    padding: 14px 0 6px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 100px;
+  }
+  .next-up-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 0 16px 10px;
+  }
+  .next-up-meta {
+    font: 400 11px Inter, sans-serif;
+    color: var(--color-text-muted);
+  }
+  .next-up-row {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 9px 16px;
+    border-left: 2px solid var(--rule-color, var(--color-border));
+    cursor: pointer;
+    transition: background var(--transition-fast);
+    text-decoration: none;
+  }
+  .next-up-row:hover { background: rgba(255, 255, 255, 0.025); }
+  .next-up-row.alt-row { background: rgba(255, 255, 255, 0.02); }
+  .next-up-score {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 14px;
+    width: 22px;
+    flex-shrink: 0;
+  }
+  .next-up-info { flex: 1; min-width: 0; }
+  .next-up-title {
+    font: 400 13px Inter, sans-serif;
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .next-up-price-meta {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 10.5px;
+    color: var(--color-text-muted);
+    margin-top: 1px;
+  }
+  .next-up-date {
+    font: 400 10.5px Inter, sans-serif;
+    color: var(--status-viewing-text);
+    flex-shrink: 0;
+  }
+  .next-up-viewed {
+    font: 400 10.5px Inter, sans-serif;
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+  }
+  .next-up-empty {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px 16px;
+    text-align: center;
+    font: 400 12px Inter, sans-serif;
+    color: var(--color-text-muted);
+  }
+
+  @media (max-width: 1100px) {
+    .overview-grid { grid-template-columns: 1fr; }
+    .overview-right { order: -1; }
+    .hero-card, .this-week-card { display: none; }
   }
 
   /* ---------- Detail tab — split layout ---------- */
@@ -1235,34 +1730,122 @@
 <main>
   <!-- ===== OVERVIEW TAB ===== -->
   <section id="tab-overview" class="active">
-    <div class="map-full">
-      <div class="filter-pills">
-        <button data-filter="all" class="active">All</button>
-        <button data-filter="approved">Approved</button>
-        <button data-filter="pending">Pending</button>
-      </div>
-      <button class="district-toggle" id="district-toggle">Districts</button>
-      <div id="map-container"></div>
-    </div>
+    <div class="overview-grid">
 
-    <!-- Below-grid dashboard: best listing full-width, then 3-card compact strip -->
-    <div id="best-featured" class="best-featured"></div>
-    <div class="kpi-strip" id="kpi-strip"></div>
+      <!-- LEFT COLUMN: map + charts -->
+      <div class="overview-left">
 
-    <div class="charts-row">
-      <div class="chart-panel" id="score-distribution">
-        <h4>Score distribution</h4>
-        <div id="score-dist-svg"></div>
-      </div>
-      <div class="chart-panel" id="price-scatter">
-        <h4>Price vs score</h4>
-        <div id="scatter-svg"></div>
-      </div>
-    </div>
+        <!-- Map card -->
+        <div class="map-card">
+          <!-- Filter pills overlay (top-left) -->
+          <div class="map-filter-pills" id="ov-filter-pills">
+            <button class="map-filter-pill active" data-filter="all">All <span class="mono" id="ov-pill-all-count"></span></button>
+            <button class="map-filter-pill" data-filter="approved">Approved <span class="mono" id="ov-pill-approved-count"></span></button>
+            <button class="map-filter-pill" data-filter="pending">Pending <span class="mono" id="ov-pill-pending-count"></span></button>
+          </div>
 
-    <div class="activity-feed">
-      <h4>Recent activity</h4>
-      <div id="activity-list"></div>
+          <!-- Layer toggles (top-right) -->
+          <div class="map-layer-toggles">
+            <button class="map-layer-toggle inactive" id="ov-district-toggle">Districts &#8364;/m&#178;</button>
+            <button class="map-layer-toggle inactive" id="ov-commute-toggle">30-min commute</button>
+          </div>
+
+          <!-- District legend (bottom-left) -->
+          <div class="map-legend" id="ov-legend">
+            <div class="map-legend-title">District &#8364;/m&#178; &#183; quartile</div>
+            <div class="map-legend-bars">
+              <div class="map-legend-bar" style="background:var(--score-85);opacity:.55"></div>
+              <div class="map-legend-bar" style="background:var(--score-60);opacity:.5"></div>
+              <div class="map-legend-bar" style="background:var(--score-40);opacity:.5"></div>
+              <div class="map-legend-bar" style="background:var(--score-0);opacity:.5"></div>
+            </div>
+            <div class="map-legend-labels">
+              <span id="ov-legend-min">—</span>
+              <span id="ov-legend-max">— &#8364;</span>
+            </div>
+          </div>
+
+          <!-- Leaflet map -->
+          <div id="map-container"></div>
+        </div>
+
+        <!-- Charts row -->
+        <div class="overview-charts-row">
+
+          <!-- Chart A: histogram -->
+          <div class="overview-chart-card">
+            <div class="overview-chart-header">
+              <div class="overview-chart-title">Where the scores land</div>
+              <span class="overview-chart-meta" id="histogram-meta">n=0</span>
+            </div>
+            <div class="histogram-bars" id="histogram-bars"></div>
+            <div class="histogram-baseline"></div>
+            <div class="histogram-axis">
+              <span>0</span><span>25</span><span>50</span><span style="color:var(--color-text-secondary)">75 &#183; approve line</span><span>100</span>
+            </div>
+          </div>
+
+          <!-- Chart B: scatter -->
+          <div class="overview-chart-card" style="position:relative">
+            <div class="overview-chart-header">
+              <div class="overview-chart-title">Is a good score expensive?</div>
+              <span class="overview-chart-meta">price &#215; score</span>
+            </div>
+            <div class="scatter-area" id="scatter-area">
+              <!-- Budget line injected by JS -->
+            </div>
+            <!-- Tooltip (positioned absolute inside the card) -->
+            <div class="scatter-tooltip" id="scatter-tooltip">
+              <div class="scatter-tooltip-title" id="scatter-tt-title"></div>
+              <div class="scatter-tooltip-meta" id="scatter-tt-meta"></div>
+            </div>
+            <div class="scatter-axis">
+              <span>score 30 &#8594;</span><span>100</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN: hero + stats + next up -->
+      <div class="overview-right">
+
+        <!-- BEST hero card -->
+        <div class="hero-card" id="ov-hero-card">
+          <div class="hero-empty">No approved listings yet</div>
+        </div>
+
+        <!-- This week stats -->
+        <div class="this-week-card card">
+          <div class="card-kicker">This week</div>
+          <div class="this-week-grid">
+            <div>
+              <div class="this-week-value mono" id="ov-stat-new">0</div>
+              <div class="this-week-label">new listings</div>
+            </div>
+            <div>
+              <div class="this-week-value mono pending-color" id="ov-stat-pending">0</div>
+              <div class="this-week-label">awaiting you</div>
+            </div>
+            <div>
+              <div class="this-week-value mono viewing-color" id="ov-stat-viewings">0</div>
+              <div class="this-week-label">viewings booked</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Next up -->
+        <div class="next-up-card" id="ov-next-up">
+          <div class="next-up-header">
+            <div class="card-kicker">Next up</div>
+            <span class="next-up-meta">approved &#183; by score</span>
+          </div>
+          <div id="ov-next-up-rows">
+            <div class="next-up-empty">Approve listings from Pending to see them here</div>
+          </div>
+        </div>
+
+      </div>
     </div>
   </section>
 
