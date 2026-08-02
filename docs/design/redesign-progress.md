@@ -272,3 +272,130 @@ Brief 1g shows a bottom-fixed dock (Overview / Detail / Pending / Settings). MVP
 - `window.renderRejectedGrid()` — new, callable by external code
 - `window._settingsData` — now a `window` property (was module-local `var`); exposed for the empty-state threshold display
 - All Wave 1–3 public APIs unchanged
+
+---
+
+## Wave 5A — Backend: Shortlist funnel + after-viewing decisions (COMPLETE)
+
+### Objective
+
+Backend preparation for the Shortlist funnel UX (design brief v2 section 2b).
+After a user marks a listing "viewed", they pick one of three post-viewing decisions.
+This wave adds the Postgres enum values, data model constants, a data_store helper,
+and a new HTTP endpoint. Waves 5B/5C rebuild the frontend to expose these.
+
+### New enum values (migration 0002)
+
+Added to the `listing_status` Postgres ENUM via `ALTER TYPE listing_status ADD VALUE IF NOT EXISTS`:
+
+| Value          | Meaning                                                        |
+|----------------|----------------------------------------------------------------|
+| `thinking`     | User attended the viewing; still deciding                     |
+| `offer_drafted`| User decided "still in"; draft offer prepared                 |
+| `dropped`      | User decided not to proceed after viewing                     |
+
+`dropped` is distinct from `rejected`. `rejected` means "never worth looking at" from
+the Inbox stage (before a viewing). `dropped` means "viewed it, not interested."
+
+Migration file: `backend/alembic/versions/0002_add_shortlist_statuses.py`
+
+Downgrade note: `ALTER TYPE ... ADD VALUE` is one-way in Postgres. `downgrade()` is a
+documented no-op. Manual removal requires recreating the type (see migration docstring).
+
+### State-transition graph
+
+```
+pending
+  │
+  ▼ (approve)
+approved ──────────────────────────────────────────────── SHORTLIST_TO_VIEW
+  │
+  ▼ (schedule-viewing)
+viewing_scheduled ─────────────────────────────────────── SHORTLIST_TO_VIEW
+  │
+  ▼ (mark-viewed)
+viewed  ←─── transient default; user must pick a decision ─ SHORTLIST_VIEWED
+  │
+  ├──→ thinking       (decision=thinking)  ────────────── SHORTLIST_VIEWED
+  │
+  ├──→ offer_drafted  (decision=still-in)  ────────────── SHORTLIST_VIEWED
+  │
+  └──→ dropped        (decision=drop)      ────────────── SHORTLIST_DROPPED
+```
+
+Separate branch from the Inbox:
+```
+pending
+  └──→ rejected  (reject from Inbox)  ─── NOT part of Shortlist funnel
+```
+
+### New endpoint
+
+`POST /api/entry/{listing_id}/viewing-decision`
+
+Request body:
+```json
+{"decision": "still-in" | "thinking" | "drop", "reason": "<optional string>"}
+```
+
+Response (success):
+```json
+{"ok": true, "new_status": "offer_drafted"}
+```
+
+HTTP status codes:
+- `200` — transition applied
+- `404` — listing not found
+- `409` — listing not yet marked viewed (status is approved/viewing_scheduled/pending/rejected)
+- `422` — `decision` is not one of the three allowed values
+- `500` — DB error (never-raise; returns `{"ok": false, "error": "..."}`)
+
+### New data_store helper
+
+`data_store.set_viewing_decision(listing_id: str, decision: str, reason: Optional[str] = None) -> bool`
+
+- Returns `True` on success, `False` on miss or wrong pre-condition status
+- Appends a `{action: "decision", decision, new_status, at, [drop_reason]}` event to
+  `viewing_history` (JSONB reassignment — never mutates in place)
+- Idempotent: calling `still-in` on a listing already at `offer_drafted` succeeds
+
+### New model constants
+
+In `backend/models.py`:
+
+```python
+SHORTLIST_TO_VIEW  = frozenset({"approved", "viewing_scheduled"})
+SHORTLIST_VIEWED   = frozenset({"viewed", "thinking", "offer_drafted"})
+SHORTLIST_DROPPED  = frozenset({"dropped"})
+```
+
+### Files modified
+
+| File | Change |
+|------|--------|
+| `backend/alembic/versions/0002_add_shortlist_statuses.py` | New migration: adds 3 enum values |
+| `backend/models.py` | Extended `LISTING_STATUS_VALUES`; added `SHORTLIST_*` frozensets |
+| `backend/data_store.py` | Added `set_viewing_decision`; updated `load_app_data` + `get_approved_listing` to include all 6 post-Inbox statuses |
+| `backend/routes_entries.py` | Added `POST /api/entry/{id}/viewing-decision` endpoint |
+| `backend/tests/test_shortlist_decisions.py` | 15 new tests (all passing) |
+
+### Test results
+
+Total: **130 passed** (was 115 before Wave 5A; +15 new tests).
+
+### Handoff to Wave 5B / 5C
+
+The Shortlist sidebar can group listings using the `status` field already returned
+in the `/api/data` response. No new GET endpoint is needed for MVP — client-side
+filtering using the `SHORTLIST_*` group membership is sufficient.
+
+Wave 5B should:
+1. Add the Shortlist funnel section to the sidebar (grouping by `SHORTLIST_TO_VIEW`,
+   `SHORTLIST_VIEWED`, `SHORTLIST_DROPPED`).
+2. Add the "After the viewing" decision bar to a viewed listing's detail panel —
+   three buttons (Still in / Thinking / Drop) that POST to the new endpoint.
+3. After a successful decision POST, refresh the listing state in the UI and move
+   the sidebar item to the correct group.
+
+Wave 5C (if separate): visual polish — badge states for thinking/offer_drafted/dropped
+in the sidebar and listing cards.
