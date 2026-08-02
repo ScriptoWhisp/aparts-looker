@@ -114,15 +114,15 @@ _settings = _load_settings()
 
 
 # kv.ee query-param names for the four hard filters we push into the URL.
-# Verified against a live kv.ee search URL on 2026-08-02. If kv.ee ever
-# renames these, override in the URL string itself instead of hoping this
-# stays in sync — the settings-hint UI text points users at kv.ee's own
-# search form to grab a fresh URL.
+# Verified against a live kv.ee/ru/search URL on 2026-08-02 (rooms_min /
+# price_max / area_total_min are the names /ru uses; the EN /search may
+# use a slightly different area name — if you're on /search and area
+# injection stops working, add both here or check the kv.ee form).
 _KV_QUERY_PARAMS = {
     "max_price_eur":  "price_max",
     "min_rooms":      "rooms_min",
     "min_images":     "nr_of_photos_from",
-    "min_area_sqm":   "size_from",
+    "min_area_sqm":   "area_total_min",
 }
 
 
@@ -473,7 +473,7 @@ INDEX_HTML = """<!DOCTYPE html>
         <div class="settings-row">
           <label class="settings-label" for="set-min-area">Min area (m²)</label>
           <input id="set-min-area" type="number" min="0" step="1" max="1000">
-          <div class="settings-hint">Injected as <code>size_from</code>. 0 = keep URL default.</div>
+          <div class="settings-hint">Injected as <code>area_total_min</code>. 0 = keep URL default.</div>
         </div>
 
         <button id="settings-save" class="settings-save">Save settings</button>
