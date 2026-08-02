@@ -58,7 +58,7 @@ from typing import Optional
 
 import config
 from db import SessionLocal
-from models import Listing
+from models import Listing, SHORTLIST_VIEWED, SHORTLIST_TO_VIEW, SHORTLIST_DROPPED
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import attributes as _sa_attributes
 
@@ -372,8 +372,11 @@ def load_app_data() -> dict:
     db_ = SessionLocal()
     try:
         rows = db_.query(Listing).all()
+        # "properties" is the approved-tier bucket: all statuses that are past
+        # the Inbox decision. The new SHORTLIST_* sets cover post-viewing states.
+        _approved_tier = SHORTLIST_TO_VIEW | SHORTLIST_VIEWED | SHORTLIST_DROPPED
         properties = [_row_to_property_dict(r) for r in rows
-                      if r.status in ("approved", "viewing_scheduled", "viewed")]
+                      if r.status in _approved_tier]
         pending = [_row_to_pending_dict(r) for r in rows if r.status == "pending"]
         rejected = [_row_to_rejected_dict(r) for r in rows if r.status == "rejected"]
         checklists = {r.id: r.checklist for r in rows if r.checklist}
@@ -722,6 +725,95 @@ def mark_viewed(listing_id: str) -> bool:
         db_.close()
 
 
+def set_viewing_decision(
+    listing_id: str,
+    decision: str,
+    reason: Optional[str] = None,
+) -> bool:
+    """Record a post-viewing decision. Returns True on success, False on miss or wrong status.
+
+    Valid decisions and the status they produce:
+      "still-in"  → offer_drafted
+      "thinking"  → thinking
+      "drop"      → dropped  (appends drop_reason to viewing_history[-1] if provided)
+
+    Precondition: listing.status must be in {viewed, thinking, offer_drafted, dropped}.
+    Calling this function before mark_viewed (i.e. on an approved/viewing_scheduled/
+    pending/rejected listing) returns False and logs a warning — callers should check
+    the return value and map it to a 409 HTTP status (see routes_entries.py).
+
+    Idempotent: calling "still-in" on a listing already at offer_drafted keeps the
+    status unchanged and appends a new history entry.
+
+    JSONB reassignment convention (Pitfall 1): viewing_history is always fully
+    reassigned, never mutated in-place.
+
+    Thread-safe (Postgres per-row atomicity). Never-raise.
+    """
+    _VALID_DECISIONS = {"still-in", "thinking", "drop"}
+    if decision not in _VALID_DECISIONS:
+        log.warning(
+            "set_viewing_decision: unrecognised decision %r for listing %s — must be one of %s",
+            decision,
+            listing_id,
+            _VALID_DECISIONS,
+        )
+        return False
+
+    # Statuses that permit a viewing decision (listing must have been viewed first).
+    _PERMITTED_STATUSES = SHORTLIST_VIEWED | SHORTLIST_DROPPED
+
+    db_ = SessionLocal()
+    try:
+        row = db_.get(Listing, listing_id)
+        if row is None:
+            return False
+        if row.status not in _PERMITTED_STATUSES:
+            log.warning(
+                "set_viewing_decision: listing %s has status=%r — "
+                "must be viewed/thinking/offer_drafted/dropped before a decision can be recorded",
+                listing_id,
+                row.status,
+            )
+            return False
+
+        # Map decision string → target status.
+        if decision == "still-in":
+            new_status = "offer_drafted"
+        elif decision == "thinking":
+            new_status = "thinking"
+        else:  # "drop"
+            new_status = "dropped"
+
+        row.status = new_status
+
+        # Append to viewing_history (JSONB reassignment — Pitfall 1).
+        history = list(row.viewing_history or [])
+        event: dict = {
+            "action": "decision",
+            "decision": decision,
+            "new_status": new_status,
+            "at": datetime.now(timezone.utc).isoformat(),
+        }
+        if decision == "drop" and reason:
+            event["drop_reason"] = reason
+
+        history.append(event)
+        row.viewing_history = history
+
+        db_.commit()
+        return True
+    except SQLAlchemyError:
+        log.exception("set_viewing_decision failed for %s", listing_id)
+        try:
+            db_.rollback()
+        except Exception:
+            pass
+        return False
+    finally:
+        db_.close()
+
+
 def save_negotiation_brief(listing_id: str, brief: dict) -> bool:
     """Overwrite negotiation_brief JSONB and record a freshness timestamp (VIEW-03, D-06).
 
@@ -891,13 +983,15 @@ def get_rejected_by_reason(reason: str) -> list:
 def get_approved_listing(listing_id: str) -> Optional[dict]:
     """Return the approved-tier row as a dict, or None if not found.
 
-    'Approved-tier' means status in (approved, viewing_scheduled, viewed).
+    'Approved-tier' means any status past the Inbox decision:
+    approved, viewing_scheduled, viewed, thinking, offer_drafted, dropped.
     Used by POST /api/draft/<id> to look up contact_email, draft_body, draft_subject.
     """
+    _approved_tier = SHORTLIST_TO_VIEW | SHORTLIST_VIEWED | SHORTLIST_DROPPED
     db_ = SessionLocal()
     try:
         row = db_.get(Listing, listing_id)
-        if row is None or row.status not in ("approved", "viewing_scheduled", "viewed"):
+        if row is None or row.status not in _approved_tier:
             return None
         return _row_to_property_dict(row)
     except SQLAlchemyError:
