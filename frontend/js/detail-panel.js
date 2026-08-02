@@ -666,6 +666,91 @@
     return heroRow;
   }
 
+  /* ----------------------------------------------------------------
+     _buildVerdictBand — colored border card with verdict + flag/unknown/ok counts
+     ---------------------------------------------------------------- */
+  function _buildVerdictBand(entry, scoreColor) {
+    var band = document.createElement("div");
+    band.className = "dm-verdict-band";
+    band.style.borderLeft = "2px solid " + scoreColor;
+
+    /* Left: kicker + verdict text */
+    var content = document.createElement("div");
+    content.className = "dm-verdict-content";
+
+    var kicker = document.createElement("div");
+    kicker.className = "dm-verdict-kicker";
+    kicker.textContent = "Вердикт";
+    content.appendChild(kicker);
+
+    var verdictText = document.createElement("div");
+    verdictText.className = "dm-verdict-text";
+    verdictText.textContent = entry.verdict || "AI verdict not yet generated — click Re-evaluate.";
+    content.appendChild(verdictText);
+
+    band.appendChild(content);
+
+    /* Right: 3 status tags — flags / unknown / ok */
+    var tags = document.createElement("div");
+    tags.className = "dm-verdict-tags";
+
+    /* Count checklist statuses */
+    var clData = window.state.checklists[entry.id] || {};
+    var manualChecklist = clData.manual_checklist || {};
+    var aiFills = entry.ai_checklist_fills || {};
+
+    var okCount = 0, unknownCount = 0, flagCount = 0, totalCount = 0;
+
+    (window.FULL_CHECKLIST || []).forEach(function (section) {
+      (section.items || []).forEach(function (it) {
+        totalCount++;
+        var isAi = it.id.startsWith("ai__");
+        var storageKey = isAi ? it.id.slice(4) : it.id;
+        var aiVal = it.aiVal;
+        if (aiVal && typeof aiVal === "object") aiVal = aiVal.result;
+        if (aiVal === "pass") aiVal = "ok";
+        if (aiVal === "fail") aiVal = "issue";
+        /* Also check AI fills from entry */
+        var aiEntryVal = entry.checklist && entry.checklist[storageKey];
+        if (aiEntryVal && typeof aiEntryVal === "object") aiEntryVal = aiEntryVal.result;
+        if (aiEntryVal === "pass") aiEntryVal = "ok";
+        if (aiEntryVal === "fail") aiEntryVal = "issue";
+        var effective = manualChecklist[storageKey] || aiVal || aiEntryVal || null;
+        if (effective === "ok") okCount++;
+        else if (effective === "issue") flagCount++;
+        else unknownCount++;
+      });
+    });
+
+    /* Fallback: if FULL_CHECKLIST not populated, try entry.checklist keys */
+    if (totalCount === 0 && entry.checklist) {
+      Object.keys(entry.checklist).forEach(function (k) {
+        var v = entry.checklist[k];
+        if (typeof v === "object") v = v.result;
+        if (v === "pass" || v === "ok") okCount++;
+        else if (v === "fail" || v === "issue") flagCount++;
+        else unknownCount++;
+        totalCount++;
+      });
+    }
+
+    function _verdictTag(text, cls) {
+      var t = document.createElement("span");
+      t.className = "tag " + cls;
+      t.textContent = text;
+      return t;
+    }
+
+    if (flagCount > 0 || unknownCount > 0 || okCount > 0) {
+      if (flagCount > 0) tags.appendChild(_verdictTag(flagCount + " flags", "tag-rejected"));
+      if (unknownCount > 0) tags.appendChild(_verdictTag(unknownCount + " unknown", "tag-viewed"));
+      if (okCount > 0) tags.appendChild(_verdictTag(okCount + " ok", "tag-approved"));
+    }
+
+    band.appendChild(tags);
+    return band;
+  }
+
   /* ================================================================
      Private: _updateDealbreakerBanner
      ================================================================ */
