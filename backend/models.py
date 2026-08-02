@@ -35,7 +35,34 @@ from sqlalchemy.orm import Mapped, mapped_column
 from db import Base
 
 
-LISTING_STATUS_VALUES = ("pending", "approved", "rejected", "viewing_scheduled", "viewed")
+LISTING_STATUS_VALUES = (
+    "pending",
+    "approved",
+    "rejected",
+    "viewing_scheduled",
+    "viewed",
+    # Post-viewing decision states (added in 0002_add_shortlist_statuses migration)
+    "thinking",        # user attended the viewing; still deciding
+    "offer_drafted",   # user decided "still in"; draft offer prepared
+    "dropped",         # user decided not to proceed (distinct from 'rejected' = Inbox dismiss)
+)
+
+# ---------------------------------------------------------------------------
+# Shortlist funnel groupings (design brief v2 section 2b).
+# These sets are used by frontend filtering and business logic to group
+# listings into the three Shortlist sidebar buckets.
+# ---------------------------------------------------------------------------
+
+# "To view" — approved and awaiting a viewing appointment
+SHORTLIST_TO_VIEW: frozenset[str] = frozenset({"approved", "viewing_scheduled"})
+
+# "Viewed" — attended the viewing; decision still pending (transient) or made
+SHORTLIST_VIEWED: frozenset[str] = frozenset({"viewed", "thinking", "offer_drafted"})
+
+# "Dropped" — user decided not to proceed after viewing
+# NOTE: "rejected" is NOT included here — it means "never worth looking at"
+# from the Inbox stage, which is a distinct earlier decision.
+SHORTLIST_DROPPED: frozenset[str] = frozenset({"dropped"})
 
 
 class Listing(Base):
