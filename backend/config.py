@@ -33,9 +33,9 @@ BOLT_HQ_LAT = 59.4203  # Veerenni 28, Tallinn (Bolt HQ) — Leaflet [lat, lng] o
 BOLT_HQ_LNG = 24.7205  # ORS/GeoJSON uses [lng, lat] order — see RESEARCH Pitfall 2
 
 DRAFT_SCORE_THRESHOLD = int(os.environ.get("DRAFT_SCORE_THRESHOLD", "60"))
-MIN_IMAGES = int(os.environ.get("MIN_IMAGES", "5"))
-MIN_ROOMS = int(os.environ.get("MIN_ROOMS", "2"))
-MAX_PRICE_EUR = int(os.environ.get("MAX_PRICE_EUR", "260000"))
+# MIN_IMAGES / MIN_ROOMS / MAX_PRICE_EUR were removed 2026-08-02. Filters now
+# live only on the scraper (single source of truth) — see scraper-client/.env
+# and the scraper's UI. Backend trusts what the scraper sends.
 
 # Telegram tiered delivery thresholds.
 #   >= PHOTO: full card with photo + inline keyboard (highest signal listings)

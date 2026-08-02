@@ -465,31 +465,13 @@ def process_ingest_batch(listing_dicts: list[dict]) -> dict:
         # Mark as seen by appending the object ID (mirrors the original agent_job behaviour).
         state["seen_listing_ids"].append(listing.id)
 
-        # Safety-net filters. Primary filtering now lives on the scraper (it
-        # injects these into the kv.ee search URL as query params). If ANY of
-        # these trigger, the scraper's URL is out of sync with backend settings
-        # or a listing slipped through — log at WARNING so we notice.
-        if listing.price_eur and config.MAX_PRICE_EUR and listing.price_eur > config.MAX_PRICE_EUR:
-            log.warning(
-                "SAFETY-NET filter — price %s > max %s for %s. "
-                "Scraper URL is not enforcing price_max — update scraper settings.",
-                listing.price_eur, config.MAX_PRICE_EUR, listing.id,
-            )
-            continue
-        if listing.rooms and config.MIN_ROOMS and listing.rooms < config.MIN_ROOMS:
-            log.warning(
-                "SAFETY-NET filter — rooms %s < min %s for %s. "
-                "Scraper URL is not enforcing rooms_min — update scraper settings.",
-                listing.rooms, config.MIN_ROOMS, listing.id,
-            )
-            continue
-        if config.MIN_IMAGES and listing.image_count < config.MIN_IMAGES:
-            log.warning(
-                "SAFETY-NET filter — only %d images (min %d) for %s. "
-                "Scraper URL is not enforcing nr_of_photos_from — update scraper settings.",
-                listing.image_count, config.MIN_IMAGES, listing.id,
-            )
-            continue
+        # NOTE: hard-filter enforcement removed. Scraper is the single source
+        # of truth for price/rooms/images filters — it injects those as query
+        # params into the kv.ee search URL so we don't fetch what we'd reject
+        # anyway. If an out-of-bounds listing arrives here, it's a scraper
+        # URL-builder bug — fix it there, not by adding a backend backstop
+        # that would drift out of sync and cause false alarms.
+
 
         try:
             log.info("Evaluating listing %s: %s", listing.id, listing.title)
