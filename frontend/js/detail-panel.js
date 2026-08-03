@@ -860,6 +860,32 @@
     var actions = document.createElement("div");
     actions.className = "sl-modal-actions";
 
+    /* "Clear override" button — only shown when an override is active */
+    if (currentOverride != null) {
+      var clearBtn = document.createElement("button");
+      clearBtn.type = "button";
+      clearBtn.className = "btn btn-secondary";
+      clearBtn.textContent = "Clear override";
+      clearBtn.style.cssText = "color:var(--color-score-bad);margin-right:auto;";
+      clearBtn.addEventListener("click", function () {
+        fetch("/api/entry/" + encodeURIComponent(entry.id) + "/cost-override", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({renovation_override_work_eur: null}),
+        })
+          .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+          .then(function () {
+            document.body.removeChild(overlay);
+            if (window.loadData) window.loadData();
+          })
+          .catch(function () {
+            window.showToast("Failed to clear override", "error");
+            document.body.removeChild(overlay);
+          });
+      });
+      actions.appendChild(clearBtn);
+    }
+
     var cancelBtn = document.createElement("button");
     cancelBtn.type = "button";
     cancelBtn.className = "btn btn-secondary";
