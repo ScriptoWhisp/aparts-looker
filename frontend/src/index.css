@@ -1,0 +1,100 @@
+/**
+ * Global styles — Tailwind directives + Nocturne base resets.
+ *
+ * Tailwind handles most styling via utility classes. This file only adds:
+ * - @tailwind directives
+ * - CSS reset extensions not covered by Tailwind's preflight
+ * - Font smoothing, selection, focus rings
+ * - prefers-reduced-motion override (SPEC §1 Motion)
+ *
+ * STYLE GUIDE: No CSS-in-JS (styled-components, emotion). Tailwind only.
+ * BANNED: dangerouslySetInnerHTML — React auto-escapes JSX. Use JSX.
+ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    /* Dark class always applied — Nocturne is dark-first */
+    color-scheme: dark;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-app text-text font-sans;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  /* Selection tint */
+  ::selection {
+    background: rgba(145, 132, 217, 0.25);
+    color: #e9e9ed;
+  }
+
+  /* Focus ring — accent purple per SPEC §1 */
+  :focus-visible {
+    outline: 2px solid #9184d9;
+    outline-offset: 2px;
+  }
+
+  /* Remove default outline for mouse users */
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  /* Hover tint for clickable rows/cards — per SPEC §1 */
+  [data-clickable]:hover {
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  /* Tabular nums on mono elements */
+  .font-mono {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* ── prefers-reduced-motion (SPEC §1 Motion — three rules, no exceptions) ── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Verdict / body-copy paragraphs (SPEC §1 Type) ─────────────────────── */
+.text-wrap-pretty {
+  text-wrap: pretty;
+}
+
+/* ── Leaflet map resets (used in Wave 7D) ─────────────────────────────── */
+.leaflet-container {
+  background: #0f111c;
+  font-family: inherit;
+}
+
+/* ── Scrollbar styling (dark theme) ─────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3f424d;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #595d6c;
+}
