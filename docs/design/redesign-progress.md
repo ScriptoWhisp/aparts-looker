@@ -5,11 +5,37 @@ It supersedes `wave-1-notes.md` (the Wave 1-only version is kept for history).
 
 ---
 
-## Redesign complete
+## Redesign v3 complete — 2026-08-03
+
+Waves 6A through 6D complete. The Aparts Looker frontend now ships the full Nocturne v3 feature
+set: hand-rolled SVG charts, compare overlay, Maa-amet sold-price intelligence, withdrawn
+signal, calibration scatter, and own-score capture.
+
+### What shipped across all waves (6A–6D)
+
+| Wave | Area | Key output |
+|------|------|------------|
+| Wave 6A | Architecture | Module split (`map.js`, `charts.js`, `inbox.js`, `shortlist.js`, `compare.js`), `escapeHtml()` XSS guard everywhere |
+| Wave 6B | Map + Inbox | Leaflet marker clusters, filter rail, inbox list with date bubbles + copy-address |
+| Wave 6C | Cost model | AI `renovation_items[]`, client-side `computeAllIn()`, all-in hero display, rank-by-all-in, per-listing override, settings renovation rates |
+| Wave 6D | Compare, Intelligence, Calibration, Charts | Compare overlay (cmd-click), Maa-amet sold-price baseline, withdrawn signal, calibration panel, own-score slider, SVG charts rewrite |
+
+### What remains outstanding
+
+- Bridge aliases (`--bg`, `--surface`, `--border`, etc.) can be fully removed once detail/filter-bar CSS is migrated to Nocturne tokens
+- Inline `<style>` block can be split into per-tab CSS files when it becomes large enough
+- Keyboard shortcuts (j/k/a/r) on Pending tab are aspirational — documented in header hint text but not implemented
+- Bottom-dock mobile nav (mockup 1g) is aspirational v2 — MVP uses top header
+- `TestMarkListingWithdrawn` and `TestCostOverrideOwnScore` API round-trip tests require Postgres — run green inside Docker only
+- Maa-amet CSV needs quarterly refresh from https://www.maaamet.ee/kinnisvara/htraru/FilteredReport.aspx
+
+---
+
+## Redesign complete (v1 — Waves 1–4)
 
 All 4 waves shipped. The Aparts Looker frontend is fully migrated to the Nocturne design system.
 
-### What shipped across all waves
+### What shipped across all waves (v1)
 
 | Wave | Tab(s) | Key output |
 |------|--------|------------|
@@ -790,3 +816,94 @@ Implement the all-in cost feature end-to-end: AI produces renovation item classi
 
 **130 passed baseline + 11 new tests passing** (4 additional tests skip without Postgres — run green in Docker).
 15 tests total in `tests/test_wave6c_allin_cost.py`.
+
+---
+
+## Wave 6D — Compare, Maa-amet baseline, calibration panel, SVG charts (COMPLETE)
+
+**Date:** 2026-08-03
+**Branch:** main
+**Status:** Complete
+
+### Objective
+
+Four independent additive features closing the Nocturne v3 feature set:
+1. **Compare overlay** (SPEC §5) — cmd-click multi-select + differing-rows-only overlay
+2. **Maa-amet sold-price baseline** (SPEC §6) — quarterly CSV lookup wired into AI context + hero delta
+3. **Calibration panel** (SPEC §2.2) — AI vs own-score scatter, own-score slider
+4. **SVG charts rewrite** (deferred from 6A) — hand-rolled histogram + scatter in `charts.js`
+
+### What shipped
+
+#### 1. Compare overlay (`frontend/js/comparison.js` rewrite)
+
+| Change | Detail |
+|--------|--------|
+| `comparison.js` | `_selected[]` (max 2, FIFO evict), `compareToggle(id)`, capture-phase cmd/ctrl-click on `.sidebar-item[data-id]`, `C` keyboard shortcut (shortlist tab guard) |
+| Overlay | 1000px dialog, `--app` bg, `--r-lg`, `--sh-lg`, 22% backdrop. Grid `172px 1fr 1fr`: label col + listing cols with 104px photo + title |
+| Differing rows only | `ROW_DEFS` array, `diffRows = ROW_DEFS.filter(row => row.va !== row.vb)`, winner gets `color: var(--st-short)` |
+| Footer | "Draft offer on this one" / "Drop this one" per column, Esc/backdrop closes |
+| CSS | `.sidebar-item.compare-selected` accent border + tint, `@media (max-width: 768px)` disabled |
+
+#### 2. Maa-amet sold-price baseline
+
+| Change | Detail |
+|--------|--------|
+| `backend/data/maa_amet_baseline.csv` | Placeholder CSV with 7 Tallinn districts, schema: `district,structure,decade_built,quarter,median_eur_sqm,n_transactions`. Refresh procedure documented in comments. |
+| `backend/maa_amet_baseline.py` | `get_median(district, structure, year_built, quarter)` with 3-tier fallback: `(district+structure+decade)` → `(district+decade)` → `(district only)`. `_MIN_TRANSACTIONS=5` guard. `latest_quarter()`. Eagerly loads at import. |
+| `backend/ingest_handler.py` | `_build_context_prefix` now uses sold median when available (replaces asking-price avg). `_mark_removed_listings` calls `data_store.mark_listing_withdrawn`. |
+| `backend/data_store.py` | `mark_listing_withdrawn(listing_id, today_str)`: stamps shortlisted entries with `{"action":"withdrawn","withdrawn_at":date}` in `viewing_history`. JSONB reassignment convention. Idempotent. |
+
+#### 3. Withdrawn signal (`frontend/js/detail-panel.js`)
+
+| Change | Detail |
+|--------|--------|
+| `_isWithdrawn(entry)`, `_getWithdrawnAt(entry)` | Scan `viewing_history` for `action === "withdrawn"` |
+| `_buildSidebarRow` | Withdrawn rows at opacity 0.5 (vs 0.4 for dropped); meta line: "sold? · N days on market"; right indicator hidden |
+| `_buildHeroRow` | vs-sold metric cell reads `window.state.soldBaseline[entry.district]`; shows "−N%" green / "+N%" red / "—" / "no comparable sales" |
+
+#### 4. Calibration panel (`frontend/js/ui.js`)
+
+| Change | Detail |
+|--------|--------|
+| `renderCalibrationPanel()` | Only renders at ≥5 viewed+rated entries. SVG scatter: AI score (x) vs own_score (y), dashed y=x reference line, colored dots with `<title>` tooltip. MAE + bias nudge if |bias| > 5 pts. |
+| Own-score slider | Range 0-100 in hero for viewed/thinking/offer_drafted/dropped. Pre-fills existing `own_score`. 800ms debounce + manual save button. POSTs `{own_score: N}` to `/api/entry/{id}/cost-override`. |
+| `backend/routes_entries.py` | `cost_override` endpoint extended: `own_score` field stored in `viewing_history[-1]` via JSONB reassignment. Co-tenant with renovation override (comment explains proper endpoint is future work). |
+
+#### 5. SVG charts rewrite (`frontend/js/charts.js`)
+
+| Change | Detail |
+|--------|--------|
+| `charts.js` (new) | `window.renderHistogram(entries, container)`: 10 bins, `<rect rx=2>`, scoreColor fill, 1px baseline, ticks, `<foreignObject>` popover. `window.renderScatter(entries, container)`: `<circle r=4.5>`, shortlisted r=5.5 + halo at 16% alpha, dashed budget line `stroke-dasharray="4 5"`, clamped hover card. |
+| `ui.js` | Both `renderHistogram` and `renderScatter` replaced with thin shims; `charts.js` loads after and overrides. `<script src="/js/charts.js">` added between `ui.js` and `cost.js` in `index.html`. |
+| XSS | `escapeHtml()` on every scraped/AI string in tooltip content |
+
+### Files created
+
+| File | Purpose |
+|------|---------|
+| `backend/data/maa_amet_baseline.csv` | Quarterly sold-price reference data from Maa-amet |
+| `backend/maa_amet_baseline.py` | 3-tier lookup module with n≥5 guard |
+| `frontend/js/charts.js` | Hand-rolled SVG histogram + scatter |
+| `backend/tests/test_wave6d.py` | 24 tests (21 pass locally, 3 skip — need Postgres/server) |
+
+### Files modified
+
+`backend/ingest_handler.py`, `backend/data_store.py`, `backend/routes_entries.py`,
+`frontend/js/comparison.js`, `frontend/js/detail-panel.js`, `frontend/js/ui.js`, `frontend/index.html`
+
+### Commits
+
+- `4b25080 feat(maa-amet): CSV baseline + lookup module + fallback bucket resolution`
+- `d06c3f2 feat(maa-amet): wire baseline into context prefix + own_score support`
+- `09dd4e0 feat(shortlist): own_score field via cost-override endpoint`
+- `33dca35 refactor(charts): rewrite histogram + scatter as hand-rolled SVG in charts.js`
+- `033512e feat(shortlist): withdrawn state — days-on-market signal on sold listings`
+- `291cd38 feat(compare): multi-select in shortlist sidebar with cmd/ctrl-click + C shortcut`
+- `0f96457 feat(compare): dialog overlay with differing-rows-only + winner tinting`
+- `19e0d8a test(wave6d): add 21 tests for maa-amet baseline, context prefix, own_score, CSV schema`
+
+### Test results
+
+**21 passed, 3 skipped** (skipped tests require Postgres or running server — green in Docker).
+24 tests total in `backend/tests/test_wave6d.py`.
