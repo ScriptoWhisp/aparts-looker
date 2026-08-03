@@ -946,13 +946,19 @@
       }
       groupHdr.appendChild(statusCount);
 
-      /* Chevron */
-      var chevron = document.createElement("span");
-      chevron.style.cssText = "color:var(--color-text-muted);font-size:11px;flex-shrink:0;";
+      /* Chevron — Phosphor SVG symbol (ph-caret-down / ph-caret-right) */
+      var SVG_NS_LOCAL = "http://www.w3.org/2000/svg";
+      var chevron = document.createElementNS(SVG_NS_LOCAL, "svg");
+      chevron.setAttribute("width", "14");
+      chevron.setAttribute("height", "14");
+      chevron.setAttribute("aria-hidden", "true");
+      chevron.style.cssText = "flex-shrink:0;color:var(--color-text-muted);";
 
       /* Default: expand first group (the one with flags or idx 0) */
       var startExpanded = idx === 0 || hasFlag;
-      chevron.textContent = startExpanded ? "▾" : "▸";
+      var useEl = document.createElementNS(SVG_NS_LOCAL, "use");
+      useEl.setAttribute("href", startExpanded ? "#ph-caret-down" : "#ph-caret-right");
+      chevron.appendChild(useEl);
 
       groupHdr.appendChild(chevron);
 
@@ -1011,11 +1017,11 @@
         });
       });
 
-      /* Toggle */
+      /* Toggle — swap Phosphor caret symbol */
       groupHdr.addEventListener("click", function () {
         var open = groupBody.style.display !== "none";
         groupBody.style.display = open ? "none" : "flex";
-        chevron.textContent = open ? "▸" : "▾";
+        chevron.querySelector("use").setAttribute("href", open ? "#ph-caret-right" : "#ph-caret-down");
       });
 
       card.appendChild(groupHdr);
