@@ -3063,6 +3063,48 @@
     flex-direction: column;
     overflow: hidden;
     z-index: 2;
+    /* Swipe-triage support: card is draggable, GPU-composited */
+    will-change: transform, opacity;
+    touch-action: pan-y; /* let vertical scroll of body work, we handle horizontal */
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .mi-card.mi-card--dragging { transition: none; }
+  .mi-card.mi-card--snap {
+    transition: transform 200ms cubic-bezier(.2,.7,.3,1), opacity 160ms;
+  }
+  .mi-card.mi-card--fling {
+    transition: transform 260ms cubic-bezier(.4,0,.6,1), opacity 220ms cubic-bezier(.4,0,.6,1);
+  }
+  /* Directional intent hints while dragging past a small threshold */
+  .mi-swipe-hint {
+    position: absolute;
+    top: 20px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font: 600 12px/1 Inter, system-ui, sans-serif;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 3;
+    transition: opacity 100ms;
+  }
+  .mi-swipe-hint--look {
+    left: 20px;
+    color: var(--score-85);
+    border: 2px solid var(--score-85);
+    background: rgba(79,185,141,.15);
+  }
+  .mi-swipe-hint--skip {
+    right: 20px;
+    color: var(--score-0);
+    border: 2px solid var(--score-0);
+    background: rgba(196,99,95,.15);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .mi-card.mi-card--snap,
+    .mi-card.mi-card--fling { transition: opacity 100ms; }
   }
 
   /* Peek card — sits 6px behind */
@@ -4850,14 +4892,164 @@
       stack.appendChild(peek);
     }
 
-    /* Front card */
-    stack.appendChild(_buildMobileCard(entry));
+    /* Front card + swipe intent hints */
+    var frontCard = _buildMobileCard(entry);
+    var hintLook = document.createElement("div");
+    hintLook.className = "mi-swipe-hint mi-swipe-hint--look";
+    hintLook.textContent = "Look closer";
+    frontCard.appendChild(hintLook);
+    var hintSkip = document.createElement("div");
+    hintSkip.className = "mi-swipe-hint mi-swipe-hint--skip";
+    hintSkip.textContent = "Skip";
+    frontCard.appendChild(hintSkip);
+    stack.appendChild(frontCard);
+    _installSwipeHandlers(frontCard, entry, hintLook, hintSkip);
     shell.appendChild(stack);
 
     /* Actions */
-    shell.appendChild(_buildMobileActions(entry));
+    shell.appendChild(_buildMobileActions(entry, frontCard));
 
     root.appendChild(shell);
+  }
+
+  /* ── Shared action handlers — invoked by both button taps and swipe gestures.
+     Each one takes the front card element so the caller can play a slide-off
+     animation before firing the network call. ── */
+  function _miDoLookCloser(entry, cardEl) {
+    _flingCard(cardEl, "right", function() {
+      fetch("/api/pending/" + encodeURIComponent(entry.id) + "/approve", {method: "POST"})
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.ok || d.status) {
+            _miSession.idx++;
+            _miSession.shortlisted++;
+            _miSession.triaged++;
+            window.loadData();
+            setTimeout(function() {
+              window.location.hash = "shortlist";
+              if (window.openDetailPanel) window.openDetailPanel(entry.id);
+            }, 300);
+          } else {
+            window.loadData();
+          }
+        })
+        .catch(function() { window.loadData(); });
+    });
+  }
+
+  function _miDoSkip(entry, cardEl) {
+    _showMobileSkipSheet(entry, function(reason) {
+      _flingCard(cardEl, "left", function() {
+        fetch("/api/pending/" + encodeURIComponent(entry.id) + "/reject", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({reason: reason}),
+        })
+          .then(function() {
+            _miSession.idx++;
+            _miSession.skipped++;
+            _miSession.triaged++;
+            window.loadData();
+          })
+          .catch(function() { window.loadData(); });
+      });
+    });
+  }
+
+  function _miDoLater(entry, cardEl) {
+    _flingCard(cardEl, "up", function() {
+      var item = _miSession.queue.splice(_miSession.idx, 1)[0];
+      _miSession.queue.push(item);
+      if (_miSession.idx >= _miSession.queue.length) _miSession.idx = 0;
+      _renderMobileInbox();
+    });
+  }
+
+  /* Play the slide-off animation on the given card, then invoke onDone.
+     direction ∈ "right" (look closer), "left" (skip), "up" (later). */
+  function _flingCard(cardEl, direction, onDone) {
+    if (!cardEl || !cardEl.parentNode) { onDone(); return; }
+    var W = window.innerWidth;
+    var offX = 0, offY = 0, rot = 0;
+    if (direction === "right") { offX = W * 1.5; rot = 25; }
+    else if (direction === "left") { offX = -W * 1.5; rot = -25; }
+    else { offY = -window.innerHeight; }
+    cardEl.classList.remove("mi-card--dragging", "mi-card--snap");
+    cardEl.classList.add("mi-card--fling");
+    cardEl.style.transform = "translate(" + offX + "px, " + offY + "px) rotate(" + rot + "deg)";
+    cardEl.style.opacity = "0";
+    setTimeout(onDone, 260);
+  }
+
+  /* Touch/pointer swipe on the front card. Horizontal drag → skip/look closer,
+     upward drag → later. Below threshold snaps back with an animated release. */
+  function _installSwipeHandlers(cardEl, entry, hintLook, hintSkip) {
+    var startX = 0, startY = 0, dx = 0, dy = 0;
+    var dragging = false, committed = false;
+    var CARD_W = 320; /* refined at drag start */
+    var THRESHOLD_X, THRESHOLD_UP = 100;
+
+    function setHints() {
+      if (!hintLook || !hintSkip) return;
+      hintLook.style.opacity = dx > 30 ? String(Math.min(1, dx / 120)) : "0";
+      hintSkip.style.opacity = dx < -30 ? String(Math.min(1, -dx / 120)) : "0";
+    }
+
+    function onStart(e) {
+      if (committed) return;
+      var t = (e.touches && e.touches[0]) || e;
+      startX = t.clientX; startY = t.clientY;
+      dx = 0; dy = 0;
+      dragging = true;
+      var rect = cardEl.getBoundingClientRect();
+      CARD_W = rect.width;
+      THRESHOLD_X = Math.max(90, CARD_W * 0.32);
+      cardEl.classList.remove("mi-card--snap", "mi-card--fling");
+      cardEl.classList.add("mi-card--dragging");
+    }
+    function onMove(e) {
+      if (!dragging || committed) return;
+      var t = (e.touches && e.touches[0]) || e;
+      dx = t.clientX - startX;
+      dy = t.clientY - startY;
+      /* Lock in horizontal intent once ≥10px moved sideways with dominant horizontal */
+      if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy) && e.cancelable) {
+        e.preventDefault();
+      }
+      var rot = dx * 0.06;
+      var alpha = 1 - Math.min(0.6, Math.abs(dx) / 400);
+      cardEl.style.transform = "translate(" + dx + "px, " + Math.min(0, dy) + "px) rotate(" + rot + "deg)";
+      cardEl.style.opacity = String(alpha);
+      setHints();
+    }
+    function onEnd() {
+      if (!dragging || committed) return;
+      dragging = false;
+      var absX = Math.abs(dx), absY = Math.abs(dy);
+      if (dx > THRESHOLD_X && absX > absY) {
+        committed = true;
+        _miDoLookCloser(entry, cardEl);
+      } else if (dx < -THRESHOLD_X && absX > absY) {
+        committed = true;
+        _miDoSkip(entry, cardEl);
+      } else if (dy < -THRESHOLD_UP && absY > absX) {
+        committed = true;
+        _miDoLater(entry, cardEl);
+      } else {
+        /* Snap back */
+        cardEl.classList.remove("mi-card--dragging");
+        cardEl.classList.add("mi-card--snap");
+        cardEl.style.transform = "";
+        cardEl.style.opacity = "";
+        if (hintLook) hintLook.style.opacity = "0";
+        if (hintSkip) hintSkip.style.opacity = "0";
+      }
+    }
+
+    cardEl.addEventListener("touchstart", onStart, {passive: true});
+    cardEl.addEventListener("touchmove", onMove, {passive: false});
+    cardEl.addEventListener("touchend", onEnd, {passive: true});
+    cardEl.addEventListener("touchcancel", onEnd, {passive: true});
   }
 
   /* Progress indicator: "N of M" + 6-segment bar */
@@ -4967,81 +5159,40 @@
     return card;
   }
 
-  /* Action block pinned to bottom of screen */
-  function _buildMobileActions(entry) {
+  /* Action block pinned to bottom of screen. Buttons and swipes both route
+     through _miDoLookCloser / _miDoSkip / _miDoLater so the slide-off
+     animation plays either way. */
+  function _buildMobileActions(entry, frontCardEl) {
     var actions = document.createElement("div");
     actions.className = "mi-actions";
 
-    /* Look closer — primary */
     var lookBtn = document.createElement("button");
     lookBtn.type = "button";
     lookBtn.className = "mi-btn mi-btn-look";
     lookBtn.textContent = "Look closer";
     lookBtn.addEventListener("click", function() {
       lookBtn.disabled = true;
-      lookBtn.style.opacity = "0.5";
-      fetch("/api/pending/" + encodeURIComponent(entry.id) + "/approve", {method: "POST"})
-        .then(function(r) { return r.json(); })
-        .then(function(d) {
-          if (d.ok || d.status) {
-            _miSession.idx++;
-            _miSession.shortlisted++;
-            _miSession.triaged++;
-            window.loadData();
-            /* Switch to shortlist + open panel after data refreshes */
-            setTimeout(function() {
-              window.location.hash = "shortlist";
-              if (window.openDetailPanel) window.openDetailPanel(entry.id);
-            }, 350);
-          } else {
-            lookBtn.disabled = false;
-            lookBtn.style.opacity = "";
-            window.loadData();
-          }
-        })
-        .catch(function() {
-          lookBtn.disabled = false;
-          lookBtn.style.opacity = "";
-        });
+      _miDoLookCloser(entry, frontCardEl);
     });
     actions.appendChild(lookBtn);
 
-    /* Skip — secondary */
     var skipBtn = document.createElement("button");
     skipBtn.type = "button";
     skipBtn.className = "mi-btn mi-btn-skip";
     skipBtn.textContent = "Skip";
     skipBtn.addEventListener("click", function() {
-      _showMobileSkipSheet(entry, function(reason) {
-        /* reason may be null — silent path is fine */
-        fetch("/api/pending/" + encodeURIComponent(entry.id) + "/reject", {
-          method: "POST",
-          headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({reason: reason}),
-        })
-          .then(function() {
-            _miSession.idx++;
-            _miSession.skipped++;
-            _miSession.triaged++;
-            window.loadData();
-          })
-          .catch(function() { window.loadData(); });
-      });
+      skipBtn.disabled = true;
+      _miDoSkip(entry, frontCardEl);
     });
     actions.appendChild(skipBtn);
 
-    /* Later — ghost, cycles card to back of queue */
     var laterBtn = document.createElement("button");
     laterBtn.type = "button";
     laterBtn.className = "mi-btn mi-btn-later";
     laterBtn.textContent = "Later";
     laterBtn.addEventListener("click", function() {
-      /* Move current entry to end of queue without a backend call */
-      var item = _miSession.queue.splice(_miSession.idx, 1)[0];
-      _miSession.queue.push(item);
-      /* Keep idx at same position (next card slides in), but clamp to end */
-      if (_miSession.idx >= _miSession.queue.length) _miSession.idx = 0;
-      _renderMobileInbox();
+      laterBtn.disabled = true;
+      _miDoLater(entry, frontCardEl);
     });
     actions.appendChild(laterBtn);
 
