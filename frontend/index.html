@@ -5091,8 +5091,7 @@
         chipsWrap.querySelectorAll(".mi-chip").forEach(function(c) {
           c.classList.toggle("selected", c === chip);
         });
-        /* Selecting a reason auto-commits after a brief moment */
-        clearTimeout(autoTimer);
+        /* Selecting a reason auto-commits after chip selection visual lands */
         setTimeout(function() { _close(r.value); }, 300);
       });
       chipsWrap.appendChild(chip);
