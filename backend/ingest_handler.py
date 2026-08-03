@@ -22,6 +22,7 @@ import requests
 
 import config
 import data_store
+import maa_amet_baseline
 import telegram_client
 from ai_evaluator import evaluate_listing
 from kv_listing_parser import Listing, extract_object_id
@@ -184,26 +185,39 @@ def _build_context_prefix(listing: Listing, data: dict) -> str:
             lines.append("Use these as reference points when scoring the new listing below.\n\n")
             anchor_block = "".join(lines)
 
-        # District average: collect price/m² from all stored entries matching listing's district.
+        # District line: prefer Maa-amet sold-price baseline (SPEC §6) over asking-price avg.
         # Listing dataclass lacks district field — use getattr with empty-string default (RESEARCH Pitfall 2).
         dist = getattr(listing, "district", "")
         if dist:
-            all_entries = list(props) + list(pending)
-            # properties[] use camelCase (pricePerSqm); pending[] use snake_case (price_per_sqm)
-            district_sqm = [
-                e.get("pricePerSqm") or e.get("price_per_sqm")
-                for e in all_entries
-                if (e.get("district") or "") == dist
-                and (e.get("pricePerSqm") or e.get("price_per_sqm"))
-            ]
-            if district_sqm:
-                avg = sum(district_sqm) / len(district_sqm)
+            quarter = maa_amet_baseline.latest_quarter()
+            structure = getattr(listing, "material", "") or ""
+            year_built = getattr(listing, "year_built", None)
+            sold_median, sold_n, bucket_label = maa_amet_baseline.get_median(
+                dist, structure, year_built, quarter
+            )
+            if sold_median and sold_n:
                 district_line = (
-                    f"District price/m² average ({dist}, from {len(district_sqm)} seen listings): "
-                    f"{avg:.0f} EUR/m²\n\n"
+                    f"District median (sold): {sold_median} EUR/m² across {sold_n} transactions "
+                    f"[{bucket_label}]\n\n"
                 )
             else:
-                district_line = ""
+                # Fallback: asking-price average from stored listings.
+                all_entries = list(props) + list(pending)
+                # properties[] use camelCase (pricePerSqm); pending[] use snake_case (price_per_sqm)
+                district_sqm = [
+                    e.get("pricePerSqm") or e.get("price_per_sqm")
+                    for e in all_entries
+                    if (e.get("district") or "") == dist
+                    and (e.get("pricePerSqm") or e.get("price_per_sqm"))
+                ]
+                if district_sqm:
+                    avg = sum(district_sqm) / len(district_sqm)
+                    district_line = (
+                        f"District price/m² average ({dist}, from {len(district_sqm)} seen listings): "
+                        f"{avg:.0f} EUR/m²\n\n"
+                    )
+                else:
+                    district_line = ""
         else:
             district_line = ""
 
