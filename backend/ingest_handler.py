@@ -381,6 +381,10 @@ def _mark_removed_listings(app_data: dict, batch_dicts: list[dict]) -> None:
 
     Called after the batch loop completes, before save (D-18, INTEL-03).
     Only marks existing entries — does not create new removed entries (T-03-13).
+
+    Wave 6D: also stamps viewing_history[-1].withdrawn_at so the frontend can show
+    days-on-market signal for sold/withdrawn listings (SPEC §6).
+
     Never raises — wraps body in try/except per never-raise convention.
     """
     try:
@@ -401,6 +405,14 @@ def _mark_removed_listings(app_data: dict, batch_dicts: list[dict]) -> None:
                     entry["removed"] = True
                     entry["removed_at"] = today_str
                     log.info("Marked pending entry %s as removed", listing_id)
+        # Wave 6D: stamp withdrawn_at on viewing_history for shortlisted removed listings.
+        # data_store.mark_listing_withdrawn handles the Postgres write (row-scoped).
+        for item in batch_dicts:
+            if item.get("raw_ok", True):
+                continue
+            listing_id = item.get("id") or extract_object_id(item.get("url", ""))
+            if listing_id:
+                data_store.mark_listing_withdrawn(listing_id, today_str)
     except Exception:
         log.exception("_mark_removed_listings failed — skipping")
 

@@ -871,6 +871,49 @@ def save_ku_enrichment(listing_id: str, ku_auto: dict) -> bool:
         db_.close()
 
 
+def mark_listing_withdrawn(listing_id: str, today_str: str) -> bool:
+    """Stamp withdrawn_at on viewing_history for a listing that disappeared from kv.ee.
+
+    Called by _mark_removed_listings when raw_ok=False for an already-approved/shortlisted
+    listing. Only writes viewing_history if the row exists and is in the shortlist
+    (not pending or rejected). The withdrawn_at event lets the frontend show a
+    'sold? N days on market' signal — a timing cue for how fast similar listings move.
+
+    Wave 6D (SPEC §6 withdrawn state).
+    Never raises — wraps body in try/except per never-raise convention.
+    """
+    db_ = SessionLocal()
+    try:
+        row = db_.get(Listing, listing_id)
+        if row is None:
+            return False
+        # Only stamp shortlisted entries (in properties[], not still in inbox/rejected).
+        shortlist_statuses = SHORTLIST_TO_VIEW | SHORTLIST_VIEWED | SHORTLIST_DROPPED | {"viewed"}
+        if row.status not in shortlist_statuses and row.status not in {"approved", "viewing_scheduled"}:
+            return False
+        # Avoid double-stamping on repeated scraper runs.
+        history = list(row.viewing_history or [])
+        if any(e.get("action") == "withdrawn" for e in history):
+            return True  # already stamped
+        history.append({
+            "action": "withdrawn",
+            "withdrawn_at": today_str,
+        })
+        row.viewing_history = history  # JSONB reassignment (Pitfall 1)
+        db_.commit()
+        log.info("mark_listing_withdrawn: stamped withdrawn_at on %s", listing_id)
+        return True
+    except SQLAlchemyError:
+        log.exception("mark_listing_withdrawn failed for %s", listing_id)
+        try:
+            db_.rollback()
+        except Exception:
+            pass
+        return False
+    finally:
+        db_.close()
+
+
 # ---------------------------------------------------------------------------
 # AI checklist
 # ---------------------------------------------------------------------------
