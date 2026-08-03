@@ -53,10 +53,39 @@ export interface CostOfOwnership {
   }
 }
 
+// ── Checklist item state ──────────────────────────────────────────────────
+export type ChecklistItemState = 'ok' | 'flag' | 'unknown' | 'skip'
+
+export interface ChecklistItem {
+  key: string
+  label: string
+  state: ChecklistItemState
+  pts?: number        // negative pts if flag
+  note?: string | null
+}
+
+export interface ChecklistGroup {
+  key: string
+  label: string
+  label_et: string   // Estonian sub-label
+  items: ChecklistItem[]
+}
+
 // ── Checklist data ────────────────────────────────────────────────────────
 export interface ChecklistData {
   renovation_items?: RenovationItem[]
+  groups?: ChecklistGroup[]
   [key: string]: unknown
+}
+
+// ── Negotiation brief ─────────────────────────────────────────────────────
+export interface NegotiationBrief {
+  offer_low?: number
+  offer_high?: number
+  target?: number
+  ask?: number
+  brief_ru?: string
+  brief?: string
 }
 
 // ── Core listing entry (from /api/data response) ──────────────────────────
@@ -82,8 +111,16 @@ export interface Entry {
   approved_at: string | null
   created_at: string | null
   viewing_history: ViewingEvent[]
-  cost_of_ownership: CostOfOwnership | null
+  cost_of_ownership: (CostOfOwnership & Record<string, unknown>) | null
   own_score: number | null
+  checklist: ChecklistData | null
+  ai_checklist_fills: Record<string, unknown> | null
+  negotiation_brief: NegotiationBrief | null
+  negotiation_brief_generated_at: string | null
+  energy_class: string | null
+  material: string | null
+  dropped_at: string | null
+  drop_reason: string | null
 }
 
 // ── /api/data response ────────────────────────────────────────────────────

@@ -69,6 +69,24 @@ export function viewingDecision(
   )
 }
 
+// ── Negotiation brief ─────────────────────────────────────────────────────
+
+export function regenerateBrief(id: string): Promise<{ ok: boolean; message?: string }> {
+  return apiFetch<{ ok: boolean; message?: string }>(
+    `/api/entry/${id}/regenerate-brief`,
+    { method: 'POST' },
+  )
+}
+
+// ── KÜ refresh ────────────────────────────────────────────────────────────
+
+export function refreshKu(id: string): Promise<{ ok: boolean; message?: string }> {
+  return apiFetch<{ ok: boolean; message?: string }>(
+    `/api/entry/${id}/refresh-ku`,
+    { method: 'POST' },
+  )
+}
+
 // ── Admin ─────────────────────────────────────────────────────────────────
 
 export function triggerCheck(): Promise<{ ok: boolean; message?: string }> {
