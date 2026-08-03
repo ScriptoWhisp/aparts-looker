@@ -58,6 +58,19 @@ COST_KU_RATE_NEW    = float(os.environ.get("COST_KU_RATE_NEW",    "1.5"))   # EU
 COST_HEATING_RATE   = float(os.environ.get("COST_HEATING_RATE",   "1.2"))   # EUR/m²/mo, year avg
 COST_UTILITIES_BASE = float(os.environ.get("COST_UTILITIES_BASE", "60"))    # EUR/mo baseline (elec + water)
 
+# ---- Renovation rate defaults (Wave 6C all-in cost) ----
+# The AI never invents euro figures — it only classifies which items apply.
+# Client-side maths uses these rates to compute renovation cost + all-in price.
+RENO_KITCHEN_FULL      = int(os.environ.get("RENO_KITCHEN_FULL",      "12000"))  # € flat per kitchen
+RENO_BATHROOM_FULL     = int(os.environ.get("RENO_BATHROOM_FULL",     "7000"))   # € flat per bathroom
+RENO_WINDOWS_PER_UNIT  = int(os.environ.get("RENO_WINDOWS_PER_UNIT",  "420"))    # €/unit
+RENO_FLOORS_PER_SQM    = int(os.environ.get("RENO_FLOORS_PER_SQM",    "100"))    # €/m²
+RENO_REWIRE_PER_SQM    = int(os.environ.get("RENO_REWIRE_PER_SQM",    "58"))     # €/m²
+RENO_HEATING           = int(os.environ.get("RENO_HEATING",           "2600"))   # € flat (boiler/radiators)
+RENO_COSMETIC_PER_SQM  = int(os.environ.get("RENO_COSMETIC_PER_SQM",  "35"))     # €/m²
+RENO_CONTINGENCY_PCT   = int(os.environ.get("RENO_CONTINGENCY_PCT",   "15"))     # % applied on top of subtotal
+RANK_BY_ALL_IN         = os.environ.get("RANK_BY_ALL_IN", "true").lower() == "true"
+
 CHECK_INTERVAL_HOURS = float(os.environ.get("CHECK_INTERVAL_HOURS", "2"))
 PRICE_DROP_THRESHOLD = float(os.environ.get("PRICE_DROP_THRESHOLD", "0.05"))
 

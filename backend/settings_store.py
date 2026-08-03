@@ -50,7 +50,31 @@ _SCHEMA = {
 
     # ---- Dashboard ----
     "web_base_url":             ("WEB_BASE_URL",             str, "dashboard", "Dashboard base URL", "e.g. aparts.example.com — used by Telegram cards' Dashboard button", 0, 200),
+
+    # ---- Renovation rates (Wave 6C all-in cost) ----
+    # The AI never writes euro figures — it only classifies which items apply.
+    # These rates are used by client-side maths (computeAllIn) to price the work.
+    "reno_kitchen_full":     ("RENO_KITCHEN_FULL",     int,  "reno", "Kitchen (full)",     "Full kitchen gut-and-replace",       0, 100000),
+    "reno_bathroom_full":    ("RENO_BATHROOM_FULL",    int,  "reno", "Bathroom (full)",    "Full bathroom gut-and-replace",       0, 50000),
+    "reno_windows_per_unit": ("RENO_WINDOWS_PER_UNIT", int,  "reno", "Windows (€/unit)",   "Per window unit, inc. installation",  0, 5000),
+    "reno_floors_per_sqm":   ("RENO_FLOORS_PER_SQM",   int,  "reno", "Floors (€/m²)",      "Parquet / LVT inc. screed",           0, 1000),
+    "reno_rewire_per_sqm":   ("RENO_REWIRE_PER_SQM",   int,  "reno", "Rewire (€/m²)",      "Full electrical rewire inc. panel",   0, 500),
+    "reno_heating":          ("RENO_HEATING",          int,  "reno", "Heating replacement","Boiler or radiator set replacement",  0, 20000),
+    "reno_cosmetic_per_sqm": ("RENO_COSMETIC_PER_SQM", int,  "reno", "Cosmetic (€/m²)",    "Paint, trim, light fixtures",         0, 200),
+    "reno_contingency_pct":  ("RENO_CONTINGENCY_PCT",  int,  "reno", "Contingency %",      "Applied on top of subtotal (0–50)",   0, 50),
+    "rank_by_all_in":        ("RANK_BY_ALL_IN",        bool, "reno", "Rank shortlist by all-in", "Sort sidebar by cheapest all-in instead of score", None, None),
 }
+
+
+def _coerce(kind: type, value) -> object:
+    """Coerce a raw value to the target type, including bool."""
+    if kind is bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.lower() in ("1", "true", "yes", "on")
+        return bool(value)
+    return kind(value)
 
 
 def get_all() -> dict:
@@ -75,6 +99,7 @@ def get_schema() -> list:
     ]
 
 
+
 def load_overrides() -> None:
     """Read settings.json and apply overrides to config.X attributes.
 
@@ -94,7 +119,7 @@ def load_overrides() -> None:
             continue
         config_attr, kind, *_ = spec
         try:
-            coerced = kind(disk[key])
+            coerced = _coerce(kind, disk[key])
             setattr(config, config_attr, coerced)
         except (ValueError, TypeError):
             log.warning("Skipping bad value in settings.json: %s=%r", key, disk[key])
@@ -120,14 +145,17 @@ def save(updates: dict) -> dict:
             continue
         config_attr, kind, _group, _label, _hint, lo, hi = spec
         try:
-            coerced = kind(value)
+            coerced = _coerce(kind, value)
         except (ValueError, TypeError):
             errors.append(f"bad value for {key}: {value!r}")
             continue
         # Numeric bounds only apply to numeric types. For str, lo/hi are the
         # min/max character counts (0/N by convention) so we still get a
         # non-empty guard without pretending strings are numbers.
-        if kind is str:
+        # bool has no bounds (lo/hi are None) — skip range check.
+        if kind is bool:
+            pass  # no bounds for bool fields
+        elif kind is str:
             if not (lo <= len(coerced) <= hi):
                 errors.append(f"{key} length must be in [{lo}, {hi}], got {len(coerced)}")
                 continue
