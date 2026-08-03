@@ -8,14 +8,14 @@
  * SPEC §2.4 §1 §4: all-in cost cell shows price + work → all-in in accent-lt mono 34px
  */
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { Entry, SettingsData } from '../../types/api'
 import { StatusPill } from './StatusPill'
 import { scoreColor, scoreTextClass } from '../../lib/score'
 import { fmtEur } from '../../lib/format'
-import { scheduleViewing, markViewed } from '../../lib/api'
+import { scheduleViewing, markViewed, saveOwnScore } from '../../lib/api'
 import { QUERY_KEYS } from '../../lib/queries'
 import { computeAllIn } from '../../lib/cost'
 import { ExternalLink } from 'lucide-react'
@@ -41,6 +41,87 @@ function fmtMonoNumber(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000) return `${Math.round(n / 1_000)}k`
   return String(n)
+}
+
+// ── Own Score Slider ──────────────────────────────────────────────────────
+
+const VIEWED_STATUSES = new Set(['viewed', 'thinking', 'offer_drafted', 'dropped'])
+
+interface OwnScoreSliderProps {
+  entry: Entry
+}
+
+function OwnScoreSlider({ entry }: OwnScoreSliderProps) {
+  // Derive current own_score: entry.own_score or last viewing_history event with own_score
+  const initial = entry.own_score ??
+    [...(entry.viewing_history ?? [])].reverse().find((ev) => ev.own_score != null)?.own_score ??
+    null
+  const [localScore, setLocalScore] = useState<number>(initial ?? 50)
+  const [saved, setSaved] = useState(false)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const qc = useQueryClient()
+
+  if (!VIEWED_STATUSES.has(entry.status)) return null
+
+  const color = scoreColor(localScore)
+
+  function handleChange(v: number) {
+    setLocalScore(v)
+    setSaved(false)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(async () => {
+      try {
+        await saveOwnScore(entry.id, v)
+        void qc.invalidateQueries({ queryKey: QUERY_KEYS.appData })
+        setSaved(true)
+        setTimeout(() => setSaved(false), 1500)
+      } catch {
+        // silently ignore — next change will retry
+      }
+    }, 800)
+  }
+
+  const pct = localScore
+
+  return (
+    <div className="flex flex-col gap-1 mt-2">
+      <div className="flex items-baseline justify-between">
+        <span className="font-sans text-[11px] text-muted">Your score</span>
+        <div className="flex items-baseline gap-1.5">
+          <span className="font-mono text-[14px]" style={{ color }}>
+            {localScore}
+          </span>
+          {saved && (
+            <span className="font-sans text-[10px] text-score-best">saved</span>
+          )}
+        </div>
+      </div>
+      <div className="relative h-4 flex items-center">
+        <div className="absolute inset-x-0 h-1 rounded-full bg-border" />
+        <div
+          className="absolute h-1 rounded-full"
+          style={{ width: `${pct}%`, background: color, opacity: 0.7 }}
+        />
+        <div
+          className="absolute w-3 h-3 rounded-full border-2 shadow-sm"
+          style={{
+            left: `calc(${pct}% - 6px)`,
+            background: color,
+            borderColor: 'rgba(22,24,38,0.6)',
+          }}
+        />
+        <input
+          type="range"
+          min={0}
+          max={100}
+          step={1}
+          value={localScore}
+          onChange={(e) => handleChange(Number(e.target.value))}
+          className="absolute inset-0 w-full opacity-0 cursor-pointer"
+        />
+      </div>
+    </div>
+  )
 }
 
 // ── Schedule Viewing Inline Picker ─────────────────────────────────────────
@@ -311,6 +392,9 @@ export function HeroRow({ entry, settings }: HeroRowProps) {
             </div>
           )}
         </div>
+
+        {/* Own score slider (viewed entries only) */}
+        <OwnScoreSlider entry={entry} />
       </div>
     </div>
   )
