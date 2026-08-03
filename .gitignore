@@ -37,3 +37,5 @@ backend/data/*.sqlite*
 .claude/node_modules/
 .claude/scripts/
 .claude/hooks/
+frontend/node_modules/
+frontend/dist/
