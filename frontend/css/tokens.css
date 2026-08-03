@@ -175,12 +175,20 @@
   --t-base: var(--transition-med);
 }
 
-/* Honour user's motion preference */
+/* Honour user's motion preference — SPEC §1 Motion */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
-  }
+  * { transition: none !important; animation: none !important; }
+}
+
+/* text-wrap: pretty on verdict/body-copy paragraphs (SPEC §1 Type)
+   Modern browsers only; degrades to default wrap on older engines. */
+.dm-verdict-text,
+.dm-neg-body,
+.pq-verdict,
+.hero-verdict,
+[data-verdict],
+.ai-verdict {
+  text-wrap: pretty;
 }
 
 /* ============================================================
