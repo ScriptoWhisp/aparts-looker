@@ -711,3 +711,82 @@ None. All SPEC §0.4, §2.3, §2.7 requirements shipped.
 ### Test results
 
 **130 passed** (net: +2 new Telegram tests, -2 removed callback tests = same count).
+
+---
+
+## Wave 6C — All-in cost feature (COMPLETE)
+
+**Date:** 2026-08-03
+**Branch:** main
+**Status:** Complete
+
+### Objective
+
+SPEC §4: "Daniel owns the prices, the AI owns the classification."
+
+Implement the all-in cost feature end-to-end: AI produces renovation item classifications, settings expose editable rates, client-side maths prices the work, and the Shortlist hero displays `price + work = all-in`.
+
+### What shipped
+
+#### 1. Backend — Settings schema for renovation rates
+
+| Change | Detail |
+|--------|--------|
+| `backend/config.py` | 9 new constants: `RENO_KITCHEN_FULL` (12000), `RENO_BATHROOM_FULL` (7000), `RENO_WINDOWS_PER_UNIT` (420), `RENO_FLOORS_PER_SQM` (100), `RENO_REWIRE_PER_SQM` (58), `RENO_HEATING` (2600), `RENO_COSMETIC_PER_SQM` (35), `RENO_CONTINGENCY_PCT` (15), `RANK_BY_ALL_IN` (true) |
+| `backend/settings_store.py` | 9 new `reno`-group fields in `_SCHEMA`. New `_coerce()` helper supporting `bool` type. `load_overrides` and `save` use `_coerce`. Bool fields skip numeric bounds check. |
+
+#### 2. AI evaluator — new `renovation_items[]` output field
+
+| Change | Detail |
+|--------|--------|
+| `backend/ai_evaluator.py` | `VALID_RENO_KEYS` frozenset (7 keys). `_validate_renovation_items()` helper: drops unknown keys, clamps confidence, truncates notes to 60 chars. SYSTEM_PROMPT extended with `renovation_items` JSON schema and hard rule 10. `_fallback_result` includes `renovation_items: []`. |
+| `backend/data_store.py` | `write_renovation_items(listing_id, items)` — persists AI output to `checklist.renovation_items` JSONB sub-key (JSONB reassignment convention). |
+| `backend/ingest_handler.py` | Calls `write_renovation_items` after `add_to_pending` when `renovation_items` is non-empty. |
+
+#### 3. Client-side cost calculator
+
+| Change | Detail |
+|--------|--------|
+| `frontend/js/cost.js` | New file. `window.computeAllIn(entry, settings)` — reads `renovation_items` from `window.state.checklists[entry.id]`, applies rates from settings, respects `cost_of_ownership.renovation_override_work_eur`, widens band to 40% for confidence-1 items. |
+
+#### 4. Shortlist hero — all-in metric cell
+
+| Change | Detail |
+|--------|--------|
+| `frontend/js/detail-panel.js` | Hero first metric cell replaced with all-in display: `price + work = all-in` (all-in in `--accent-lt`). Subline: `X €/m² all-in · ±band`. When no items: shows price with italic "all-in unknown — waiting for AI". Override button opens `_showRenoOverrideDialog`. `window._currentListingId` exposed for settings save callback. |
+| `backend/routes_entries.py` | `POST /api/entry/{id}/cost-override` extended to accept `renovation_override_work_eur` key. |
+
+#### 5. Settings — Renovation rates section
+
+| Change | Detail |
+|--------|--------|
+| `frontend/index.html` | `GROUP_META` + `SIDEBAR_CATEGORIES` extended with `reno` group ("Renovation rates" sidebar label). `_buildSettingsFieldNocturne` handles `bool` type → toggle switch using existing `.sn-toggle-track/.sn-toggle-thumb` CSS. `_saveSettingsNocturne` handles bool checkboxes. After reno save: updates `window._settingsData` in-memory + re-renders current hero. |
+
+#### 6. Rank shortlist by all-in
+
+| Change | Detail |
+|--------|--------|
+| `frontend/js/detail-panel.js` | `_renderShortlistGroups` reads `rank_by_all_in` from settings. When true: each group sorted by `computeAllIn.allIn` asc. Entries without `renovation_items` sort to group end. Score-colored left rule preserved. |
+
+### Acceptance notes
+
+- Fresh scrape required to see AI-produced `renovation_items` in the wild (new listings only).
+- Existing listings show "all-in unknown — waiting for AI" until re-scored.
+- Cost model rates can be changed in Settings → Renovation rates → save → hero re-renders instantly.
+- Override dialog available on any shortlisted entry; "Clear override" removes pin.
+
+### Commits
+
+- `1849400 feat(settings): add renovation rate schema + bool support`
+- `aee95b6 feat(ai): extend evaluator prompt with renovation_items output`
+- `6e62184 feat(cost): add computeAllIn helper for client-side maths`
+- `6a0a7c2 feat(shortlist): hero shows price + work = all-in`
+- `812e26a feat(settings): render Cost model section with rates + contingency + toggle`
+- `ee29ef7 feat(shortlist): rank by all-in setting flips sidebar sort`
+- `28bd21d feat(shortlist): per-listing override for renovation work figure`
+- `572cbcd test(wave6c): add 15 tests for all-in cost feature`
+
+### Test results
+
+**130 passed baseline + 11 new tests passing** (4 additional tests skip without Postgres — run green in Docker).
+15 tests total in `tests/test_wave6c_allin_cost.py`.
