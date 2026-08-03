@@ -114,18 +114,65 @@ No webpack, no babel — Vite's esbuild is fast (cold start < 300ms).
 
 ---
 
-## Wave 7B — Inbox tab (PLANNED)
+## Wave 7B — Inbox tab (COMPLETE)
 
-**Scope:**
-- Desktop: 3-column card grid (Look closer / Skip actions)
-- Mobile (≤768px): Framer Motion swipe cards (primary triage surface)
-- Keyboard shortcuts: L=look closer, S=skip, ↑↓=navigate
-- vaul bottom sheet for skip reason picker (6 chips)
-- Cleared state after triage
+**Date:** 2026-08-04
+**Status:** Complete. Build passes, backend tests 166 passed.
 
-**Key packages already installed:** `framer-motion@11`, `vaul@0.9`, `lucide-react`
+### What shipped
 
-**shadcn/ui init in Wave 7B:** `npx shadcn@latest init` — style: default, base: slate, CSS vars: true
+| Area | Detail |
+|------|--------|
+| shadcn/ui init | `npx shadcn@latest init` — style: base-nova, baseColor: neutral, CSS vars: true. Path alias @/* added to tsconfig + vite. |
+| cn utility | `src/lib/cn.ts` — clsx + tailwind-merge (needed by shadcn components) |
+| InboxSession Zustand | `state.ts` — triaged/shortlisted/skipped counters, decidedIds Set, laterIds. Tab-lifetime persistence. |
+| useMediaQuery hook | `src/hooks/useMediaQuery.ts` — 10-line hook, no dep |
+| InboxDesktop | 3-col grid (1→2→3 cols), photo 132px, ScoreBadge, meta, price mono 22px, verdict border-left, Look closer + Skip, ring-accent on best |
+| Keyboard shortcuts | L/Enter=look closer, S=skip, ↑↓=navigate. Guarded by `activeElement.tagName` |
+| Desktop skip modal | Inline overlay, 6 reason chips, Skip/Cancel |
+| InboxMobile | `h-[calc(100dvh-48px)]` iOS-safe viewport, 6-segment 2px progress bar |
+| Framer Motion swipe | `motion.div drag="x"`, dragElastic=0.7, fling thresholds ±100px/±500vel, spring stiffness=300 damping=30 |
+| Direction hint pills | opacity useTransform left (Look closer green) + right (Skip red) |
+| Drag tint overlays | green/red color wash during drag |
+| Peek card behind | absolute below front card, opacity 0.4 preview |
+| vaul skip drawer | Drawer.Root from vaul, grab handle, 6 chips, Undo button, 8s auto-close countdown |
+| Later behavior | Cycle to end of local queue, no backend call |
+| Cleared state | "You triaged N: X shortlisted · Y skipped" + Open shortlist button |
+| Empty state | Both layouts: adjust threshold / run scrape now |
+| AnimatePresence | mode="wait" on card stack for clean exit animations |
+
+### shadcn config quirks
+
+shadcn v4 (`shadcn@4.16.1`) uses `base-nova` style by default (not the old `default` + slate from v3).
+It generated components that depend on `@base-ui/react` + CSS color variables that clash with Nocturne.
+Resolution: deleted shadcn-generated component files entirely, built all components inline with
+Nocturne design tokens. shadcn init was run only to generate `components.json` + path alias setup.
+The `cn` utility from shadcn was recreated manually in `src/lib/cn.ts`.
+
+### Framer Motion iOS notes for Wave 7C/7D
+
+- Use `touch-none` CSS class on draggable elements to prevent iOS Safari's scroll bounce from
+  intercepting the drag. Framer Motion handles pointer events internally — no manual `touchmove`
+  prevention needed.
+- `h-[calc(100dvh-48px)]` is required instead of `h-[calc(100vh-48px)]` for iOS Safari with
+  dynamic viewport (URL bar appears/disappears). `100dvh` = dynamic viewport height.
+- `dragConstraints={{ left: 0, right: 0 }}` with `dragElastic={0.7}` gives the rubber-band
+  feeling during a soft drag — the spring snaps back cleanly on release below threshold.
+- `select-none` on the card prevents iOS text selection during swipe.
+- `draggable={false}` on `<img>` prevents native image drag conflicting with Framer drag.
+
+### Commits
+
+| Hash | Message |
+|------|---------|
+| `e5ba8f3` | `feat(frontend): init shadcn/ui + install framer-motion + vaul` |
+| `fa0a929` | `feat(inbox): desktop 3-col card grid` |
+| `7ac2831` | `feat(inbox): keyboard shortcuts L/S/arrows` |
+| `56ab416` | `feat(inbox): mobile single-card layout with progress bar` |
+| `8100134` | `feat(inbox): framer-motion swipe cards (drag + fling + snap-back)` |
+
+Note: vaul drawer, cleared state, and empty state are all inside `InboxMobile.tsx`
+committed in `8100134` (combined as one coherent mobile component).
 
 ---
 
