@@ -1,20 +1,29 @@
 /**
- * Overview tab — Wave 7A proof-of-life.
+ * Overview tab — Wave 7D full build.
  *
- * Layout: 2-column grid (1fr 372px), gap 12, gutter 16px.
- * Left: placeholder Map card + placeholder Charts row.
- * Right: BEST hero card (real data) + This week stats + Next up list (real data).
+ * Layout: grid grid-cols-[1fr_372px] gap-3 p-4 h-[calc(100dvh-48px)]
  *
- * Proves the full data flow: TanStack Query → Zustand → React components → Tailwind.
+ * Left column (flex-1 min-h-0):
+ *   - Map card (flex-1): Leaflet map — ListingsMap component
+ *   - Charts row (flex-none grid grid-cols-2 gap-3): HistogramSVG + ScatterSVG
  *
- * Waves 7C/7D will fill in the Map (react-leaflet) and Charts (SVG or recharts).
+ * Right column (w-[372px] flex flex-col gap-3):
+ *   - BEST hero card
+ *   - This week stats card
+ *   - Calibration panel (≥5 rated viewings only)
+ *   - Next up list card (flex-1)
  */
 
-import { useAppData, selectBestEntry, selectShortlisted } from '../lib/queries'
+import { useAppData, selectBestEntry, selectShortlisted, selectInbox } from '../lib/queries'
+import { useSettings } from '../lib/queries'
 import { fmtEur, fmtDate } from '../lib/format'
 import { scoreColor, scoreTextClass } from '../lib/score'
 import { useAppStore } from '../lib/state'
 import type { Entry } from '../types/api'
+import { ListingsMap } from '../components/overview/ListingsMap'
+import { HistogramSVG } from '../components/overview/HistogramSVG'
+import { ScatterSVG } from '../components/overview/ScatterSVG'
+import { CalibrationPanel } from '../components/overview/CalibrationPanel'
 
 // ── BEST hero card ─────────────────────────────────────────────────────────
 
@@ -55,6 +64,7 @@ function BestHeroCard({ entry }: { entry: Entry | null }) {
             src={entry.image_url}
             alt={entry.title}
             className="w-full h-full object-cover block"
+            draggable={false}
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-[11px] text-faint">
@@ -69,12 +79,11 @@ function BestHeroCard({ entry }: { entry: Entry | null }) {
           BEST TODAY
         </span>
         {/* Score badge */}
-        <div className="absolute right-3 bottom-3 flex items-baseline gap-1 px-2.5 py-[5px] rounded-[6px]"
-          style={{ background: 'rgba(22,24,38,0.8)' }}>
-          <span
-            className="font-mono text-[22px] font-medium"
-            style={{ color: scoreCol }}
-          >
+        <div
+          className="absolute right-3 bottom-3 flex items-baseline gap-1 px-2.5 py-[5px] rounded-[6px]"
+          style={{ background: 'rgba(22,24,38,0.8)' }}
+        >
+          <span className="font-mono text-[22px] font-medium" style={{ color: scoreCol }}>
             {entry.score ?? '—'}
           </span>
           <span className="font-mono text-[10px] text-muted">/100</span>
@@ -105,7 +114,7 @@ function BestHeroCard({ entry }: { entry: Entry | null }) {
         {/* Verdict excerpt */}
         {entry.verdict && (
           <div
-            className="mt-3 px-3 py-2.5 rounded-md bg-sunken text-[13px] leading-[1.5] text-text-2 text-wrap-pretty"
+            className="mt-3 px-3 py-2.5 rounded-md bg-sunken text-[13px] leading-[1.5] text-text-2"
             style={{ borderLeft: `2px solid ${scoreCol}` }}
           >
             {entry.verdict.slice(0, 180)}{entry.verdict.length > 180 ? '…' : ''}
@@ -130,8 +139,12 @@ function BestHeroCard({ entry }: { entry: Entry | null }) {
 
 function ThisWeekStats({ data }: { data: ReturnType<typeof useAppData>['data'] }) {
   const pending   = data?.pending?.length ?? 0
-  const shortlist = data?.properties?.filter(e => e.status === 'approved' || e.status === 'viewing_scheduled').length ?? 0
-  const viewed    = data?.properties?.filter(e => e.status === 'viewed' || e.status === 'thinking' || e.status === 'offer_drafted').length ?? 0
+  const shortlist = data?.properties?.filter(
+    (e) => e.status === 'approved' || e.status === 'viewing_scheduled',
+  ).length ?? 0
+  const viewed = data?.properties?.filter(
+    (e) => e.status === 'viewed' || e.status === 'thinking' || e.status === 'offer_drafted',
+  ).length ?? 0
 
   return (
     <div className="bg-sunken rounded-lg shadow-hairline p-3.5 flex-none">
@@ -168,9 +181,14 @@ function NextUpList({ entries }: { entries: Entry[] }) {
   const setTab = useAppStore((s) => s.setTab)
   const setSelected = useAppStore((s) => s.setSelectedListingId)
 
-  if (entries.length === 0) {
+  const sorted = [...entries]
+    .filter((e) => ['approved', 'viewing_scheduled'].includes(e.status))
+    .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+    .slice(0, 6)
+
+  if (sorted.length === 0) {
     return (
-      <div className="bg-sunken rounded-lg shadow-hairline p-4 pb-1.5 flex-1 flex flex-col">
+      <div className="bg-sunken rounded-lg shadow-hairline p-4 pb-1.5 flex-1 flex flex-col min-h-0">
         <div className="flex justify-between items-baseline px-0 pb-2.5">
           <span className="font-sans font-semibold text-[9.5px] uppercase tracking-[0.1em] text-muted">
             Next up
@@ -190,11 +208,6 @@ function NextUpList({ entries }: { entries: Entry[] }) {
       </div>
     )
   }
-
-  const sorted = [...entries]
-    .filter(e => ['approved', 'viewing_scheduled'].includes(e.status))
-    .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
-    .slice(0, 8)
 
   return (
     <div className="bg-sunken rounded-lg shadow-hairline pt-3.5 flex-1 flex flex-col min-h-0">
@@ -225,14 +238,12 @@ function NextUpList({ entries }: { entries: Entry[] }) {
               ].join(' ')}
               style={{ borderLeft: `2px solid ${scoreCol}` }}
             >
-              {/* Score */}
               <span
                 className={['font-mono text-[14px] w-[22px] flex-shrink-0', scoreTextClass(entry.score)].join(' ')}
               >
                 {entry.score ?? '?'}
               </span>
 
-              {/* Info */}
               <div className="flex-1 min-w-0">
                 <div className="font-sans text-[13px] text-text whitespace-nowrap overflow-hidden text-ellipsis">
                   {entry.title}
@@ -244,7 +255,6 @@ function NextUpList({ entries }: { entries: Entry[] }) {
                 </div>
               </div>
 
-              {/* Date indicator */}
               {entry.scheduled_at ? (
                 <span className="font-sans text-[10.5px] text-status-viewing flex-shrink-0">
                   {fmtDate(entry.scheduled_at)}
@@ -264,8 +274,13 @@ function NextUpList({ entries }: { entries: Entry[] }) {
 
 export function Overview() {
   const { data, isLoading, error } = useAppData()
+  const { data: settings } = useSettings()
   const best = selectBestEntry(data)
   const allShortlisted = selectShortlisted(data)
+  const inboxEntries = selectInbox(data)
+
+  // All entries for map and charts
+  const allEntries = [...allShortlisted, ...inboxEntries]
 
   if (isLoading) {
     return (
@@ -288,48 +303,41 @@ export function Overview() {
   return (
     <div
       className="grid gap-3 p-4"
-      style={{ gridTemplateColumns: '1fr 372px', minHeight: 'calc(100vh - 48px)', alignItems: 'start' }}
+      style={{
+        gridTemplateColumns: '1fr 372px',
+        height: 'calc(100dvh - 48px)',
+        alignItems: 'start',
+      }}
     >
-      {/* ── Left column ────────────────────────────────────────────────── */}
-      <div className="flex flex-col gap-3 min-h-0">
-        {/* Map placeholder */}
-        <div
-          className="bg-bg rounded-lg flex items-center justify-center"
-          style={{ height: 'calc(100vh - 48px - 16px - 12px - 148px - 16px)', minHeight: '360px' }}
-        >
-          <div className="text-center">
-            <div className="font-mono text-[13px] text-muted mb-2">Map</div>
-            <div className="font-sans text-[12px] text-faint">
-              Leaflet map coming in Wave 7D
-            </div>
-          </div>
+      {/* ── Left column ─────────────────────────────────────────────────── */}
+      <div className="flex flex-col gap-3 min-h-0" style={{ height: 'calc(100dvh - 48px - 32px)' }}>
+        {/* Map card — flex-1 */}
+        <div className="flex-1 min-h-0 rounded-lg overflow-hidden">
+          <ListingsMap
+            entries={allShortlisted}
+            pendingEntries={inboxEntries}
+          />
         </div>
 
-        {/* Charts placeholder row */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-sunken rounded-lg shadow-hairline p-3.5" style={{ height: '148px' }}>
-            <div className="font-sans font-semibold text-[9.5px] uppercase tracking-[0.1em] text-muted mb-2">
-              Where scores land
-            </div>
-            <div className="flex items-center justify-center h-[90px]">
-              <span className="font-sans text-[12px] text-faint">Histogram — Wave 7D</span>
-            </div>
+        {/* Charts row — flex-none */}
+        <div className="grid grid-cols-2 gap-3 flex-none">
+          <div className="bg-sunken rounded-lg shadow-hairline p-3.5" style={{ height: '160px' }}>
+            <HistogramSVG entries={allEntries} />
           </div>
-          <div className="bg-sunken rounded-lg shadow-hairline p-3.5" style={{ height: '148px' }}>
-            <div className="font-sans font-semibold text-[9.5px] uppercase tracking-[0.1em] text-muted mb-2">
-              Score vs price
-            </div>
-            <div className="flex items-center justify-center h-[90px]">
-              <span className="font-sans text-[12px] text-faint">Scatter — Wave 7D</span>
-            </div>
+          <div className="bg-sunken rounded-lg shadow-hairline p-3.5" style={{ height: '160px' }}>
+            <ScatterSVG entries={allEntries} settings={settings} />
           </div>
         </div>
       </div>
 
-      {/* ── Right column ───────────────────────────────────────────────── */}
-      <div className="flex flex-col gap-3 min-h-0">
+      {/* ── Right column ────────────────────────────────────────────────── */}
+      <div
+        className="flex flex-col gap-3 min-h-0 overflow-y-auto"
+        style={{ height: 'calc(100dvh - 48px - 32px)' }}
+      >
         <BestHeroCard entry={best} />
         <ThisWeekStats data={data} />
+        <CalibrationPanel entries={allEntries} />
         <NextUpList entries={allShortlisted} />
       </div>
     </div>
