@@ -87,6 +87,24 @@ export function refreshKu(id: string): Promise<{ ok: boolean; message?: string }
   )
 }
 
+// ── Cost override / own score ─────────────────────────────────────────────
+
+export function saveOwnScore(id: string, ownScore: number): Promise<{ ok: boolean }> {
+  return apiFetch<{ ok: boolean }>(`/api/entry/${id}/cost-override`, {
+    method: 'POST',
+    body: JSON.stringify({ own_score: ownScore }),
+  })
+}
+
+// ── Settings save ─────────────────────────────────────────────────────────
+
+export function saveSettings(values: Record<string, unknown>): Promise<{ applied: Record<string, unknown>; errors: string[] }> {
+  return apiFetch<{ applied: Record<string, unknown>; errors: string[] }>('/api/settings', {
+    method: 'POST',
+    body: JSON.stringify(values),
+  })
+}
+
 // ── Admin ─────────────────────────────────────────────────────────────────
 
 export function triggerCheck(): Promise<{ ok: boolean; message?: string }> {
