@@ -193,6 +193,27 @@ async def cost_override(listing_id: str, request: Request) -> dict:
                 "overridden": True,
             }
 
+            # Wave 6D: own_score — temporary co-tenant on cost-override endpoint.
+            # Stores Daniel's personal score for a viewed listing under
+            # viewing_history[-1].own_score. Used by the calibration panel (SPEC §2.2).
+            # A proper /api/entry/{id}/own-score endpoint would be preferable
+            # when time allows, but reusing cost-override is the no-new-endpoints path.
+            if "own_score" in body and body["own_score"] is not None and body["own_score"] != "":
+                try:
+                    own_score_val = max(0, min(100, int(float(body["own_score"]))))
+                    history = list(row.viewing_history or [])
+                    if history:
+                        # JSONB reassignment — never mutate in place.
+                        last_event = dict(history[-1])
+                        last_event["own_score"] = own_score_val
+                        history[-1] = last_event
+                    else:
+                        # No viewing_history yet — create a sentinel event.
+                        history = [{"action": "own_score", "own_score": own_score_val}]
+                    row.viewing_history = history  # JSONB reassignment (Pitfall 1)
+                except (TypeError, ValueError):
+                    pass  # ignore bad value
+
             # Wave 6C: optional renovation work override (JSONB sub-key)
             # Pass renovation_override_work_eur=N to pin a manual work figure;
             # pass renovation_override_work_eur=null to remove it.
