@@ -356,16 +356,32 @@
     return el;
   }
 
+  /* Check if a listing has been withdrawn (removed from kv.ee) */
+  function _isWithdrawn(entry) {
+    var history = entry.viewing_history || [];
+    return history.some(function (e) { return e.action === "withdrawn"; });
+  }
+
+  /* Get withdrawn_at date from viewing_history */
+  function _getWithdrawnAt(entry) {
+    var history = entry.viewing_history || [];
+    for (var i = history.length - 1; i >= 0; i--) {
+      if (history[i].action === "withdrawn") return history[i].withdrawn_at || null;
+    }
+    return null;
+  }
+
   /* Build a sidebar row */
   function _buildSidebarRow(entry, indicatorEl, isDropped) {
     var scoreColor = window.scoreColor(entry.score || 0);
+    var withdrawn = _isWithdrawn(entry);
 
     var row = document.createElement("div");
     row.className = "sidebar-item";
     row.dataset.id = entry.id;
     row.style.setProperty("--rule-color", scoreColor);
-    if (isDropped) {
-      row.style.opacity = "0.4";
+    if (isDropped || withdrawn) {
+      row.style.opacity = withdrawn ? "0.5" : "0.4";
     }
 
     /* Score numeral */
@@ -391,13 +407,27 @@
     var price = entry.price_eur || entry.price;
     if (price) metaParts.push(window.fmtEur(price));
     if (entry.area_sqm) metaParts.push(entry.area_sqm + " m²");
+    /* Withdrawn sub-state (Wave 6D): show "sold? N days" instead of indicator */
+    if (withdrawn) {
+      var withdrawnAt = _getWithdrawnAt(entry);
+      var dom = null;
+      if (withdrawnAt) {
+        /* Days on market = days from first price_history to withdrawn_at */
+        var priceHist = (window.state.priceHistory || {})[entry.id];
+        var firstDate = priceHist && priceHist.length ? new Date(priceHist[0].date) : null;
+        if (firstDate) {
+          dom = Math.max(0, Math.floor((new Date(withdrawnAt) - firstDate) / 86400000));
+        }
+      }
+      metaParts.push(dom !== null ? "sold? · " + dom + "d on market" : "sold?");
+    }
     meta.textContent = metaParts.join(" · ");
     info.appendChild(meta);
 
     row.appendChild(info);
 
-    /* Right indicator */
-    if (indicatorEl) row.appendChild(indicatorEl);
+    /* Right indicator — not shown for withdrawn (info is in meta line) */
+    if (indicatorEl && !withdrawn) row.appendChild(indicatorEl);
 
     row.addEventListener("click", function () {
       window.openDetailPanel(entry.id);
@@ -812,10 +842,130 @@
     var monthlyTotal = coo ? coo.monthly_total_eur : null;
     strip.appendChild(_metricCell(monthlyTotal ? window.fmtEur(monthlyTotal) : "—", "monthly, all-in", null));
 
+    /* Wave 6D: vs sold Maa-amet delta cell (SPEC §6) */
+    if (entry.district && entry.price_per_sqm) {
+      var soldBaselines = (window.state && window.state.soldBaseline) || {};
+      var sb = soldBaselines[entry.district];
+      var vsCell = document.createElement("div");
+      vsCell.className = "dm-metric-cell";
+      var vsCellVal = document.createElement("div");
+      vsCellVal.className = "dm-metric-val";
+      var vsCellMeta = document.createElement("div");
+      vsCellMeta.className = "dm-metric-meta";
+      if (sb && sb.median_eur_sqm && sb.n_transactions >= 5) {
+        var sDiff = entry.price_per_sqm - sb.median_eur_sqm;
+        var sPct = Math.abs(Math.round((sDiff / sb.median_eur_sqm) * 100));
+        vsCellVal.textContent = (sDiff <= 0 ? "−" : "+") + sPct + "%";
+        vsCellVal.style.color = sDiff <= 0 ? "var(--st-short,#6fc9a3)" : "var(--st-skip,#d4827e)";
+        vsCellMeta.textContent = "vs sold " + entry.district;
+        /* Tooltip with bucket label */
+        vsCell.title = (sb.bucket_label || "") + (sb.n_transactions ? " · n=" + sb.n_transactions : "");
+      } else {
+        vsCellVal.style.color = "var(--color-text-muted)";
+        vsCellVal.textContent = "—";
+        vsCellMeta.textContent = "no comparable sales";
+      }
+      vsCell.appendChild(vsCellVal);
+      vsCell.appendChild(vsCellMeta);
+      strip.appendChild(vsCell);
+    }
+
     hdrBlock.appendChild(strip);
+
+    /* ── Own-score slider (Wave 6D, SPEC §2.2 calibration) ────────────
+       Only shown when status is in the viewed set (viewed/thinking/offer_drafted/dropped).
+       Posts to cost-override endpoint with own_score field. */
+    var viewedStatuses = ["viewed", "thinking", "offer_drafted", "dropped"];
+    if (viewedStatuses.indexOf(status) !== -1) {
+      /* Read existing own_score from viewing_history */
+      var existingOwnScore = null;
+      var history = entry.viewing_history || [];
+      for (var hi = history.length - 1; hi >= 0; hi--) {
+        if (history[hi].own_score != null) { existingOwnScore = history[hi].own_score; break; }
+      }
+
+      var ownScoreWrap = document.createElement("div");
+      ownScoreWrap.style.cssText = "margin-top:12px;display:flex;align-items:center;gap:10px;";
+
+      var ownLbl = document.createElement("label");
+      ownLbl.htmlFor = "own-score-input-" + entry.id;
+      ownLbl.style.cssText = "font:600 9.5px Inter,system-ui,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--color-text-muted);white-space:nowrap;min-width:70px;";
+      ownLbl.textContent = "Your score";
+      ownScoreWrap.appendChild(ownLbl);
+
+      var ownSlider = document.createElement("input");
+      ownSlider.type = "range";
+      ownSlider.id = "own-score-input-" + entry.id;
+      ownSlider.min = "0";
+      ownSlider.max = "100";
+      ownSlider.step = "1";
+      ownSlider.value = existingOwnScore != null ? String(existingOwnScore) : "50";
+      ownSlider.style.cssText = "flex:1;cursor:pointer;accent-color:var(--color-accent,#9184d9);";
+      ownScoreWrap.appendChild(ownSlider);
+
+      var ownValDisplay = document.createElement("span");
+      ownValDisplay.style.cssText = "font:500 13px 'JetBrains Mono',ui-monospace,monospace;color:var(--color-accent-400,#b5abfc);min-width:28px;text-align:right;";
+      ownValDisplay.textContent = existingOwnScore != null ? String(existingOwnScore) : "50";
+      ownScoreWrap.appendChild(ownValDisplay);
+
+      var ownSaveBtn = document.createElement("button");
+      ownSaveBtn.type = "button";
+      ownSaveBtn.style.cssText = "background:none;border:none;padding:3px 8px;cursor:pointer;font:400 11px Inter,system-ui,sans-serif;color:var(--color-text-muted);border-radius:var(--radius-sm,4px);";
+      ownSaveBtn.textContent = "Save";
+      ownScoreWrap.appendChild(ownSaveBtn);
+
+      /* Show initial state — only highlight Save if value differs from saved */
+      if (existingOwnScore == null) {
+        ownSaveBtn.style.color = "var(--color-accent-400,#b5abfc)";
+      }
+
+      var _ownDebounce = null;
+      ownSlider.addEventListener("input", function () {
+        ownValDisplay.textContent = ownSlider.value;
+        ownSaveBtn.style.color = "var(--color-accent-400,#b5abfc)";
+        clearTimeout(_ownDebounce);
+        _ownDebounce = setTimeout(function () {
+          /* Auto-save on slider settle */
+          _saveOwnScore(entry.id, parseInt(ownSlider.value, 10), ownSaveBtn);
+        }, 800);
+      });
+
+      ownSaveBtn.addEventListener("click", function () {
+        clearTimeout(_ownDebounce);
+        _saveOwnScore(entry.id, parseInt(ownSlider.value, 10), ownSaveBtn);
+      });
+
+      hdrBlock.appendChild(ownScoreWrap);
+    }
+
     heroRow.appendChild(hdrBlock);
 
     return heroRow;
+  }
+
+  /* Save own_score via cost-override endpoint (Wave 6D co-tenant pattern) */
+  function _saveOwnScore(listingId, score, btn) {
+    if (btn) {
+      btn.textContent = "Saving…";
+      btn.style.color = "var(--color-text-muted)";
+    }
+    fetch("/api/entry/" + encodeURIComponent(listingId) + "/cost-override", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({own_score: score}),
+    })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(function () {
+        if (btn) {
+          btn.textContent = "Saved ✓";
+          btn.style.color = "var(--color-text-muted)";
+        }
+        /* Refresh state so calibration panel picks up the new rating */
+        if (window.loadData) window.loadData();
+      })
+      .catch(function () {
+        if (btn) { btn.textContent = "Save"; btn.style.color = "var(--red,#c4635f)"; }
+      });
   }
 
   /* ================================================================

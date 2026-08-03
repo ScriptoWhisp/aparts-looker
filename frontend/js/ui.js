@@ -295,21 +295,43 @@
       priceRow.appendChild(sqmEl);
     }
 
-    /* vs district comparison — compute from districtsData */
-    var districtsData = window.state.districtsData || [];
-    var districtEntry = null;
-    if (best.district) {
-      for (var di = 0; di < districtsData.length; di++) {
-        if (districtsData[di].name === best.district) { districtEntry = districtsData[di]; break; }
+    /* vs sold comparison (SPEC §6): prefer baseline from state.soldBaseline[district]
+       injected by the API, else fall back to asking-price avg from districtsData. */
+    if (best.price_per_sqm && best.district) {
+      var soldBaselines = (window.state && window.state.soldBaseline) || {};
+      var sb = soldBaselines[best.district];
+      if (sb && sb.median_eur_sqm && sb.n_transactions >= 5) {
+        /* Sold-price comparison */
+        var sDiff = best.price_per_sqm - sb.median_eur_sqm;
+        var sPct = Math.abs(Math.round((sDiff / sb.median_eur_sqm) * 100));
+        var vsElSold = document.createElement("span");
+        vsElSold.className = "hero-vs-district mono" + (sDiff <= 0 ? " below" : " above");
+        vsElSold.textContent = (sDiff <= 0 ? "−" : "+") + sPct + "% vs sold " + best.district;
+        vsElSold.title = (sb.bucket_label || "") + (sb.n_transactions ? " · n=" + sb.n_transactions : "");
+        priceRow.appendChild(vsElSold);
+      } else {
+        /* Fallback: asking-price average from districtsData */
+        var districtsData = window.state.districtsData || [];
+        var districtEntry = null;
+        for (var di = 0; di < districtsData.length; di++) {
+          if (districtsData[di].name === best.district) { districtEntry = districtsData[di]; break; }
+        }
+        if (districtEntry && districtEntry.avg_price_per_sqm) {
+          var diff = best.price_per_sqm - districtEntry.avg_price_per_sqm;
+          var pct = Math.abs(Math.round((diff / districtEntry.avg_price_per_sqm) * 100));
+          var vsEl = document.createElement("span");
+          vsEl.className = "hero-vs-district mono" + (diff <= 0 ? " below" : " above");
+          vsEl.textContent = (diff <= 0 ? "−" : "+") + pct + "% vs district";
+          priceRow.appendChild(vsEl);
+        } else if (!districtEntry || !districtEntry.avg_price_per_sqm) {
+          /* No baseline at all — show "no comparable sales" */
+          var noDataEl = document.createElement("span");
+          noDataEl.className = "hero-vs-district mono";
+          noDataEl.style.color = "var(--muted,#75798c)";
+          noDataEl.textContent = "no comparable sales";
+          priceRow.appendChild(noDataEl);
+        }
       }
-    }
-    if (districtEntry && districtEntry.avg_price_per_sqm && best.price_per_sqm) {
-      var diff = best.price_per_sqm - districtEntry.avg_price_per_sqm;
-      var pct = Math.abs(Math.round((diff / districtEntry.avg_price_per_sqm) * 100));
-      var vsEl = document.createElement("span");
-      vsEl.className = "hero-vs-district mono" + (diff <= 0 ? " below" : " above");
-      vsEl.textContent = (diff <= 0 ? "−" : "+") + pct + "% vs district";
-      priceRow.appendChild(vsEl);
     }
 
     body.appendChild(priceRow);
@@ -456,6 +478,116 @@
      window.renderOverview — main entry point called by renderApp()
      Rebuilds all overview components from window.state.
      ================================================================ */
+  /* ================================================================
+     renderCalibrationPanel — SPEC §2.2 / mockup 3c
+     AI predicted score (x) vs Daniel's own_score (y).
+     Only renders when ≥5 viewed+rated listings exist.
+     Reads own_score from viewing_history[-1].own_score (Wave 6D).
+     ================================================================ */
+  window.renderCalibrationPanel = function () {
+    var slot = document.getElementById("ov-calibration-slot");
+    if (!slot) return;
+
+    /* Gather rated viewings: status in (viewed/thinking/offer_drafted/dropped)
+       AND viewing_history has any event with own_score field. */
+    var ratedStatuses = ["viewed", "thinking", "offer_drafted", "dropped"];
+    var rated = [];
+    (window.state.properties || []).forEach(function (e) {
+      if (ratedStatuses.indexOf(e.status) === -1) return;
+      var history = e.viewing_history || [];
+      var ownScore = null;
+      for (var i = history.length - 1; i >= 0; i--) {
+        if (history[i].own_score != null) { ownScore = history[i].own_score; break; }
+      }
+      if (ownScore != null && e.score != null) {
+        rated.push({ai: e.score, own: ownScore, title: e.title || e.name || e.id || ""});
+      }
+    });
+
+    /* Below 5 — hide slot */
+    while (slot.firstChild) slot.removeChild(slot.firstChild);
+    if (rated.length < 5) return;
+
+    /* Build card */
+    var card = document.createElement("div");
+    card.style.cssText = [
+      "background:var(--color-sunken,#1d1f2d)",
+      "border-radius:var(--radius-md,6px)",
+      "box-shadow:inset 0 0 0 1px var(--color-hairline,#292b31)",
+      "padding:14px 16px 12px",
+    ].join(";");
+
+    /* Kicker */
+    var kicker = document.createElement("div");
+    kicker.style.cssText = "font:600 9.5px Inter,system-ui,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--color-text-muted,#75798c);margin-bottom:10px;";
+    kicker.textContent = "Calibration";
+    card.appendChild(kicker);
+
+    /* SVG scatter: AI score (x) vs own score (y) */
+    var W = slot.clientWidth ? slot.clientWidth - 32 : 280;
+    var H = 110;
+    var PAD = 8;
+    var SVG_NS = "http://www.w3.org/2000/svg";
+    function sEl(tag, attrs) {
+      var el = document.createElementNS(SVG_NS, tag);
+      Object.keys(attrs || {}).forEach(function (k) { el.setAttribute(k, attrs[k]); });
+      return el;
+    }
+
+    var svg = sEl("svg", {width: W, height: H, viewBox: "0 0 " + W + " " + H, style: "display:block;overflow:visible;"});
+
+    /* Frame: just a baseline + left edge */
+    var mutedColor = "#75798c";
+    svg.appendChild(sEl("line", {x1: PAD, y1: PAD, x2: PAD, y2: H - PAD, stroke: mutedColor, "stroke-width": "0.5", opacity: "0.4"}));
+    svg.appendChild(sEl("line", {x1: PAD, y1: H - PAD, x2: W - PAD, y2: H - PAD, stroke: mutedColor, "stroke-width": "0.5", opacity: "0.4"}));
+
+    /* Dashed y=x line (perfect prediction) */
+    var lineColor = "#595d6c";
+    svg.appendChild(sEl("line", {
+      x1: PAD, y1: H - PAD, x2: W - PAD, y2: PAD,
+      stroke: lineColor, "stroke-width": "1", "stroke-dasharray": "4 4"
+    }));
+
+    /* Compute MAE and bias */
+    var totalErr = 0, totalBias = 0;
+    rated.forEach(function (p) { totalErr += Math.abs(p.ai - p.own); totalBias += (p.ai - p.own); });
+    var mae = Math.round(totalErr / rated.length);
+    var bias = Math.round(totalBias / rated.length);
+
+    /* Score range: 0-100 */
+    function _x(ai) { return PAD + (Math.max(0, Math.min(100, ai)) / 100) * (W - 2 * PAD); }
+    function _y(own) { return H - PAD - (Math.max(0, Math.min(100, own)) / 100) * (H - 2 * PAD); }
+
+    /* Dots */
+    rated.forEach(function (p) {
+      var cx = _x(p.ai), cy = _y(p.own);
+      var color = window.scoreColor ? window.scoreColor(p.ai) : "#c9b455";
+      var c = sEl("circle", {cx: cx, cy: cy, r: 4, fill: color, opacity: "0.85", style: "cursor:default;"});
+      var titleSafe = window.escapeHtml ? window.escapeHtml(p.title) : String(p.title).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      c.appendChild(sEl("title", {})); /* add title child for tooltip */
+      c.firstChild.textContent = titleSafe + "\nAI: " + p.ai + " · your score: " + p.own;
+      svg.appendChild(c);
+    });
+
+    card.appendChild(svg);
+
+    /* Meta text */
+    var meta = document.createElement("div");
+    meta.style.cssText = "font:400 11px Inter,system-ui,sans-serif;color:var(--color-text-muted,#75798c);margin-top:8px;";
+    meta.textContent = "AI vs your score across " + rated.length + " viewings \xB7 MAE " + mae + " pts";
+    card.appendChild(meta);
+
+    /* Bias nudge — only when bias > 5 */
+    if (Math.abs(bias) > 5) {
+      var nudge = document.createElement("div");
+      nudge.style.cssText = "font:400 11px Inter,system-ui,sans-serif;color:var(--color-text-muted,#75798c);margin-top:4px;font-style:italic;";
+      nudge.textContent = "AI reads " + Math.abs(bias) + " pts too " + (bias > 0 ? "high" : "low");
+      card.appendChild(nudge);
+    }
+
+    slot.appendChild(card);
+  };
+
   window.renderOverview = function () {
     /* Init Leaflet map (idempotent) */
     if (window.initMap) window.initMap();
@@ -486,6 +618,9 @@
 
     /* Next up list */
     window.renderNextUp();
+
+    /* Calibration panel (Wave 6D) — only renders when ≥5 rated viewings */
+    window.renderCalibrationPanel();
   };
 
   /* ================================================================
