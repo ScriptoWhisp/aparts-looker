@@ -7,8 +7,9 @@ Phase 7 Wave 2 port notes:
 - `with data_store._lock:` blocks still parse and execute (no-op nullcontext).
 - `_seed_pending` now uses data_store.save_app_data via the DB shim instead of
   writing JSON directly, so the DB fixture intercepts the writes correctly.
-- test_send_pending_card_buttons and test_callback_query_* tests do NOT touch
-  data_store directly (they monkeypatch it) and keep tmp_agent_state only.
+- test_send_pending_card_buttons: Wave 6B — asserts notifier-only layout
+  (Open Inbox + kv.ee; no Approve/Reject callback_data buttons).
+- test_callback_query_* tests removed (Wave 6B — no callback processing).
 """
 
 import pytest
@@ -82,9 +83,17 @@ def test_data_model_keys(db_session):
 
 
 def test_send_pending_card_buttons(monkeypatch):
-    """QUEUE-02: send_pending_card sends sendPhoto with a 3-button inline keyboard."""
+    """QUEUE-02 (Wave 6B): send_pending_card is notifier-only — no Approve/Reject buttons.
+
+    Photo tier must send sendPhoto with:
+    - row[0]: {"text": "Open Inbox", "url": <inbox_url>}   — tap-through to web triage
+    - row[1]: {"text": "kv.ee", "url": <listing_url>}      — direct listing link
+
+    No callback_data keys anywhere in the keyboard (triage happens in the web app).
+    """
     from unittest.mock import MagicMock  # noqa: PLC0415
 
+    import config as cfg  # noqa: PLC0415
     import telegram_client  # noqa: PLC0415
     from kv_listing_parser import Listing  # noqa: PLC0415
 
@@ -95,9 +104,12 @@ def test_send_pending_card_buttons(monkeypatch):
     mock_post = MagicMock(return_value=mock_response)
     monkeypatch.setattr(telegram_client.requests, "post", mock_post)
 
-    # Patch TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID so guard passes
+    # Patch token/chat-id guards so the send path is exercised
     monkeypatch.setattr(telegram_client, "TELEGRAM_BOT_TOKEN", "test-bot-token")
     monkeypatch.setattr(telegram_client, "TELEGRAM_CHAT_ID", "-100")
+
+    # Provide a WEB_BASE_URL so the Inbox deep-link is included
+    monkeypatch.setattr(cfg, "WEB_BASE_URL", "https://aparts.example.com")
 
     listing = Listing(
         id="1234567",
@@ -107,113 +119,95 @@ def test_send_pending_card_buttons(monkeypatch):
     )
     result = telegram_client.send_pending_card(listing, {"score": 82, "verdict": "Good"})
 
-    # Verify the call was to sendPhoto (listing has image_url)
+    # Call was to sendPhoto (listing has image_url, score >= photo threshold)
     assert mock_post.called
     call_url = mock_post.call_args[0][0]
     assert call_url.endswith("/sendPhoto")
 
-    # Verify the inline keyboard structure
+    # Keyboard: one row, exactly 2 buttons — "Open Inbox" + "kv.ee"
     call_json = mock_post.call_args[1]["json"]
     keyboard = call_json["reply_markup"]["inline_keyboard"]
     assert len(keyboard) == 1  # one row
     row = keyboard[0]
-    assert len(row) == 3  # three buttons
+    assert len(row) == 2  # two buttons: Open Inbox + kv.ee
 
-    assert row[0]["text"] == "Approve"
-    assert row[0]["callback_data"] == "approve:1234567"
-    assert row[1]["text"] == "Reject"
-    assert row[1]["callback_data"] == "reject:1234567"
-    assert row[2]["text"] == "kv.ee"
-    assert row[2]["url"].startswith("https://")
-    assert "1234567" in row[2]["url"]
+    # First button: deep-link into Inbox
+    assert row[0]["text"] == "Open Inbox"
+    assert row[0]["url"].endswith("/#inbox")
+    assert "callback_data" not in row[0]  # no server-side action
 
-    # Verify return value (message_id, chat_id)
+    # Second button: listing link
+    assert row[1]["text"] == "kv.ee"
+    assert "1234567" in row[1]["url"]
+    assert "callback_data" not in row[1]
+
+    # Return value unchanged
     assert result == (42, -100)
 
 
-def test_callback_query_parse_approve(monkeypatch, tmp_agent_state):
-    """QUEUE-04: process_pending_action dispatches approve callback_query correctly.
+def test_send_pending_card_no_web_base_url(monkeypatch):
+    """QUEUE-02b (Wave 6B): when WEB_BASE_URL is unset, card sends without Open Inbox button.
 
-    Verifies:
-    - approve_listing is called with the listing_id
-    - edit_card_resolved is called with caption starting with '✅ Approved'
-    - answer_callback_query is called with the callback_query id
-    - Chat-id guard: wrong chat_id causes approve_listing NOT to be called
+    The keyboard should still have the kv.ee link only.
     """
     from unittest.mock import MagicMock  # noqa: PLC0415
 
-    import agent_job  # noqa: PLC0415
-    import data_store  # noqa: PLC0415
+    import config as cfg  # noqa: PLC0415
     import telegram_client  # noqa: PLC0415
+    from kv_listing_parser import Listing  # noqa: PLC0415
 
-    # Patch TELEGRAM_CHAT_ID to a known value on both modules
-    monkeypatch.setattr(agent_job, "TELEGRAM_CHAT_ID", "12345")
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {"result": {"message_id": 1, "chat": {"id": -100}}}
+    mock_post = MagicMock(return_value=mock_response)
+    monkeypatch.setattr(telegram_client.requests, "post", mock_post)
+    monkeypatch.setattr(telegram_client, "TELEGRAM_BOT_TOKEN", "test-bot-token")
+    monkeypatch.setattr(telegram_client, "TELEGRAM_CHAT_ID", "-100")
+    monkeypatch.setattr(cfg, "WEB_BASE_URL", "")  # no base URL
 
-    # Patch data_store.approve_listing
-    mock_approve = MagicMock(return_value=True)
-    monkeypatch.setattr(data_store, "approve_listing", mock_approve)
+    listing = Listing(
+        id="9999999",
+        url="https://kv.ee/9999999.html",
+        title="No-URL Listing",
+        image_url="https://img/y.jpg",
+    )
+    telegram_client.send_pending_card(listing, {"score": 82, "verdict": "OK"})
 
-    # Patch telegram_client functions (lazy imports in process_pending_action resolve from the module)
-    mock_answer = MagicMock(return_value=None)
-    mock_edit = MagicMock(return_value=None)
-    mock_reject_prompt = MagicMock(return_value=None)
-    monkeypatch.setattr(telegram_client, "answer_callback_query", mock_answer)
-    monkeypatch.setattr(telegram_client, "edit_card_resolved", mock_edit)
-    monkeypatch.setattr(telegram_client, "send_rejection_prompt", mock_reject_prompt)
-
-    cq = {"id": "cq-1", "data": "approve:1234567", "message": {"chat": {"id": 12345}, "message_id": 42}}
-    agent_job.process_pending_action(cq)
-
-    # Verify approve path
-    mock_approve.assert_called_once_with("1234567")
-    assert mock_edit.called
-    resolved_caption = mock_edit.call_args[0][1]
-    assert resolved_caption.startswith("✅ Approved")
-    mock_answer.assert_called_once_with("cq-1")
-
-    # Sub-assertion: chat_id guard — wrong chat_id drops the update
-    mock_approve.reset_mock()
-    mock_edit.reset_mock()
-    cq_wrong = {"id": "cq-bad", "data": "approve:1234567", "message": {"chat": {"id": 99999}, "message_id": 42}}
-    agent_job.process_pending_action(cq_wrong)
-    mock_approve.assert_not_called()
+    call_json = mock_post.call_args[1]["json"]
+    row = call_json["reply_markup"]["inline_keyboard"][0]
+    # Only kv.ee button — no Open Inbox when URL not configured
+    assert len(row) == 1
+    assert row[0]["text"] == "kv.ee"
 
 
-def test_callback_query_parse_reason(monkeypatch, tmp_agent_state):
-    """QUEUE-05: process_pending_action dispatches rr:<reason>:<id> callback correctly.
+def test_stale_callback_answered(monkeypatch):
+    """QUEUE-02c (Wave 6B): stale approve/reject callbacks are answered gracefully.
 
-    Verifies:
-    - reject_listing is called with listing_id and reason
-    - edit_card_resolved is called with caption starting with '❌ Rejected: Price'
+    handle_stale_callback() must call answerCallbackQuery with a user-friendly
+    message.  No data_store mutation must occur.
     """
     from unittest.mock import MagicMock  # noqa: PLC0415
 
-    import agent_job  # noqa: PLC0415
-    import data_store  # noqa: PLC0415
     import telegram_client  # noqa: PLC0415
 
-    # Patch TELEGRAM_CHAT_ID to a known value
-    monkeypatch.setattr(agent_job, "TELEGRAM_CHAT_ID", "12345")
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {}
+    mock_post = MagicMock(return_value=mock_response)
+    monkeypatch.setattr(telegram_client.requests, "post", mock_post)
+    monkeypatch.setattr(telegram_client, "TELEGRAM_BOT_TOKEN", "test-bot-token")
+    monkeypatch.setattr(telegram_client, "TELEGRAM_CHAT_ID", "-100")
 
-    # Patch data_store.reject_listing
-    mock_reject = MagicMock(return_value=True)
-    monkeypatch.setattr(data_store, "reject_listing", mock_reject)
+    stale_cq = {"id": "old-cq-99", "data": "approve:1234567",
+                "message": {"chat": {"id": -100}, "message_id": 5}}
+    telegram_client.handle_stale_callback(stale_cq)
 
-    # Patch telegram_client functions
-    mock_answer = MagicMock(return_value=None)
-    mock_edit = MagicMock(return_value=None)
-    mock_reject_prompt = MagicMock(return_value=None)
-    monkeypatch.setattr(telegram_client, "answer_callback_query", mock_answer)
-    monkeypatch.setattr(telegram_client, "edit_card_resolved", mock_edit)
-    monkeypatch.setattr(telegram_client, "send_rejection_prompt", mock_reject_prompt)
-
-    cq = {"id": "cq-2", "data": "rr:price:1234567", "message": {"chat": {"id": 12345}, "message_id": 42}}
-    agent_job.process_pending_action(cq)
-
-    mock_reject.assert_called_once_with("1234567", "price")
-    assert mock_edit.called
-    resolved_caption = mock_edit.call_args[0][1]
-    assert resolved_caption.startswith("❌ Rejected: Price")
+    assert mock_post.called
+    call_url = mock_post.call_args[0][0]
+    assert call_url.endswith("/answerCallbackQuery")
+    body = mock_post.call_args[1]["json"]
+    assert body["callback_query_id"] == "old-cq-99"
+    assert "dashboard" in body["text"].lower() or "inbox" in body["text"].lower()
 
 
 def _seed_pending(listing_id: str) -> None:
