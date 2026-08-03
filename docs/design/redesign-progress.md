@@ -648,3 +648,66 @@ Only the checklist accordion chevrons were wired to use `<use href>` as proof-of
 ### Test results
 
 Backend tests unchanged: **130 passed** (no Python changes in this wave).
+
+---
+
+## Wave 6B — Telegram notifier-only + Mobile Inbox (COMPLETE)
+
+**Date:** 2026-08-03
+**Branch:** main
+**Status:** Complete
+
+### Objective
+
+SPEC §0.4: "These two ship together or the couch workflow breaks."
+
+1. Strip Telegram Approve/Reject inline keyboard — Telegram becomes a notifier surface only.
+2. Build mobile Inbox as the primary triage surface at ≤768px.
+
+### What shipped
+
+#### Part 1 — Telegram notifier only
+
+| Change | Detail |
+|--------|--------|
+| `backend/telegram_client.py` | Removed Approve/Reject callback buttons from `send_pending_card`. Photo tier: "Open Inbox" deep-link (`/#inbox`) + kv.ee link. Text tier: same two links in body text + inline keyboard. `edit_card_resolved` and `send_rejection_prompt` are no-op stubs. New `handle_stale_callback()` answers stale pre-deploy taps with "Triage moved to the dashboard." |
+| `backend/agent_job.py` | Deleted `process_pending_action()`. `process_send_commands()` now calls `handle_stale_callback()` for incoming `callback_query` updates. |
+| `backend/tests/test_pending.py` | Replaced 3-button assertion with 2-button assertion (Open Inbox + kv.ee, no `callback_data`). Added `test_send_pending_card_no_web_base_url` and `test_stale_callback_answered`. Removed 2 callback_query tests. Net count: 130 → 130. |
+
+#### Part 2 — Mobile Inbox (≤768px)
+
+| Change | Detail |
+|--------|--------|
+| `frontend/index.html` CSS | `.mi-*` classes: shell, progress bar, card stack, 6px peek card, action block (Look closer/Skip/Later), bottom-sheet (grab handle, 6 chips, countdown), cleared state. |
+| `frontend/index.html` JS | `_renderMobileInbox()` — `matchMedia("(max-width: 768px)")` branch in `renderInboxGrid`. Progress "N of M" + 6-segment bar. Look closer/Skip/Later actions. `_showMobileSkipSheet()` — 8s auto-close, 6 chips. `_buildMobileCleared()` — triage summary + "Open shortlist · N". |
+
+### User-visible behavior changes (next scrape)
+
+- Telegram cards look different: no Approve/Reject buttons. "Open Inbox" deep-links to `/#inbox`. Stale card taps get a friendly "moved to dashboard" response.
+- On mobile (≤768px) the Inbox tab shows one card at a time.
+
+### Deviations from spec
+
+None. All SPEC §0.4, §2.3, §2.7 requirements shipped.
+
+### Files modified
+
+| File | Change |
+|------|--------|
+| `backend/telegram_client.py` | Strip Approve/Reject; Open Inbox deep-link; `handle_stale_callback`; no-op stubs |
+| `backend/agent_job.py` | Remove `process_pending_action`; stale callback handler |
+| `backend/tests/test_pending.py` | Updated assertions (130 → 130 tests) |
+| `frontend/index.html` | Wave 6B CSS block (`.mi-*`); mobile inbox JS (6 new functions) |
+
+### Commits
+
+- `42e32b6 feat(telegram): strip approve/reject inline keyboard — notifier only`
+- `ab41ebd refactor(telegram): remove callback_query dispatcher`
+- `bc46c1e test(pending): update Telegram button assertions after notifier-only change`
+- `4d65723 feat(inbox-mobile): single-card triage layout for ≤768px viewport`
+- `7ac8bf6 feat(inbox-mobile): bottom-sheet skip reason picker with grab handle`
+- `1c085cc feat(inbox-mobile): cleared state — summary + open shortlist button`
+
+### Test results
+
+**130 passed** (net: +2 new Telegram tests, -2 removed callback tests = same count).
