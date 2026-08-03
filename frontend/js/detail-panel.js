@@ -391,6 +391,9 @@
      window.openDetailPanel(listingId) — highlight sidebar + render main pane
      ================================================================ */
   window.openDetailPanel = function (listingId) {
+    /* Expose to settings save handler for hero re-render on reno rate change */
+    window._currentListingId = listingId;
+
     var sidebar = document.getElementById("detail-sidebar");
     if (!sidebar || !sidebar.querySelector(".sidebar-item")) {
       window.renderDetailList();

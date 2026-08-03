@@ -5730,6 +5730,7 @@
     telegram:  {title: "Telegram delivery",            hint: "Tier thresholds for the pending card. Photo tier gets buttons; text tier is a compact line."},
     ai:        {title: "AI evaluation",                hint: "Anthropic Claude call knobs. Raise max tokens if long ads truncate the JSON verdict."},
     dashboard: {title: "Dashboard",                    hint: "External URL of this UI — used by Telegram cards' Dashboard button to deep-link into a listing."},
+    reno:      {title: "Renovation rates",             hint: "Rates used by computeAllIn to price renovation work client-side. The AI classifies which items apply; you set the prices. Data source: Maa-amet transactions database."},
   };
 
   /* Sidebar category labels (mapping schema group → display label) */
@@ -5737,6 +5738,7 @@
     {key: "filter",   label: "Buyer profile"},
     {key: "ai",       label: "Scoring & AI"},
     {key: "cost",     label: "Cost model"},
+    {key: "reno",     label: "Renovation rates"},
     {key: "telegram", label: "Telegram"},
     {key: "dashboard",label: "Scraper / Dashboard"},
   ];
@@ -5859,10 +5861,60 @@
     wrap.className = "sn-field";
     wrap.dataset.key = f.key;
 
+    var isBool = (f.type === "bool");
     var isString = (f.type === "str");
     var isFloat = (f.type === "float");
     var isInt = (f.type === "int");
     var isNumeric = isFloat || isInt;
+
+    /* Bool fields: toggle switch */
+    if (isBool) {
+      var boolRow = document.createElement("div");
+      boolRow.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:12px;";
+
+      var boolLabel = document.createElement("div");
+      var boolLabelText = document.createElement("span");
+      boolLabelText.textContent = f.label;
+      boolLabel.appendChild(boolLabelText);
+      if (f.hint) {
+        var boolHint = document.createElement("div");
+        boolHint.className = "sn-field-hint";
+        boolHint.style.marginTop = "2px";
+        boolHint.textContent = f.hint;
+        boolLabel.appendChild(boolHint);
+      }
+      boolRow.appendChild(boolLabel);
+
+      /* Toggle switch using Wave 4 .sn-toggle CSS structure */
+      var toggleLabel = document.createElement("label");
+      toggleLabel.className = "sn-toggle";
+      toggleLabel.style.flexShrink = "0";
+      var toggleInput = document.createElement("input");
+      toggleInput.type = "checkbox";
+      toggleInput.id = "set-" + f.key;
+      toggleInput.dataset.key = f.key;
+      toggleInput.dataset.type = "bool";
+      toggleInput.checked = f.value === true || f.value === "true";
+      toggleInput.addEventListener("change", function () {
+        var original = f.value === true || f.value === "true";
+        if (toggleInput.checked !== original) {
+          _dirtyKeys.add(f.key);
+        } else {
+          _dirtyKeys.delete(f.key);
+        }
+      });
+      var toggleTrack = document.createElement("span");
+      toggleTrack.className = "sn-toggle-track";
+      var toggleThumb = document.createElement("span");
+      toggleThumb.className = "sn-toggle-thumb";
+      toggleLabel.appendChild(toggleInput);
+      toggleLabel.appendChild(toggleTrack);
+      toggleLabel.appendChild(toggleThumb);
+      boolRow.appendChild(toggleLabel);
+
+      wrap.appendChild(boolRow);
+      return wrap;
+    }
 
     /* Label row */
     var labelRow = document.createElement("div");
@@ -5990,6 +6042,10 @@
     var updates = {};
     pane.querySelectorAll("input[data-key]").forEach(function(inp) {
       if (!_dirtyKeys.has(inp.dataset.key)) return;
+      if (inp.dataset.type === "bool") {
+        updates[inp.dataset.key] = inp.checked;
+        return;
+      }
       var v = inp.value;
       if (inp.dataset.type === "str") {
         updates[inp.dataset.key] = v;
@@ -6016,12 +6072,30 @@
       .then(function(res) {
         if (res.body.ok) {
           status.className = "settings-status ok";
-          var msg = "✓ Saved " + Object.keys(res.body.applied || {}).length + " setting(s)";
+          var appliedKeys = Object.keys(res.body.applied || {});
+          var msg = "✓ Saved " + appliedKeys.length + " setting(s)";
           if (res.body.costs_recomputed != null) {
             msg += " \xB7 " + res.body.costs_recomputed + " costs recomputed";
           }
           status.textContent = msg;
+          /* Update _settingsData with new values so computeAllIn picks them up immediately */
+          if (window._settingsData && res.body.applied) {
+            var applied = res.body.applied;
+            Object.keys(applied).forEach(function(k) {
+              if (window._settingsData.values) window._settingsData.values[k] = applied[k];
+              /* Also update schema value for re-render */
+              var schema = window._settingsData.schema || [];
+              for (var i = 0; i < schema.length; i++) {
+                if (schema[i].key === k) { schema[i].value = applied[k]; break; }
+              }
+            });
+          }
           if (window.loadData) window.loadData();
+          /* Re-render current shortlist hero if reno settings changed */
+          var hasReno = appliedKeys.some(function(k) { return k.startsWith("reno_") || k === "rank_by_all_in"; });
+          if (hasReno && window.openDetailPanel && window._currentListingId) {
+            window.openDetailPanel(window._currentListingId);
+          }
           _dirtyKeys.clear();
           setTimeout(renderSettingsNocturne, 1200);
         } else {
