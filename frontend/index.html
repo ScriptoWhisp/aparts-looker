@@ -5140,31 +5140,35 @@
     });
   }
 
-  /* Cleared state: all inbox items have been triaged */
+  /* Cleared state: all inbox items have been triaged (SPEC §2.3 third frame).
+     Shown after cycling through all cards OR when inbox is empty on open.
+     No celebration graphic — just a factual summary + single action button. */
   function _buildMobileCleared() {
     var n = _miSession.triaged;
     var x = _miSession.shortlisted;
     var y = _miSession.skipped;
+    /* True cleared state (had items and triaged them) vs. genuinely empty inbox */
+    var wasTriaged = n > 0;
 
     var wrap = document.createElement("div");
     wrap.className = "mi-cleared";
 
     var heading = document.createElement("h2");
     heading.className = "mi-cleared-heading";
-    heading.textContent = "Inbox cleared";
+    heading.textContent = wasTriaged ? "Inbox cleared" : "Inbox is empty";
     wrap.appendChild(heading);
 
     var sub = document.createElement("p");
     sub.className = "mi-cleared-sub";
-    if (n > 0) {
+    if (wasTriaged) {
       sub.textContent = "You triaged " + n + " in this session: " +
         x + " shortlisted \xB7 " + y + " skipped";
     } else {
-      sub.textContent = "Nothing new in the inbox right now.";
+      sub.textContent = "Nothing new waiting for review.";
     }
     wrap.appendChild(sub);
 
-    /* Shortlist count from live data */
+    /* Open shortlist button — shortlist count from live data */
     var shortlistCount = (window.state.properties || []).length;
     var btn = document.createElement("button");
     btn.type = "button";
