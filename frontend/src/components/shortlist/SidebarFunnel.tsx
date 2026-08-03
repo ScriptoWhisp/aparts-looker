@@ -8,9 +8,13 @@
  *
  * Each group has a count badge, collapses on click.
  * Filter input narrows all groups by title substring.
+ *
+ * Wave 7D: Compare multi-select via cmd/ctrl-click or checkbox.
+ * Max 2 selections (FIFO evict). Compare button in header when ≥1 selected.
+ * Keyboard C when 2 selected opens compare overlay.
  */
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import type { Entry } from '../../types/api'
@@ -32,6 +36,7 @@ interface SidebarFunnelProps {
   entries: Entry[]
   selectedId: string | null
   onSelect: (id: string) => void
+  onCompare?: (ids: [string, string]) => void
 }
 
 // ── Group header ──────────────────────────────────────────────────────────
@@ -67,17 +72,45 @@ function GroupHeader({ title, count, isOpen, onToggle }: GroupHeaderProps) {
 
 // ── Main sidebar component ────────────────────────────────────────────────
 
-export function SidebarFunnel({ entries, selectedId, onSelect }: SidebarFunnelProps) {
+export function SidebarFunnel({ entries, selectedId, onSelect, onCompare }: SidebarFunnelProps) {
   const [filter, setFilter] = useState('')
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     to_view: true,
     viewed: true,
     dropped: false,
   })
+  // Compare selection: max 2, FIFO eviction
+  const [compareIds, setCompareIds] = useState<string[]>([])
 
   function toggleGroup(key: string) {
     setOpenGroups((prev) => ({ ...prev, [key]: !prev[key] }))
   }
+
+  function handleCompareToggle(id: string) {
+    setCompareIds((prev) => {
+      if (prev.includes(id)) {
+        return prev.filter((x) => x !== id)
+      }
+      // FIFO evict oldest if already at max 2
+      const next = [...prev, id]
+      return next.length > 2 ? next.slice(-2) : next
+    })
+  }
+
+  // Keyboard C → open compare when 2 selected
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+    if (e.key === 'c' || e.key === 'C') {
+      if (compareIds.length === 2) {
+        onCompare?.([compareIds[0], compareIds[1]])
+      }
+    }
+  }, [compareIds, onCompare])
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleKeyDown])
 
   // Apply filter
   const q = filter.toLowerCase()
@@ -117,6 +150,43 @@ export function SidebarFunnel({ entries, selectedId, onSelect }: SidebarFunnelPr
 
   return (
     <aside className="flex flex-col h-full border-r border-border bg-bg overflow-hidden">
+      {/* Compare header bar */}
+      {compareIds.length > 0 && (
+        <div className="flex items-center justify-between px-3 py-2 bg-accent/[0.08] border-b border-accent/30 flex-none">
+          <span className="text-[11px] text-accent-lt font-sans">
+            {compareIds.length}/2 selected
+          </span>
+          <div className="flex items-center gap-2">
+            {compareIds.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setCompareIds([])}
+                className="text-[11px] text-muted hover:text-text transition-colors"
+              >
+                Clear
+              </button>
+            )}
+            <button
+              type="button"
+              disabled={compareIds.length < 2}
+              onClick={() => {
+                if (compareIds.length === 2) {
+                  onCompare?.([compareIds[0], compareIds[1]])
+                }
+              }}
+              className={[
+                'px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors',
+                compareIds.length === 2
+                  ? 'bg-accent text-bg hover:bg-accent/80 cursor-pointer'
+                  : 'bg-border text-muted cursor-not-allowed opacity-50',
+              ].join(' ')}
+            >
+              Compare
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Filter input */}
       <div className="px-3 pt-3 pb-2 border-b border-border flex-none">
         <input
@@ -168,7 +238,9 @@ export function SidebarFunnel({ entries, selectedId, onSelect }: SidebarFunnelPr
                           key={entry.id}
                           entry={entry}
                           isSelected={selectedId === entry.id}
+                          isCompareSelected={compareIds.includes(entry.id)}
                           onClick={() => onSelect(entry.id)}
+                          onCompareToggle={handleCompareToggle}
                         />
                       ))
                     )}
@@ -182,9 +254,15 @@ export function SidebarFunnel({ entries, selectedId, onSelect }: SidebarFunnelPr
 
       {/* Sidebar footer */}
       <div className="flex-none px-3 py-2.5 border-t border-border">
-        <p className="text-[11px] text-faint italic leading-snug">
-          Inbox decides worth a look. This list decides worth an offer.
-        </p>
+        {compareIds.length === 0 ? (
+          <p className="text-[11px] text-faint italic leading-snug">
+            Inbox decides worth a look. This list decides worth an offer.
+          </p>
+        ) : (
+          <p className="text-[11px] text-muted leading-snug">
+            Cmd/Ctrl+click to select · C to compare
+          </p>
+        )}
       </div>
     </aside>
   )
