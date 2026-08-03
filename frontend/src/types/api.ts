@@ -121,6 +121,10 @@ export interface Entry {
   material: string | null
   dropped_at: string | null
   drop_reason: string | null
+  lat: number | null
+  lng: number | null
+  price_per_sqm: number | null
+  commute_minutes: number | null
 }
 
 // ── /api/data response ────────────────────────────────────────────────────

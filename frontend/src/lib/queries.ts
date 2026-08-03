@@ -12,10 +12,18 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { fetchAppData, fetchSettings } from './api'
 import type { AppData, Entry, SettingsData } from '../types/api'
 
+async function fetchJson<T>(url: string): Promise<T> {
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`${url} failed [${res.status}]`)
+  return res.json() as Promise<T>
+}
+
 // ── Query keys ─────────────────────────────────────────────────────────────
 export const QUERY_KEYS = {
-  appData:  ['appData']  as const,
-  settings: ['settings'] as const,
+  appData:   ['appData']   as const,
+  settings:  ['settings']  as const,
+  isochrone: ['isochrone'] as const,
+  districts: ['districts'] as const,
 }
 
 // ── App data hook ──────────────────────────────────────────────────────────
@@ -33,6 +41,28 @@ export function useSettings() {
   return useQuery<SettingsData>({
     queryKey: QUERY_KEYS.settings,
     queryFn:  fetchSettings,
+    staleTime: 60_000,
+  })
+}
+
+// ── Geo hooks ─────────────────────────────────────────────────────────────
+export function useIsochrone() {
+  return useQuery<object>({
+    queryKey: QUERY_KEYS.isochrone,
+    queryFn:  () => fetchJson<object>('/api/isochrone'),
+    staleTime: 300_000, // 5 min — isochrone rarely changes
+  })
+}
+
+export interface DistrictStat {
+  name: string
+  avg_price_per_sqm: number | null
+  count: number
+}
+export function useDistricts() {
+  return useQuery<{ districts: DistrictStat[] }>({
+    queryKey: QUERY_KEYS.districts,
+    queryFn:  () => fetchJson<{ districts: DistrictStat[] }>('/api/districts'),
     staleTime: 60_000,
   })
 }
