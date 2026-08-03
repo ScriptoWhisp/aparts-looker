@@ -1,18 +1,19 @@
 /**
- * Shortlist tab — Wave 7C implementation.
+ * Shortlist tab — Wave 7C + Wave 7D.
  *
  * Layout: grid grid-cols-[284px_1fr] h-[calc(100vh-48px)]
  * - Left: 284px SidebarFunnel (To view / Viewed / Dropped)
  * - Right: main pane with hero row, verdict band, checklist + right column
  *
- * Responsive: sidebar hidden on mobile (md:block), main pane full width.
- * Desktop-first; mobile shows main pane only with "← Back" button when a
- * listing is selected.
+ * Wave 7D additions:
+ * - Multi-select for Compare via cmd/ctrl-click in SidebarRow
+ * - CompareOverlay dialog with differing-rows-only and winner tinting
+ * - own_score slider in HeroRow (for viewed listings)
  *
- * Entries sorted by score desc (or all-in asc if rank_by_all_in setting active).
+ * Responsive: sidebar hidden on mobile (md:block), main pane full width.
  */
 
-import { useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { useAppData, useSettings, selectShortlisted } from '../lib/queries'
 import { useAppStore } from '../lib/state'
 import { rankByAllIn } from '../lib/cost'
@@ -24,6 +25,7 @@ import { AfterViewingBar } from '../components/shortlist/AfterViewingBar'
 import { ChecklistCard } from '../components/shortlist/ChecklistCard'
 import { AskAtViewing } from '../components/shortlist/AskAtViewing'
 import { NegotiationCard } from '../components/shortlist/NegotiationCard'
+import { CompareOverlay } from '../components/shortlist/CompareOverlay'
 
 // ── Empty / no-selection states ────────────────────────────────────────────
 
@@ -64,11 +66,11 @@ function MainPane({ entry, settings, onBack }: MainPaneProps) {
           onClick={onBack}
           className="md:hidden flex items-center gap-1 px-4 pt-3 text-[13px] text-muted hover:text-text transition-colors"
         >
-          ← Back
+          Back
         </button>
       )}
 
-      {/* Hero row */}
+      {/* Hero row (includes own_score slider for viewed) */}
       <HeroRow entry={entry} settings={settings} />
 
       {/* Verdict band */}
@@ -99,6 +101,9 @@ export function Shortlist() {
   const { data: settings } = useSettings()
   const { selectedListingId, setSelectedListingId } = useAppStore()
 
+  // Compare overlay state: null = closed, [id, id] = open
+  const [compareIds, setCompareIds] = useState<[string, string] | null>(null)
+
   // All shortlisted entries sorted by score (or all-in)
   const allEntries = useMemo(() => {
     const raw = selectShortlisted(appData)
@@ -111,9 +116,6 @@ export function Shortlist() {
     [allEntries, selectedListingId],
   )
 
-  // Auto-select first entry if none selected and entries exist
-  const effectiveSelected = selectedEntry ?? (allEntries.length > 0 ? null : null)
-
   function handleSelect(id: string) {
     setSelectedListingId(id)
   }
@@ -121,6 +123,23 @@ export function Shortlist() {
   function handleBack() {
     setSelectedListingId(null)
   }
+
+  function handleCompare(ids: [string, string]) {
+    setCompareIds(ids)
+  }
+
+  function handleCloseCompare() {
+    setCompareIds(null)
+  }
+
+  // Resolve compare entries
+  const compareEntries = useMemo(() => {
+    if (!compareIds) return null
+    const a = allEntries.find((e) => e.id === compareIds[0])
+    const b = allEntries.find((e) => e.id === compareIds[1])
+    if (!a || !b) return null
+    return [a, b] as [Entry, Entry]
+  }, [compareIds, allEntries])
 
   if (isLoading) {
     return (
@@ -136,48 +155,54 @@ export function Shortlist() {
   const showMainOnMobile = !!selectedEntry
 
   return (
-    <div className="grid grid-cols-[284px_1fr] h-[calc(100vh-48px)]">
-      {/* Sidebar — always visible on desktop, toggles on mobile */}
-      <div
-        className={[
-          'h-full overflow-hidden',
-          showSidebarOnMobile ? 'block' : 'hidden',
-          'md:block',
-        ].join(' ')}
-      >
-        <SidebarFunnel
-          entries={allEntries}
-          selectedId={selectedListingId}
-          onSelect={handleSelect}
-        />
+    <>
+      <div className="grid grid-cols-[284px_1fr] h-[calc(100vh-48px)]">
+        {/* Sidebar — always visible on desktop, toggles on mobile */}
+        <div
+          className={[
+            'h-full overflow-hidden',
+            showSidebarOnMobile ? 'block' : 'hidden',
+            'md:block',
+          ].join(' ')}
+        >
+          <SidebarFunnel
+            entries={allEntries}
+            selectedId={selectedListingId}
+            onSelect={handleSelect}
+            onCompare={handleCompare}
+          />
+        </div>
+
+        {/* Main pane */}
+        <div
+          className={[
+            'h-full overflow-hidden',
+            showMainOnMobile ? 'block' : 'hidden',
+            'md:block',
+          ].join(' ')}
+        >
+          {selectedEntry ? (
+            <MainPane
+              entry={selectedEntry}
+              settings={settings}
+              onBack={handleBack}
+            />
+          ) : allEntries.length === 0 ? (
+            <EmptySidebar />
+          ) : (
+            <NoSelection />
+          )}
+        </div>
       </div>
 
-      {/* Main pane */}
-      <div
-        className={[
-          'h-full overflow-hidden',
-          showMainOnMobile ? 'block' : 'hidden',
-          'md:block',
-        ].join(' ')}
-      >
-        {effectiveSelected ? (
-          <MainPane
-            entry={effectiveSelected}
-            settings={settings}
-            onBack={handleBack}
-          />
-        ) : selectedEntry ? (
-          <MainPane
-            entry={selectedEntry}
-            settings={settings}
-            onBack={handleBack}
-          />
-        ) : allEntries.length === 0 ? (
-          <EmptySidebar />
-        ) : (
-          <NoSelection />
-        )}
-      </div>
-    </div>
+      {/* Compare overlay — rendered outside the grid (portal-like fixed positioning) */}
+      {compareEntries && (
+        <CompareOverlay
+          entries={compareEntries}
+          settings={settings}
+          onClose={handleCloseCompare}
+        />
+      )}
+    </>
   )
 }
