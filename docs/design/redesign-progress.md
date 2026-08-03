@@ -580,3 +580,71 @@ Checkboxes are not persisted to the backend. They reset on every re-render. The 
 ### Test results
 
 Backend tests unchanged: **130 passed** (no Python changes in this wave).
+
+---
+
+## Wave 6A — SPEC alignment delta pass
+
+**Date:** 2026-08-03
+**Branch:** main
+**Status:** Complete
+
+### Objective
+
+Surgical alignment pass against the newly added `docs/design/aparts-looker-design-brief/project/SPEC.md`. No new features — only delta fixes to make shipped Waves 1-5C compliant with the authoritative SPEC document.
+
+### What shipped
+
+**1. Token short-name aliases** (`frontend/css/tokens.css`)
+
+Added 50+ short-name aliases as declared in SPEC §1: `--bg`, `--sunken`, `--surface`, `--border`, `--text`, `--text-2`, `--text-3`, `--muted`, `--faint`, `--accent`, `--accent-lt`, score ramp (`--s-bad/weak/mid/good/best`), status (`--st-new/short/skip/viewing/viewed`), spacing (`--sp-1..12`), radius (`--r-sm/md/lg/xl`), shadows (`--sh-sm/md/lg`), motion (`--ease`, `--t-fast`, `--t-base`). All aliases point to existing Nocturne tokens via `var(...)` — no rename, no ripple to existing code.
+
+**2. Inbox skip reason chips: 4 → 6** (`frontend/index.html`)
+
+Added `Layout` and `Building` chips to the Inbox skip overlay (SPEC §2.3). Previous impl had Price / Location / Condition / Other (4 chips). Now Price / Location / Condition / Layout / Building / Other (6 chips). Reason string stored as-is in `rejection_reason` on the API.
+
+**3. Checklist group-header signal strip** (`frontend/js/detail-panel.js`)
+
+Added per-item 7×7px rounded squares between the group label and the count in each accordion group header (SPEC §2.5). Colors: `ok` = `--s-best`, `unknown` = `--faint`, `flag` = `--s-bad`, `warning` = `--s-weak`. Items rendered in section order.
+
+**4. Histogram 75-tick label** — already present from Wave 5B
+
+`75 · approve line` label was already rendered in `--color-text-secondary` (≡ `--text-3`) from a prior wave. No action needed.
+
+**5. Phosphor icons vendored** (`frontend/index.html`, `frontend/js/detail-panel.js`)
+
+Added hidden `<svg style="display:none">` block at top of `<body>` with 10 Phosphor icon symbols (regular weight, 16px viewBox): calendar, check, x, question, warning, caret-down, caret-right, magnifying-glass, house, arrow-square-out. Proof-of-life: checklist accordion chevrons now use `<svg><use href="#ph-caret-down">` / `<use href="#ph-caret-right">` instead of `▾`/`▸` text glyphs.
+
+**6. `prefers-reduced-motion` + `text-wrap: pretty`** (`frontend/css/tokens.css`)
+
+Upgraded motion media query from `animation-duration: 0.01ms` to `transition: none !important; animation: none !important;` per SPEC §1. Added `text-wrap: pretty` on verdict paragraph selectors: `.dm-verdict-text`, `.dm-neg-body`, `.pq-verdict`, `.hero-verdict`, `[data-verdict]`, `.ai-verdict`.
+
+### What was deferred
+
+**Charts to SVG (optional — Wave 6C)**
+
+SPEC §3 specifies hand-rolled SVG for both the histogram and scatter charts. Current implementation uses div-based flex bars (histogram) and absolutely-positioned DOM dots (scatter). Converting to SVG is a ~60-minute rewrite with no behavior change. Deferred to Wave 6C to keep this wave surgical. Both charts remain fully functional with correct colors, tooltips, and behavior.
+
+**Full Phosphor icon migration**
+
+Only the checklist accordion chevrons were wired to use `<use href>` as proof-of-life. Full migration of all remaining emoji/text glyphs to Phosphor symbols is deferred (no timeline assigned — lower priority than Wave 6B/6C feature work).
+
+### Files modified
+
+| File | Change |
+|------|--------|
+| `frontend/css/tokens.css` | +55 short-name aliases in `:root`; upgraded `prefers-reduced-motion`; added `text-wrap:pretty` block |
+| `frontend/index.html` | Added 2 skip reason chips (Layout + Building); added hidden Phosphor SVG sprite block |
+| `frontend/js/detail-panel.js` | Signal strip in accordion group headers; chevrons use Phosphor SVG symbols |
+
+### Commits
+
+- `59731ee feat(tokens): add SPEC.md short-name aliases`
+- `2cd3c14 feat(inbox): add Layout + Building to skip-reason chips`
+- `36b3950 feat(shortlist): add signal strip to checklist group headers`
+- `4e74e05 feat(design): vendor Phosphor SVG symbols + wire one use site`
+- `268d379 feat(design): add prefers-reduced-motion + text-wrap:pretty`
+
+### Test results
+
+Backend tests unchanged: **130 passed** (no Python changes in this wave).
