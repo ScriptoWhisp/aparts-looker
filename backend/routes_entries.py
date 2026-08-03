@@ -192,6 +192,20 @@ async def cost_override(listing_id: str, request: Request) -> dict:
                 "cost_per_sqm_eur": round(total / area, 1) if area else None,
                 "overridden": True,
             }
+
+            # Wave 6C: optional renovation work override (JSONB sub-key)
+            # Pass renovation_override_work_eur=N to pin a manual work figure;
+            # pass renovation_override_work_eur=null to remove it.
+            if "renovation_override_work_eur" in body:
+                raw_reno = body["renovation_override_work_eur"]
+                if raw_reno is None or raw_reno == "":
+                    new_coo.pop("renovation_override_work_eur", None)
+                else:
+                    try:
+                        new_coo["renovation_override_work_eur"] = round(float(raw_reno))
+                    except (TypeError, ValueError):
+                        pass  # ignore bad value — keep existing or absent
+
             row.cost_of_ownership = new_coo  # JSONB reassignment (Pitfall 1)
             db_.commit()
 

@@ -683,11 +683,97 @@
       return cell;
     }
 
+    /* --- First metric cell: all-in cost (Wave 6C) or price fallback --- */
     var price = entry.price_eur || entry.price || 0;
     var pricePerSqm = entry.price_per_sqm || entry.pricePerSqm;
-    var priceMetaParts = [];
-    if (pricePerSqm) priceMetaParts.push(Math.round(pricePerSqm) + " €/m²");
-    strip.appendChild(_metricCell(price ? window.fmtEur(price) : "—", priceMetaParts.join(" · ") || "asking price", null));
+    var area = entry.area_sqm || entry.area || 0;
+
+    /* Attempt to compute all-in cost */
+    var allInCell;
+    if (window.computeAllIn && window._settingsData) {
+      var allInResult = window.computeAllIn(entry, window._settingsData.values || window._settingsData);
+      var clData = (window.state.checklists || {})[entry.id] || {};
+      var hasRenoItems = (clData.renovation_items || []).length > 0;
+
+      if (!hasRenoItems) {
+        /* No renovation_items yet — show price only with muted note */
+        allInCell = document.createElement("div");
+        allInCell.className = "dm-metric-cell";
+        var allInPriceVal = document.createElement("div");
+        allInPriceVal.className = "dm-metric-val";
+        allInPriceVal.textContent = price ? window.fmtEur(price) : "—";
+        var allInUnknownMeta = document.createElement("div");
+        allInUnknownMeta.className = "dm-metric-meta";
+        allInUnknownMeta.style.fontStyle = "italic";
+        allInUnknownMeta.textContent = "all-in unknown — waiting for AI";
+        allInCell.appendChild(allInPriceVal);
+        allInCell.appendChild(allInUnknownMeta);
+      } else {
+        /* Build the "price + work = all-in" compound cell */
+        allInCell = document.createElement("div");
+        allInCell.className = "dm-metric-cell";
+
+        /* Equation line: price + work = all-in */
+        var eqLine = document.createElement("div");
+        eqLine.style.cssText = "display:flex;align-items:baseline;gap:4px;white-space:nowrap;flex-wrap:nowrap;";
+
+        var priceSpan = document.createElement("span");
+        priceSpan.style.cssText = "font:500 20px 'JetBrains Mono',ui-monospace,monospace;color:var(--color-text);white-space:nowrap;";
+        priceSpan.textContent = price ? window.fmtEur(price) : "—";
+        eqLine.appendChild(priceSpan);
+
+        var plusSpan = document.createElement("span");
+        plusSpan.style.cssText = "font:400 13px 'JetBrains Mono',ui-monospace,monospace;color:var(--color-text-muted);";
+        plusSpan.textContent = " + " + window.fmtEur(allInResult.work);
+        eqLine.appendChild(plusSpan);
+
+        var eqSpan = document.createElement("span");
+        eqSpan.style.cssText = "font:400 13px 'JetBrains Mono',ui-monospace,monospace;color:var(--color-text-muted);";
+        eqSpan.textContent = " = ";
+        eqLine.appendChild(eqSpan);
+
+        var allInSpan = document.createElement("span");
+        allInSpan.className = "dm-metric-val";
+        allInSpan.style.cssText = "color:var(--color-accent-400);font:500 28px 'JetBrains Mono',ui-monospace,monospace;white-space:nowrap;";
+        allInSpan.textContent = window.fmtEur(allInResult.allIn);
+        eqLine.appendChild(allInSpan);
+
+        allInCell.appendChild(eqLine);
+
+        /* Sub-line: €/m² all-in · ±band */
+        var allInMeta = document.createElement("div");
+        allInMeta.className = "dm-metric-meta";
+        var allInPerSqm = area > 0 ? Math.round(allInResult.allIn / area) : null;
+        var metaText = allInPerSqm ? allInPerSqm.toLocaleString("et-EE") + " €/m² all-in" : "all-in";
+        if (allInResult.band > 0) {
+          metaText += " · ±" + window.fmtEur(allInResult.band);
+        }
+        if (allInResult.hasLowConfidence) {
+          metaText += " (est.)";
+        }
+        allInMeta.textContent = metaText;
+        allInCell.appendChild(allInMeta);
+      }
+
+      /* Override button (edit-icon near the all-in figure) */
+      var overrideBtn = document.createElement("button");
+      overrideBtn.type = "button";
+      overrideBtn.title = "Override renovation estimate";
+      overrideBtn.style.cssText = "background:none;border:none;padding:2px 4px;cursor:pointer;color:var(--color-text-muted);font-size:11px;margin-top:4px;border-radius:var(--radius-sm);";
+      overrideBtn.textContent = "Override";
+      overrideBtn.addEventListener("click", function () {
+        _showRenoOverrideDialog(entry);
+      });
+      allInCell.appendChild(overrideBtn);
+
+    } else {
+      /* computeAllIn not loaded yet — plain price fallback */
+      var priceMetaParts = [];
+      if (pricePerSqm) priceMetaParts.push(Math.round(pricePerSqm) + " €/m²");
+      allInCell = _metricCell(price ? window.fmtEur(price) : "—", priceMetaParts.join(" · ") || "asking price", null);
+    }
+
+    strip.appendChild(allInCell);
 
     var areaMeta = entry.area_sqm ? "m²" : "";
     if (entry.rooms) areaMeta += (areaMeta ? " · " : "") + entry.rooms + " tuba";
@@ -708,6 +794,100 @@
     heroRow.appendChild(hdrBlock);
 
     return heroRow;
+  }
+
+  /* ================================================================
+     Private: _showRenoOverrideDialog — per-listing renovation override
+     Stores renovation_override_work_eur on cost_of_ownership (JSONB).
+     Setting to empty clears the override.
+     ================================================================ */
+  function _showRenoOverrideDialog(entry) {
+    /* Remove any stale overlay */
+    var existing = document.getElementById("sl-reno-override-overlay");
+    if (existing) existing.parentNode.removeChild(existing);
+
+    var coo = entry.cost_of_ownership || {};
+    var currentOverride = coo.renovation_override_work_eur;
+
+    var overlay = document.createElement("div");
+    overlay.id = "sl-reno-override-overlay";
+    overlay.className = "sl-modal-overlay";
+
+    var modal = document.createElement("div");
+    modal.className = "sl-modal";
+    modal.style.cssText = "max-width:380px;";
+
+    var title = document.createElement("div");
+    title.className = "sl-modal-title";
+    title.textContent = "Override renovation estimate";
+    modal.appendChild(title);
+
+    var sub = document.createElement("div");
+    sub.className = "sl-modal-subtitle";
+    sub.textContent = "Pin a manual work figure (€). Leave empty to remove the override and use AI estimate.";
+    modal.appendChild(sub);
+
+    var input = document.createElement("input");
+    input.type = "number";
+    input.min = "0";
+    input.className = "sl-modal-input";
+    input.placeholder = "e.g. 25000";
+    if (currentOverride != null) input.value = String(currentOverride);
+    modal.appendChild(input);
+
+    var actions = document.createElement("div");
+    actions.className = "sl-modal-actions";
+
+    var cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "btn btn-secondary";
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.addEventListener("click", function () {
+      document.body.removeChild(overlay);
+    });
+    actions.appendChild(cancelBtn);
+
+    var confirmBtn = document.createElement("button");
+    confirmBtn.type = "button";
+    confirmBtn.className = "btn btn-primary";
+    confirmBtn.textContent = "Save";
+    confirmBtn.addEventListener("click", function () {
+      var raw = input.value.trim();
+      var overrideValue = (raw === "" || isNaN(Number(raw))) ? null : Math.round(Number(raw));
+
+      /* POST renovation_override_work_eur to the existing cost-override endpoint.
+         Pass null to remove the override, a number to pin it. */
+      fetch("/api/entry/" + encodeURIComponent(entry.id) + "/cost-override", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({renovation_override_work_eur: overrideValue}),
+      })
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+        .then(function () {
+          document.body.removeChild(overlay);
+          if (window.loadData) window.loadData();
+        })
+        .catch(function () {
+          window.showToast("Failed to save override", "error");
+          document.body.removeChild(overlay);
+        });
+    });
+    actions.appendChild(confirmBtn);
+    modal.appendChild(actions);
+    overlay.appendChild(modal);
+
+    overlay.addEventListener("click", function (e) {
+      if (e.target === overlay) document.body.removeChild(overlay);
+    });
+    document.addEventListener("keydown", function escHandler(e) {
+      if (e.key === "Escape") {
+        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        document.removeEventListener("keydown", escHandler);
+      }
+    });
+
+    document.body.appendChild(overlay);
+    requestAnimationFrame(function () { input.focus(); });
   }
 
   /* Build status pill for the hero top-left */
