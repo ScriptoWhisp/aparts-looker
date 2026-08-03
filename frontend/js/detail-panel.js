@@ -175,11 +175,30 @@
     var viewed  = filtered.filter(function (e) { return _inGroup(e.status, SHORTLIST_VIEWED); });
     var dropped = filtered.filter(function (e) { return _inGroup(e.status, SHORTLIST_DROPPED); });
 
-    /* Sort each group by score desc */
+    /* Sort each group: by all-in cost asc when rank_by_all_in is enabled, else score desc */
+    var settingsVals = window._settingsData ? (window._settingsData.values || window._settingsData) : {};
+    var rankByAllIn = settingsVals.rank_by_all_in === true || settingsVals.rank_by_all_in === "true";
+
     function byScore(a, b) { return (b.score || 0) - (a.score || 0); }
-    toView.sort(byScore);
-    viewed.sort(byScore);
-    dropped.sort(byScore);
+    function byAllIn(a, b) {
+      if (!window.computeAllIn) return byScore(a, b);
+      var ra = window.computeAllIn(a, settingsVals);
+      var rb = window.computeAllIn(b, settingsVals);
+      /* Unknown all-in (no renovation_items) sorts to end */
+      var clA = (window.state.checklists || {})[a.id] || {};
+      var clB = (window.state.checklists || {})[b.id] || {};
+      var hasA = (clA.renovation_items || []).length > 0;
+      var hasB = (clB.renovation_items || []).length > 0;
+      if (!hasA && !hasB) return byScore(a, b);
+      if (!hasA) return 1;
+      if (!hasB) return -1;
+      return ra.allIn - rb.allIn;
+    }
+    var sortFn = rankByAllIn ? byAllIn : byScore;
+
+    toView.sort(sortFn);
+    viewed.sort(sortFn);
+    dropped.sort(sortFn);
 
     if (toView.length === 0 && viewed.length === 0 && dropped.length === 0) {
       var empty = document.createElement("div");
