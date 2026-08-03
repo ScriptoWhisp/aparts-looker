@@ -1,0 +1,43 @@
+# Maa-amet apartment transaction price statistics (sample/placeholder data)
+# Source: Maa-amet kinnisvara hinnastatistika (https://www.maaamet.ee/et/teenused/kinnisvarastatistika)
+#
+# Refresh procedure:
+#   1. Go to https://www.maaamet.ee/et/teenused/kinnisvarastatistika
+#   2. Choose: Tehingud → Korterid → select quarter → export CSV/XLSX
+#   3. Filter to Tallinn linnaosad you care about, match columns below.
+#   4. Replace rows below with fresh data (keep the header line).
+#   5. Restart the container (or send SIGHUP) to reload.
+#
+# Column semantics:
+#   district        — Tallinn linnaosa name (e.g. Kalamaja, Kesklinn, Mustamäe)
+#   structure       — load-bearing structure (brick, panel, wood, block, monolith)
+#                     empty string = "any structure" (fallback tier)
+#   decade_built    — decade of first use, e.g. 1930, 1960, 1970, 1990
+#                     empty string = "any decade" (fallback tier)
+#   quarter         — YYYY-QN format, e.g. 2026-Q2
+#   median_eur_sqm  — median transaction price per m² (integer)
+#   n_transactions  — number of qualifying transactions (used for n>=5 guard)
+#
+# Lookup precision hierarchy (finest → coarsest):
+#   1. (district, structure, decade_built)
+#   2. (district, any, decade_built)
+#   3. (district, any, any)
+#   Returns None when no tier has n>=5 transactions.
+district,structure,decade_built,quarter,median_eur_sqm,n_transactions
+Kalamaja,brick,1930,2026-Q2,3120,23
+Kalamaja,brick,1940,2026-Q2,3050,8
+Kalamaja,,1930,2026-Q2,2980,45
+Kalamaja,,,2026-Q2,3050,89
+Kesklinn,brick,1960,2026-Q2,3800,14
+Kesklinn,,,2026-Q2,3600,67
+Mustamäe,panel,1970,2026-Q2,2410,52
+Mustamäe,panel,1980,2026-Q2,2280,38
+Mustamäe,,,2026-Q2,2350,94
+Kristiine,brick,1960,2026-Q2,3100,11
+Kristiine,,,2026-Q2,3000,47
+Põhja-Tallinn,wood,1930,2026-Q2,2750,9
+Põhja-Tallinn,,,2026-Q2,2900,73
+Nõmme,wood,1930,2026-Q2,2600,7
+Nõmme,,,2026-Q2,2500,55
+Haabersti,panel,1970,2026-Q2,2200,31
+Haabersti,,,2026-Q2,2150,62
