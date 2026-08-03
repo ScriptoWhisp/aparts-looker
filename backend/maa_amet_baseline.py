@@ -1,7 +1,7 @@
 """
 Maa-amet sold-price baseline lookup module.
 
-Loads the CSV at module import time from backend/data/maa_amet_baseline.csv.
+Loads the CSV at module import time from backend/reference_data/maa_amet_baseline.csv.
 Provides get_median() which returns the finest-grain sold-price bucket for a
 given (district, structure, decade_built, quarter) tuple.
 
@@ -20,7 +20,7 @@ documented refresh procedure (docs/maa-amet-refresh.md).
 SPEC §6 reference:
   - No live API, no X-Road.
   - Manual quarterly pull from Maa-amet price statistics query environment.
-  - File: backend/data/maa_amet_baseline.csv
+  - File: backend/reference_data/maa_amet_baseline.csv
 """
 
 import csv
@@ -31,7 +31,7 @@ from typing import Optional
 log = logging.getLogger("maa_amet_baseline")
 
 # Path relative to this module's location.
-_CSV_PATH = os.path.join(os.path.dirname(__file__), "data", "maa_amet_baseline.csv")
+_CSV_PATH = os.path.join(os.path.dirname(__file__), "reference_data", "maa_amet_baseline.csv")
 
 # Minimum transactions for a bucket to be usable.
 _MIN_TRANSACTIONS = 5

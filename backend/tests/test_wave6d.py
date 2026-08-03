@@ -339,13 +339,13 @@ class TestMaaAmetCsvFile:
     """Sanity checks on the committed CSV data file."""
 
     CSV_PATH = os.path.join(
-        os.path.dirname(__file__), "..", "data", "maa_amet_baseline.csv"
+        os.path.dirname(__file__), "..", "reference_data", "maa_amet_baseline.csv"
     )
 
     def test_csv_file_exists(self):
         """The CSV placeholder file must exist in backend/data/."""
         assert os.path.exists(self.CSV_PATH), (
-            "backend/data/maa_amet_baseline.csv not found — "
+            "backend/reference_data/maa_amet_baseline.csv not found — "
             "run `git pull` or recreate from docs/maa-amet-refresh.md"
         )
 

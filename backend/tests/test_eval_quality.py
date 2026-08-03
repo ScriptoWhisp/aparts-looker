@@ -81,12 +81,14 @@ def test_district_avg_injected(db_session, tmp_agent_state):
     app_data = data_store.load_app_data()
     result = ingest_handler._build_context_prefix(listing, app_data)
 
-    assert "District price/m² average" in result, (
-        f"'District price/m² average' not in prefix: {result!r}"
-    )
+    # Wave 6D replaced kv.ee asking-price average with Maa-amet sold median
+    # when the baseline CSV has a matching bucket. Either wording is acceptable —
+    # both surface a district-scoped EUR/m² reference to the AI.
+    assert (
+        "District price/m² average" in result
+        or "District median (sold)" in result
+    ), f"district reference not in prefix: {result!r}"
     assert "Mustamäe" in result, f"'Mustamäe' not in prefix: {result!r}"
-    # Average of 2500 and 2400 = 2450
-    assert "2450" in result, f"'2450' (average) not in prefix: {result!r}"
 
 
 def test_district_avg_omitted_unknown(db_session, tmp_agent_state):
@@ -112,6 +114,9 @@ def test_district_avg_omitted_unknown(db_session, tmp_agent_state):
 
     assert "District price/m² average" not in result, (
         f"'District price/m² average' unexpectedly in prefix: {result!r}"
+    )
+    assert "District median (sold)" not in result, (
+        f"'District median (sold)' unexpectedly in prefix: {result!r}"
     )
 
 
