@@ -1,6 +1,13 @@
 """
-Minimal Telegram Bot API client: send listing cards, poll for incoming
-"/send <id>" commands from Daniel.
+Minimal Telegram Bot API client: send listing cards (notifier only — Wave 6B),
+poll for incoming "/send <id>" commands from Daniel.
+
+Wave 6B: Telegram is a notifier surface only.  Approve/Reject inline keyboard
+buttons have been removed.  Every card now carries a single "Open Inbox" deep-link
+button that routes directly to the Inbox tab (`#inbox`).  All triage happens in the
+web app.  Callback_query processing (approve:/reject:/rr:) has been deleted from
+agent_job.py — if a stale pre-deploy card triggers a callback, answer_callback_query
+returns a user-friendly message and no state is mutated.
 """
 
 from __future__ import annotations
@@ -221,33 +228,30 @@ def send_pending_card(listing: Listing, evaluation: dict) -> tuple[int | None, i
     # link — glance-and-move-on, not glance-and-be-mystified.
     is_photo_tier = score >= config.TELEGRAM_MIN_SCORE_PHOTO
 
-    # Build the internal dashboard deep-link (empty when WEB_BASE_URL isn't
-    # configured — the frontend reads ?listing=<id> on load and jumps to the
-    # detail panel).
-    dashboard_url = ""
+    # Build the Inbox deep-link (Wave 6B: routes to the Inbox tab, not the detail panel).
+    # The frontend's hash-routing picks up #inbox and renders the mobile triage surface.
+    # When WEB_BASE_URL is unset cards still arrive without a tap-through button.
+    inbox_url = ""
     if config.WEB_BASE_URL:
         base = config.WEB_BASE_URL.rstrip("/")
         if not base.startswith("http"):
             base = "https://" + base
-        dashboard_url = f"{base}/?listing={listing.id}"
+        inbox_url = f"{base}/#inbox"
 
     if is_photo_tier:
         caption = (
             f"{score}/100 | {verdict} | {price:,} EUR · {price_m2:,}/m² | "
             f"{rooms} rooms · {area} m² | {listing.title or listing.url}"
         )
-        buttons = [
-            {"text": "Approve", "callback_data": f"approve:{listing.id}"},
-            {"text": "Reject",  "callback_data": f"reject:{listing.id}"},
-        ]
-        if dashboard_url:
-            buttons.append({"text": "Dashboard", "url": dashboard_url})
+        # Wave 6B: no Approve/Reject buttons — notifier only.
+        # One "Open Inbox" deep-link (if WEB_BASE_URL set) + kv.ee link.
+        buttons = []
+        if inbox_url:
+            buttons.append({"text": "Open Inbox", "url": inbox_url})
         buttons.append({"text": "kv.ee", "url": listing.url})
         reply_markup = {"inline_keyboard": [buttons]}
     else:
-        # Compact text — includes the AI verdict and (when configured) the
-        # dashboard deep-link so the user can click straight to the detail
-        # view instead of hunting for the listing in the sidebar.
+        # Compact text tier — one-liner summary + links.
         parts = [
             f"[{score}] {listing.title or listing.id}",
             f"→ {verdict}" if verdict else "",
@@ -255,14 +259,13 @@ def send_pending_card(listing: Listing, evaluation: dict) -> tuple[int | None, i
         ]
         caption = "\n".join(p for p in parts if p)
         links = [f"kv.ee: {listing.url}"]
-        if dashboard_url:
-            links.append(f"dashboard: {dashboard_url}")
+        if inbox_url:
+            links.append(f"inbox: {inbox_url}")
         caption = caption + "\n" + " · ".join(links)
-        # Even text tier gets an inline keyboard when we have a dashboard URL —
-        # one tap is much better than long-pressing the link.
-        if dashboard_url:
+        # Text tier: inline keyboard with Open Inbox + kv.ee when URL is configured.
+        if inbox_url:
             reply_markup = {"inline_keyboard": [[
-                {"text": "Dashboard", "url": dashboard_url},
+                {"text": "Open Inbox", "url": inbox_url},
                 {"text": "kv.ee", "url": listing.url},
             ]]}
         else:
@@ -303,58 +306,13 @@ def send_pending_card(listing: Listing, evaluation: dict) -> tuple[int | None, i
     return None, None
 
 
-def edit_card_resolved(cq: dict, resolved_caption: str) -> None:
-    """Update card caption to resolved state and remove inline keyboard (per D-08).
-
-    Silently tolerates stale message_id or deleted Telegram messages (RESEARCH Pitfall 3).
-    """
-    try:
-        requests.post(
-            f"{API_BASE}/editMessageCaption",
-            json={
-                "chat_id": cq["message"]["chat"]["id"],
-                "message_id": cq["message"]["message_id"],
-                "caption": resolved_caption,
-                "reply_markup": {"inline_keyboard": []},
-            },
-            timeout=15,
-        )
-    except (requests.RequestException, KeyError):
-        pass  # never-raise — stale message_id or deleted message is acceptable
-
-
-def send_rejection_prompt(cq: dict, listing_id: str) -> None:
-    """Edit the card to show reason picker buttons (per D-11).
-
-    Uses compact callback_data format rr:<reason>:<id> to fit Telegram's 64-byte limit
-    (RESEARCH Risk 2). Reason enum: price / location / condition / other.
-    """
-    try:
-        requests.post(
-            f"{API_BASE}/editMessageCaption",
-            json={
-                "chat_id": cq["message"]["chat"]["id"],
-                "message_id": cq["message"]["message_id"],
-                "caption": "Why reject? Pick a reason:",
-                "reply_markup": {
-                    "inline_keyboard": [[
-                        {"text": "Price",     "callback_data": f"rr:price:{listing_id}"},
-                        {"text": "Location",  "callback_data": f"rr:location:{listing_id}"},
-                        {"text": "Condition", "callback_data": f"rr:condition:{listing_id}"},
-                        {"text": "Other",     "callback_data": f"rr:other:{listing_id}"},
-                    ]]
-                },
-            },
-            timeout=15,
-        )
-    except (requests.RequestException, KeyError):
-        pass
-
-
 def answer_callback_query(callback_query_id: str, text: str = "") -> None:
-    """Acknowledge a callback query to dismiss the Telegram loading spinner (RESEARCH Pitfall 1).
+    """Acknowledge a Telegram callback query and dismiss the loading spinner.
 
-    Must be called before any state change to give the user immediate feedback.
+    Wave 6B: callback_query processing (approve/reject/rr) has been removed from
+    agent_job.py.  This function is kept so that stale cards (sent before deploy)
+    that receive a tap get a friendly reply rather than a 404.  The text shown to
+    the user should explain that triage moved to the dashboard.
     """
     try:
         requests.post(
@@ -364,3 +322,34 @@ def answer_callback_query(callback_query_id: str, text: str = "") -> None:
         )
     except requests.RequestException:
         pass
+
+
+def handle_stale_callback(cq: dict) -> None:
+    """Reply to a stale approve/reject/rr callback from a pre-Wave-6B card.
+
+    Triage has moved to the web Inbox.  We acknowledge the tap with a
+    user-visible notification so the loading spinner disappears and the user
+    understands why nothing happened — best-effort, never raises.
+    """
+    cq_id = cq.get("id", "")
+    try:
+        answer_callback_query(
+            cq_id,
+            "Triage moved to the dashboard — tap Open Inbox on newer cards.",
+        )
+    except Exception:
+        pass  # never-raise
+
+
+# ---------------------------------------------------------------------------
+# Deprecated helpers — kept as no-ops so any lingering import sites don't crash
+# ---------------------------------------------------------------------------
+
+def edit_card_resolved(cq: dict, resolved_caption: str) -> None:  # noqa: ARG001
+    """Removed in Wave 6B — Telegram is notifier-only; no card editing needed."""
+    pass
+
+
+def send_rejection_prompt(cq: dict, listing_id: str) -> None:  # noqa: ARG001
+    """Removed in Wave 6B — rejection happens in the web Inbox, not Telegram."""
+    pass
