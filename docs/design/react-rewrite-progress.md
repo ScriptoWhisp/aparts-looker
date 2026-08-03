@@ -176,15 +176,64 @@ committed in `8100134` (combined as one coherent mobile component).
 
 ---
 
-## Wave 7C — Shortlist tab (PLANNED)
+## Wave 7C — Shortlist tab (COMPLETE)
 
-**Scope:**
-- 284px sidebar: To view / Viewed / Dropped funnel groups
-- Main pane: hero row + verdict band + accordion checklist
-- After-viewing decision bar (Still in / Thinking / Drop)
-- Drop reason modal
-- Gated negotiation card (opacity 0.45 until viewed)
-- Compare overlay (cmd-click multi-select)
+**Date:** 2026-08-04
+**Status:** Complete. Build passes, 166 backend tests passed.
+
+### What shipped
+
+| Area | Detail |
+|------|--------|
+| Layout | `grid grid-cols-[284px_1fr] h-[calc(100vh-48px)]` — sidebar + main pane |
+| SidebarFunnel | 3 collapsible funnel groups: To view / Viewed / Dropped |
+| SidebarRow | 2px score-colored left rule, mono score, title/meta, right status label |
+| StatusPill | Coloured mono pill for all 9 ListingStatus values |
+| SidebarFilter | Input narrows all groups by title substring |
+| HeroRow | 300px photo (184px height) + header block + 4-cell metric strip |
+| Metric strip | All-in cost (accent-lt 34px) · area · score-colored score · monthly |
+| Schedule viewing | Inline datetime-local picker → UTC ISO POST /schedule-viewing |
+| Mark viewed | Button only when viewing_scheduled, POSTs /mark-viewed |
+| VerdictBand | bg-sunken, border-l-2 scoreColor, verdict text, tag counts (flags/unknown/ok) |
+| AfterViewingBar | Renders for viewed/thinking/offer_drafted/dropped; 3 decision buttons |
+| Drop drawer | vaul Drawer with optional reason text input, Confirm/Cancel |
+| Undo drop | Ghost button shown when status=dropped, POST decision=thinking |
+| ChecklistCard | Accordion, flag-first group ordering, AnimatePresence height animation |
+| SignalStrip | One 7×7 rounded square per item colored by state |
+| CollapsedOkRow | Trailing consecutive ok items collapsed: "label1 · label2 · +N more" |
+| AskAtViewing | Unknown items as 11×11 checkbox questions, local state only |
+| NegotiationCard | Gated (opacity-45) for approved/viewing_scheduled; offer range + brief_ru + action buttons |
+| computeAllIn | `frontend/src/lib/cost.ts` — TS port of vanilla Wave 6C logic |
+| rankByAllIn | Sidebar re-sorts when settings.rank_by_all_in === true |
+| Mobile layout | Sidebar/main pane toggle on mobile; ← Back button in main pane |
+| Empty states | "Nothing shortlisted yet" (no entries) + "Select a listing" (no selection) |
+
+### TypeScript notes
+
+- `entry.checklist.groups` typed as `ChecklistGroup[]` in `types/api.ts`. Old entries
+  without `groups` fall through to `buildGroupsFromFills()` which synthesises groups
+  from `ai_checklist_fills` key prefixes. This means no empty-checklist cards for legacy rows.
+- `CostOfOwnership` extended as `CostOfOwnership & Record<string, unknown>` to allow
+  `renovation_override_work_eur` sub-key without widening the named interface.
+- `computeAllIn` reads `settings.fields.find(f => f.key === 'reno_kitchen_full')` — if
+  the backend doesn't include a reno_* key in Settings, the rate silently falls back to 0
+  (no TypeError). Safe for partial settings deploys.
+- `textWrap: 'pretty'` needed a `as React.CSSProperties` cast — not in TS lib types yet
+  but supported in modern browsers.
+
+### Commits
+
+| Hash | Message |
+|------|---------|
+| `5d63c40` | `feat(cost): port computeAllIn helper to TS` |
+| `708bb8d` | `feat(shortlist): sidebar funnel (To view / Viewed / Dropped)` |
+| `0738ad4` | `feat(shortlist): status pills + hero row with all-in cost cell` |
+| `110fb93` | `feat(shortlist): verdict band with score-colored border` |
+| `9b6483d` | `feat(shortlist): after-viewing decision bar (Still in / Thinking / Drop)` |
+| `0c5d73f` | `feat(shortlist): accordion checklist with flag-first ordering + signal strip` |
+| `84b0553` | `feat(shortlist): Ask at the viewing card` |
+| `c3a63ce` | `feat(shortlist): gated Negotiation card` |
+| `dedac5b` | `feat(shortlist): assemble Shortlist route — sidebar + main pane` |
 
 ---
 
