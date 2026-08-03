@@ -523,6 +523,12 @@ def process_ingest_batch(listing_dicts: list[dict]) -> dict:
             # add_to_pending scopes its own session (opens + commits + closes internally)
             data_store.add_to_pending(pending_entry)
 
+            # Persist renovation_items onto checklist.renovation_items (Wave 6C).
+            # Must happen after add_to_pending so the row exists.
+            reno_items = evaluation.get("renovation_items", [])
+            if reno_items:
+                data_store.write_renovation_items(listing.id, reno_items)
+
             # send_pending_card is provided by Plan 02-02. Until then, the lazy
             # getattr fallback returns (None, None) so this module ships before
             # telegram_client grows the new function (never-raise contract).

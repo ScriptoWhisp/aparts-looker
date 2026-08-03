@@ -909,6 +909,42 @@ def write_checklist_ai(listing_id: str, checklist: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Renovation items (Wave 6C all-in cost)
+# ---------------------------------------------------------------------------
+
+def write_renovation_items(listing_id: str, items: list) -> None:
+    """Persist AI-produced renovation_items onto checklist.renovation_items.
+
+    JSONB reassignment convention: builds a fresh checklist dict and assigns
+    the whole column — never mutates in place (Pitfall 1).
+    Never raises — per never-raise contract.
+    """
+    if not isinstance(items, list):
+        log.warning("write_renovation_items: items is not a list for %s — skipping", listing_id)
+        return
+    db_ = SessionLocal()
+    try:
+        row = db_.get(Listing, listing_id)
+        if row is None:
+            log.warning("write_renovation_items: listing %s not found", listing_id)
+            return
+        current = row.checklist or {}
+        new_checklist = dict(current)
+        new_checklist["renovation_items"] = items  # JSONB reassignment (Pitfall 1)
+        row.checklist = new_checklist
+        db_.commit()
+        log.info("write_renovation_items: persisted %d items for %s", len(items), listing_id)
+    except SQLAlchemyError:
+        log.exception("write_renovation_items failed for %s", listing_id)
+        try:
+            db_.rollback()
+        except Exception:
+            pass
+    finally:
+        db_.close()
+
+
+# ---------------------------------------------------------------------------
 # Price history
 # ---------------------------------------------------------------------------
 

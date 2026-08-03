@@ -28,11 +28,64 @@ API_URL = "https://api.anthropic.com/v1/messages"
 # Whitelist of manual-checklist item keys the AI is allowed to auto-fill.
 # Kept in sync with the prompt's checklist_fills section — anything the model
 # returns outside this set is dropped defensively.
+VALID_RENO_KEYS = frozenset({
+    "kitchen_full", "bathroom_full", "windows", "floors",
+    "rewire", "heating", "cosmetic",
+})
+
 AI_FILLABLE_CHECKLIST_KEYS = frozenset({
     "s09_01", "s09_02",
     "s14_01", "s14_02", "s14_03", "s14_04", "s14_05", "s14_09", "s14_10",
     "s16_01", "s16_02", "s16_03", "s16_04",
 })
+
+
+def _validate_renovation_items(raw) -> list:
+    """Validate and sanitise the AI-produced renovation_items array.
+
+    - Drops any item with an unknown key.
+    - Ensures applies is true/false/None (drops malformed).
+    - Ensures confidence is 1/2/3 (clamps to 1 on invalid).
+    - Truncates note to 60 chars.
+    - Returns empty list on any structural failure — never crashes evaluate flow.
+    """
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        log.warning("renovation_items is not a list: %r — treating as empty", type(raw).__name__)
+        return []
+    out = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        key = item.get("key")
+        if key not in VALID_RENO_KEYS:
+            log.warning("renovation_items: unknown key %r — dropped", key)
+            continue
+        applies = item.get("applies")
+        if applies not in (True, False, None):
+            log.warning("renovation_items[%s].applies is %r — treated as null", key, applies)
+            applies = None
+        confidence = item.get("confidence")
+        if confidence not in (1, 2, 3):
+            confidence = 1
+        qty = item.get("qty")
+        if qty is not None:
+            try:
+                qty = float(qty)
+            except (TypeError, ValueError):
+                qty = None
+        note = item.get("note")
+        if note is not None:
+            note = str(note)[:60]
+        out.append({
+            "key": key,
+            "applies": applies,
+            "confidence": confidence,
+            "qty": qty,
+            "note": note,
+        })
+    return out
 
 
 def _whitelist_checklist_fills(raw: dict) -> dict:
@@ -119,7 +172,26 @@ Return STRICTLY valid JSON (no markdown, no ``` fences), with this exact shape:
   }},
   "should_draft_email": <bool — true if score >= 65 and no high-severity blockers>,
   "draft_subject": "<RUSSIAN — email subject if should_draft_email=true, else empty string>",
-  "draft_body": "<RUSSIAN — polite email body asking about condition, remondifond, mandatory extras, viewing availability — if should_draft_email=true, else empty string>"
+  "draft_body": "<RUSSIAN — polite email body asking about condition, remondifond, mandatory extras, viewing availability — if should_draft_email=true, else empty string>",
+  "renovation_items": [
+    // One entry per renovation line-item that is relevant to this listing.
+    // Omit items you cannot form any opinion about — prefer a short list over guessing.
+    {{
+      "key": "<one of: kitchen_full | bathroom_full | windows | floors | rewire | heating | cosmetic>",
+      "applies": true | false | null,
+      "confidence": 1 | 2 | 3,
+      "qty": <number or null>,
+      "note": "<short RU/EE string ≤60 chars explaining evidence, or null>"
+    }}
+    // applies: true = definitely needs this work; false = confirmed NOT needed
+    //          (e.g. renovated 2020, mentioned in listing); null = unknown / can't tell.
+    // confidence: 1 = guess (age/context only), 2 = photo/text signal, 3 = explicit mention.
+    // qty: only for per-unit or per-m² items where you can estimate count/area.
+    //      Use null otherwise (client falls back to 1 for flat-rate items, area_sqm for per-m²).
+    // CRITICAL: NEVER invent a euro figure. Only classify applies/qty.
+    //           Client-side code multiplies qty × rate from user settings.
+    // key MUST be exactly one of the 7 keys listed above — no variations.
+  ]
 }}
 
 HARD RULES — non-negotiable:
@@ -157,6 +229,14 @@ HARD RULES — non-negotiable:
    answer. For anything not covered by the listing, return an empty string "".
    Do NOT invent nearby shops, heating types, or noise levels the description
    does not mention. Empty is the correct answer when unsure.
+
+10. renovation_items: classify only the 7 line-items listed in the schema.
+    - If the listing shows photos of a renovated kitchen, set kitchen_full applies=false confidence=2.
+    - If the listing says "vajab renoveerimist" (needs renovation) with no details,
+      set cosmetic applies=true confidence=1 and floors applies=null confidence=1.
+    - If year_built < 1980 and electrical is not mentioned, set rewire applies=null confidence=1.
+    - NEVER write a euro amount in any note field.
+    - Return an empty array [] if you genuinely cannot form any opinion on any item.
 """
 
 
@@ -324,6 +404,13 @@ in the price_value reason.
     result.setdefault("draft_body", "")
     # Sanitise checklist_fills — drop anything outside the allow-list or empty.
     result["checklist_fills"] = _whitelist_checklist_fills(result.get("checklist_fills", {}))
+    # Validate renovation_items — never crash; bad output → empty list.
+    raw_reno = result.get("renovation_items")
+    result["renovation_items"] = _validate_renovation_items(raw_reno)
+    if raw_reno is not None and not result["renovation_items"] and raw_reno:
+        log.warning(
+            "AI returned renovation_items but all items were invalid/dropped for %s", listing.id
+        )
     return result
 
 
@@ -337,6 +424,7 @@ def _fallback_result(verdict: str) -> dict:
         "risks": [],
         "strengths": [],
         "checklist_fills": {},
+        "renovation_items": [],
         "should_draft_email": False,
         "draft_subject": "",
         "draft_body": "",
