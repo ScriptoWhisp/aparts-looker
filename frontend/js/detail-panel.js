@@ -907,6 +907,31 @@
 
       groupHdr.appendChild(hdrLeft);
 
+      /* Signal strip: one 7×7px square per item, coloured by status.
+       * SPEC §2.5: ok = --s-best, unknown = --faint, flag/warning = --s-bad/--s-weak.
+       * Inserted between the group label block and the count text. */
+      var stripEl = document.createElement("div");
+      stripEl.style.cssText = "display:flex;flex-wrap:wrap;gap:2px;align-items:center;margin:0 10px;flex-shrink:0;max-width:120px;";
+      cat.sections.forEach(function (secId) {
+        (sectionMap[secId] || []).forEach(function (it) {
+          var sk = it.id.startsWith("ai__") ? it.id.slice(4) : it.id;
+          var s = _getChecklistStatus(entry, sk);
+          var sq = document.createElement("span");
+          sq.style.cssText = "display:inline-block;width:7px;height:7px;border-radius:2px;flex-shrink:0;";
+          if (s === "ok") {
+            sq.style.background = "var(--score-85)"; /* --s-best */
+          } else if (s === "issue") {
+            sq.style.background = "var(--score-0)";  /* --s-bad */
+          } else if (s === "warning") {
+            sq.style.background = "var(--score-40)"; /* --s-weak */
+          } else {
+            sq.style.background = "var(--color-neutral-700)"; /* --faint */
+          }
+          stripEl.appendChild(sq);
+        });
+      });
+      groupHdr.appendChild(stripEl);
+
       /* Status count */
       var statusCount = document.createElement("span");
       statusCount.style.cssText = "font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10.5px;color:var(--color-text-muted);margin-right:12px;flex-shrink:0;";
