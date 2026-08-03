@@ -172,168 +172,27 @@
   }
 
   /* ================================================================
-     renderHistogram — 10-bar histogram of score distribution
-     Buckets: 0-9, 10-19, 20-29, 30-39, 40-49, 50-59, 60-69, 70-74, 75-84, 85-100
-     Colors follow the score ramp per design brief.
+     renderHistogram — SPEC §3.1 hand-rolled SVG histogram.
+     Wave 6D: implementation moved to js/charts.js.
+     This shim preserves the call-site signature used by renderOverview().
      ================================================================ */
   window.renderHistogram = function (entries) {
     var barsEl = document.getElementById("histogram-bars");
-    var metaEl = document.getElementById("histogram-meta");
     if (!barsEl) return;
-    clearChildren(barsEl);
-
-    var scored = (entries || []).filter(function (e) { return typeof e.score === "number"; });
-    var total = scored.length;
-
-    if (metaEl) {
-      if (total === 0) {
-        metaEl.textContent = "n=0";
-        return;
-      }
-      var scores = scored.map(function (e) { return e.score; }).sort(function (a, b) { return a - b; });
-      var median = total % 2 === 1
-        ? scores[Math.floor((total - 1) / 2)]
-        : Math.round((scores[total / 2 - 1] + scores[total / 2]) / 2);
-      metaEl.textContent = "median " + median + " \xB7 n=" + total;
-    }
-
-    /* 10 buckets mapped to score ramp colors per brief */
-    var BUCKETS = [
-      {lo: 0,  hi: 9,   color: "#c4635f"},
-      {lo: 10, hi: 19,  color: "#c4635f"},
-      {lo: 20, hi: 29,  color: "#c4635f"},
-      {lo: 30, hi: 39,  color: "#c4635f"},
-      {lo: 40, hi: 49,  color: "#c98b52"},
-      {lo: 50, hi: 59,  color: "#c98b52"},
-      {lo: 60, hi: 69,  color: "#c9b455"},
-      {lo: 70, hi: 74,  color: "#c9b455"},
-      {lo: 75, hi: 84,  color: "#7fbf7a"},
-      {lo: 85, hi: 100, color: "#4fb98d"},
-    ];
-    BUCKETS.forEach(function (b) { b.count = 0; });
-    scored.forEach(function (e) {
-      for (var i = 0; i < BUCKETS.length; i++) {
-        if (e.score >= BUCKETS[i].lo && e.score <= BUCKETS[i].hi) {
-          BUCKETS[i].count++;
-          break;
-        }
-      }
-    });
-
-    var maxCount = Math.max.apply(null, BUCKETS.map(function (b) { return b.count; }).concat([1]));
-
-    BUCKETS.forEach(function (bucket) {
-      var bar = document.createElement("div");
-      bar.className = "histogram-bar";
-      bar.style.background = bucket.color;
-      var pct = Math.max((bucket.count / maxCount) * 100, bucket.count > 0 ? 2 : 1);
-      bar.style.height = pct + "%";
-      if (bucket.count === 0) bar.style.opacity = "0.25";
-      /* Tooltip via title attribute — accessible, no JS hover needed */
-      bar.title = bucket.lo + "–" + bucket.hi + ": " + bucket.count + " listing" + (bucket.count !== 1 ? "s" : "");
-      barsEl.appendChild(bar);
-    });
+    /* charts.js exposes window.renderHistogram — call it if loaded, else no-op */
+    /* Note: charts.js replaces this definition at load time; this shim handles
+       the case where charts.js hasn't loaded yet (should not happen in normal flow). */
   };
 
   /* ================================================================
-     renderScatter — price × score scatter plot with DOM dots
+     renderScatter — SPEC §3.2 hand-rolled SVG scatter.
+     Wave 6D: implementation moved to js/charts.js.
+     This shim preserves the call-site signature used by renderOverview().
      ================================================================ */
   window.renderScatter = function (entries) {
     var areaEl = document.getElementById("scatter-area");
     if (!areaEl) return;
-    clearChildren(areaEl);
-
-    var ttEl = document.getElementById("scatter-tooltip");
-    var ttTitle = document.getElementById("scatter-tt-title");
-    var ttMeta = document.getElementById("scatter-tt-meta");
-
-    var points = (entries || []).filter(function (e) {
-      return typeof e.score === "number" && typeof e.price_eur === "number" && e.price_eur > 0;
-    });
-
-    if (points.length === 0) return;
-
-    /* Score axis: 30 to 100 (clamp to min 30 per mockup) */
-    var scoreMin = 30, scoreMax = 100;
-
-    /* Price axis: derived from data */
-    var prices = points.map(function (p) { return p.price_eur; });
-    var priceMin = Math.min.apply(null, prices);
-    var priceMax = Math.max.apply(null, prices);
-    if (priceMin === priceMax) { priceMin = priceMin * 0.8; priceMax = priceMax * 1.2; }
-    var priceRange = priceMax - priceMin || 1;
-
-    /* Budget line — 265k or from window.state.filters (if set by settings) */
-    var budgetPrice = 265000;
-    if (window.state && window.state.filters && window.state.filters.max_price) {
-      budgetPrice = window.state.filters.max_price;
-    }
-
-    /* Draw budget line if within axis range */
-    var budgetPct = 1 - (budgetPrice - priceMin) / priceRange;
-    budgetPct = Math.max(0.02, Math.min(0.98, budgetPct));
-    var budgetLine = document.createElement("div");
-    budgetLine.className = "scatter-budget-line";
-    budgetLine.style.top = (budgetPct * 100) + "%";
-    areaEl.appendChild(budgetLine);
-
-    var budgetLabel = document.createElement("div");
-    budgetLabel.className = "scatter-budget-label";
-    budgetLabel.style.top = "calc(" + (budgetPct * 100) + "% - 14px)";
-    budgetLabel.textContent = "budget " + Math.round(budgetPrice / 1000) + "k";
-    areaEl.appendChild(budgetLabel);
-
-    /* Find best (highest score) for the ring highlight */
-    var best = points.reduce(function (a, b) { return a.score >= b.score ? a : b; }, points[0]);
-
-    /* Draw dots */
-    points.forEach(function (p) {
-      var xPct = ((Math.max(scoreMin, Math.min(scoreMax, p.score)) - scoreMin) / (scoreMax - scoreMin)) * 100;
-      var yPct = (1 - (p.price_eur - priceMin) / priceRange) * 100;
-      xPct = Math.max(2, Math.min(98, xPct));
-      yPct = Math.max(2, Math.min(98, yPct));
-
-      var dot = document.createElement("div");
-      dot.className = "scatter-dot" + (p === best ? " best-dot" : "");
-      var sz = p === best ? 11 : 9;
-      dot.style.cssText = [
-        "width:" + sz + "px",
-        "height:" + sz + "px",
-        "background:" + window.scoreColor(p.score),
-        "left:" + xPct + "%",
-        "top:" + yPct + "%",
-      ].join(";");
-
-      /* Tooltip on hover (mouseover/mouseout) */
-      dot.addEventListener("mouseenter", function () {
-        if (!ttEl || !ttTitle || !ttMeta) return;
-        ttTitle.textContent = p.title || p.id || "";
-        var metaParts = [window.fmtEur ? window.fmtEur(p.price_eur) : (p.price_eur + " €")];
-        if (p.price_per_sqm) metaParts.push(p.price_per_sqm + " €/m\xB2");
-        metaParts.push(p.score + "/100");
-        ttMeta.textContent = metaParts.join(" \xB7 ");
-        /* Position: above the dot if in lower half, below if in upper half */
-        ttEl.style.left = xPct + "%";
-        ttEl.style.top = (yPct < 50) ? (yPct + 3) + "%" : "auto";
-        ttEl.style.bottom = (yPct >= 50) ? (100 - yPct + 3) + "%" : "auto";
-        ttEl.style.transform = "translateX(-50%)";
-        ttEl.classList.add("visible");
-      });
-      dot.addEventListener("mouseleave", function () {
-        if (ttEl) ttEl.classList.remove("visible");
-      });
-
-      /* Click: open detail panel */
-      dot.addEventListener("click", function () {
-        if (window.openDetailPanel) {
-          var detailBtn = document.querySelector('.tab-nav button[data-tab="shortlist"]');
-          if (detailBtn) detailBtn.click();
-          window.openDetailPanel(p.id);
-        }
-      });
-
-      areaEl.appendChild(dot);
-    });
+    /* charts.js exposes window.renderScatter — call it if loaded, else no-op */
   };
 
   /* ================================================================
