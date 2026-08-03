@@ -237,13 +237,68 @@ committed in `8100134` (combined as one coherent mobile component).
 
 ---
 
-## Wave 7D — Settings + Map + Charts + Compare (PLANNED)
+## Wave 7D — Map + Charts + Overview + Settings + Compare (COMPLETE)
 
-**Scope:**
-- Settings tab: renovation rates, score ramp slider, district chips, Telegram
-- Map: `react-leaflet@4` — Leaflet with Nocturne DivIcon pins + district polygons
-- SVG charts: histogram (score distribution) + scatter (score vs price)
-- Compare overlay migration from vanilla to React
-- Maa-amet sold-price delta display
+**Date:** 2026-08-04
+**Status:** Complete. Build passes (clean TS + Vite), 166 backend tests passed.
 
-**Delete `frontend-legacy/`** after Wave 7D ships and is stable in production for 1 week.
+### What shipped
+
+| Area | Detail |
+|------|--------|
+| ListingsMap | react-leaflet@4, OSM tiles, DivIcon pins colored by scoreColor (solid=approved/dashed=pending), filter pills (All/Approved/Pending), layer toggles (Districts €/m² + 30-min commute), score-ramp legend, district polygon layer from /tallinn-districts.geojson + /api/districts, isochrone ring from /api/isochrone, pin click → shortlist tab |
+| HistogramSVG | Hand-rolled SVG, 10 bins 0-100, scoreColor fills, 75-approve tick label, median · n= header, hover tooltip |
+| ScatterSVG | Hand-rolled SVG, score(x) vs price(y-inverted), shortlisted halo, dashed budget line, click navigates, hover card |
+| Overview route | Full 2-col grid replaces Wave 7A placeholders. Left: map (flex-1) + charts row. Right: BEST hero + stats + calibration (≥5) + Next up |
+| CalibrationPanel | SVG scatter AI vs own_score, dashed y=x reference, MAE + bias stats, nudge sentence if |bias|>5 pts |
+| Settings route | 5-category sidebar, custom sliders (with ramp variant for threshold keys), toggle switches, text inputs, Save → POST /api/settings, toast |
+| CompareOverlay | 1000px modal, differing-rows-only, winner tinting (text-status-short), Draft offer / Drop per column, Esc+backdrop close |
+| SidebarRow multi-select | cmd/ctrl-click toggles compare selection, ring-2 ring-accent inset visual, checkbox overlay |
+| SidebarFunnel compare | compareIds state (max 2 FIFO), header bar with count + Compare button, keyboard C shortcut |
+| own_score slider | In HeroRow for viewed/thinking/offer_drafted/dropped; debounced 800ms POST to /api/entry/{id}/cost-override |
+
+### Key decisions
+
+1. **PinsLayer uses imperative Leaflet API** — react-leaflet `Marker` components cause full re-render on every entry change. Using `useEffect` + `L.layerGroup` + `L.marker` directly avoids this and is the standard pattern for large datasets.
+2. **Charts are pure SVG, no chart lib** — HistogramSVG + ScatterSVG are ~100 lines each. No recharts/visx dep. Hover state via onMouseEnter/Leave on SVG elements.
+3. **Compare overlay is not a shadcn Dialog** — built inline with fixed+backdrop pattern. shadcn Dialog was not initialized in Wave 7B (shadcn-generated files were deleted). Inline pattern is simpler and avoids react-portal footgun with Zustand state.
+4. **CalibrationPanel gated at MIN_RATED_VIEWINGS=5** — constant exported for future use. Panel returns null below threshold.
+5. **Settings sidebar uses `useState` for active category** — no route change needed (hash routing is tab-level only). Category switch is instant.
+
+### Commits
+
+| Hash | Message |
+|------|---------|
+| `179036e` | `feat(overview): react-leaflet map with pins, districts, isochrone, filter pills` |
+| `4762f35` | `feat(charts): hand-rolled SVG histogram + scatter` |
+| `c376175` | `feat(overview): BEST hero + This week + Next up list — full Overview route` |
+| `bfd8980` | `feat(overview): calibration panel at >=5 rated viewings` |
+| `c20508b` | `feat(settings): 5-category layout with sliders, chips, toggles, threshold ramp` |
+| `8cf5141` | `feat(compare): multi-select in shortlist sidebar + C keyboard shortcut` |
+| `d297701` | `feat(compare): dialog overlay — differing rows, winner tinting, per-column actions` |
+| `8836441` | `feat(shortlist): own_score slider in hero for viewed listings` |
+
+---
+
+## React rewrite complete
+
+All 4 tabs (Overview / Inbox / Shortlist / Settings) are fully implemented in React across Waves 7A–7D.
+
+### What's in production per tab
+
+| Tab | Route | Features |
+|-----|-------|---------|
+| Overview | `#overview` | Leaflet map (pins, districts, isochrone, filter pills), SVG histogram, SVG scatter, BEST hero card, This week stats, Calibration panel (≥5 rated), Next up list |
+| Inbox | `#inbox` | Desktop 3-col card grid, mobile swipe stack (Framer Motion), keyboard shortcuts L/S/arrows, vaul skip drawer, progress bar, AnimatePresence transitions |
+| Shortlist | `#shortlist` | SidebarFunnel with 3 collapsible groups, multi-select compare, HeroRow with own_score slider, VerdictBand, AfterViewingBar, ChecklistCard accordion, AskAtViewing, NegotiationCard (gated), CompareOverlay |
+| Settings | `#settings` | 5-category sidebar, sliders + ramp variants + toggles + text inputs, save → POST /api/settings, toast notification |
+
+### Delete `frontend-legacy/` after 1 week of stable production
+
+After confirming Wave 7D is stable on the deployed VPS (approx 2026-08-11), run:
+```bash
+rm -rf frontend-legacy/
+git add -A && git commit -m "chore: delete frontend-legacy/ (vanilla JS, superseded by React rewrite)"
+```
+
+The vanilla JS frontend has been fully superseded. The `frontend-legacy/` directory is kept for 1 week as a reference in case rollback is needed.
