@@ -3002,6 +3002,332 @@
   }
 
   /* ══════════════════════════════════════════════════════════
+     Wave 6B — Mobile Inbox: single-card triage (≤768px)
+     ══════════════════════════════════════════════════════════ */
+
+  /* Mobile Inbox root shell — replaces the pq-grid at narrow widths */
+  .mi-root {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 48px);
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Progress bar row at the top */
+  .mi-progress-bar-wrap {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px 6px;
+  }
+  .mi-progress-label {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 11px;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+  }
+  .mi-progress-segments {
+    display: flex;
+    gap: 3px;
+    flex: 1;
+  }
+  .mi-progress-seg {
+    flex: 1;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--color-hairline);
+  }
+  .mi-progress-seg.filled {
+    background: var(--color-accent);
+  }
+
+  /* Card stack area — grows to fill remaining space above actions */
+  .mi-stack {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    margin: 0 12px;
+    min-height: 0;
+  }
+
+  /* The visible front card */
+  .mi-card {
+    position: absolute;
+    inset: 0;
+    background: var(--color-sunken);
+    border-radius: var(--radius-md);
+    box-shadow: inset 0 0 0 1px var(--color-hairline);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    z-index: 2;
+  }
+
+  /* Peek card — sits 6px behind */
+  .mi-card-peek {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 6px;
+    bottom: -6px;
+    background: var(--color-sunken);
+    border-radius: var(--radius-md);
+    box-shadow: inset 0 0 0 1px var(--color-hairline);
+    z-index: 1;
+  }
+
+  /* Card photo */
+  .mi-photo {
+    position: relative;
+    height: 180px;
+    background: linear-gradient(150deg, #2a2d3d, #191b28);
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .mi-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .mi-photo-placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font: 400 11px Inter, system-ui, sans-serif;
+    color: #4a4d5c;
+  }
+  .mi-score-badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-weight: 500;
+    font-size: 16px;
+    padding: 2px 8px;
+    border-radius: 5px;
+    color: #fff;
+  }
+  .mi-score-badge[data-score-bucket="bad"]   { background: var(--score-0); }
+  .mi-score-badge[data-score-bucket="poor"]  { background: var(--score-40); }
+  .mi-score-badge[data-score-bucket="ok"]    { background: var(--score-60); }
+  .mi-score-badge[data-score-bucket="good"]  { background: var(--score-75); }
+  .mi-score-badge[data-score-bucket="great"] { background: var(--score-85); }
+
+  /* Card body — scrollable */
+  .mi-card-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-height: 0;
+  }
+  .mi-card-title {
+    font: 500 15px/1.3 Inter, system-ui, sans-serif;
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .mi-card-meta {
+    font: 400 11.5px Inter, system-ui, sans-serif;
+    color: var(--color-text-muted);
+  }
+  .mi-price-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .mi-price {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-weight: 500;
+    font-size: 18px;
+    color: var(--color-text);
+    white-space: nowrap;
+  }
+  .mi-price-sqm {
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 11px;
+    color: var(--color-text-muted);
+  }
+  .mi-verdict {
+    font: 400 13px/1.5 Inter, system-ui, sans-serif;
+    color: var(--color-text-secondary);
+    border-left: 2px solid var(--score-60);
+    padding-left: 8px;
+    text-wrap: pretty;
+  }
+
+  /* Bottom action block — pinned */
+  .mi-actions {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 12px 14px;
+    background: var(--color-app-bg);
+    box-shadow: inset 0 1px 0 var(--color-hairline);
+  }
+  .mi-btn {
+    width: 100%;
+    border: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: Inter, system-ui, sans-serif;
+    min-height: 48px;
+    transition: opacity var(--t-fast, 120ms);
+  }
+  .mi-btn:active { opacity: 0.75; }
+  .mi-btn-look {
+    background: var(--color-accent);
+    color: #fff;
+    font-size: 17px;
+    font-weight: 500;
+  }
+  .mi-btn-skip {
+    background: rgba(255,255,255,.06);
+    color: var(--color-text-secondary);
+    font-size: 15px;
+    box-shadow: inset 0 0 0 1px var(--color-hairline);
+  }
+  .mi-btn-later {
+    background: none;
+    color: var(--color-text-muted);
+    font-size: 14px;
+    min-height: 40px;
+    border-radius: var(--radius-md);
+  }
+  .mi-btn-later:hover { color: var(--color-text-secondary); }
+
+  /* Bottom sheet for skip reason */
+  .mi-sheet-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: rgba(15,17,28,.55);
+    display: flex;
+    align-items: flex-end;
+    animation: mi-overlay-in 120ms var(--ease, cubic-bezier(.2,.7,.3,1));
+  }
+  @keyframes mi-overlay-in { from { opacity: 0; } to { opacity: 1; } }
+
+  .mi-sheet {
+    width: 100%;
+    background: var(--color-surface);
+    border-radius: 14px 14px 0 0;
+    padding: 10px 16px 28px;
+    box-shadow: 0 -8px 32px rgba(0,0,0,.45);
+    animation: mi-sheet-in 200ms var(--ease, cubic-bezier(.2,.7,.3,1));
+  }
+  @keyframes mi-sheet-in { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+  .mi-sheet-handle {
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--color-border);
+    margin: 0 auto 14px;
+  }
+  .mi-sheet-title {
+    font: 500 15px Inter, system-ui, sans-serif;
+    color: var(--color-text);
+    margin: 0 0 4px;
+  }
+  .mi-sheet-sub {
+    font: 400 12px Inter, system-ui, sans-serif;
+    color: var(--color-text-muted);
+    margin: 0 0 14px;
+  }
+  .mi-sheet-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .mi-chip {
+    padding: 9px 14px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-hairline);
+    background: rgba(255,255,255,.04);
+    color: var(--color-text-secondary);
+    font: 400 13px Inter, system-ui, sans-serif;
+    cursor: pointer;
+    transition: background var(--t-fast, 120ms), border-color var(--t-fast, 120ms);
+  }
+  .mi-chip.selected {
+    background: rgba(145,132,217,.18);
+    border-color: rgba(145,132,217,.5);
+    color: var(--color-accent-lt, #b5abfc);
+  }
+  .mi-sheet-footer {
+    display: flex;
+    gap: 8px;
+  }
+  .mi-sheet-dismiss {
+    flex: 1;
+    padding: 10px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-hairline);
+    background: none;
+    color: var(--color-text-muted);
+    font: 400 13px Inter, system-ui, sans-serif;
+    cursor: pointer;
+    min-height: 44px;
+  }
+  .mi-sheet-auto {
+    flex-shrink: 0;
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    font-size: 11px;
+    color: var(--color-text-muted);
+    align-self: center;
+  }
+
+  /* Cleared state */
+  .mi-cleared {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: calc(100vh - 48px);
+    padding: 24px;
+    gap: 12px;
+    text-align: center;
+  }
+  .mi-cleared-heading {
+    font: 500 20px/1.2 Inter, system-ui, sans-serif;
+    color: var(--color-text);
+    margin: 0;
+  }
+  .mi-cleared-sub {
+    font: 400 13px/1.5 Inter, system-ui, sans-serif;
+    color: var(--color-text-secondary);
+    margin: 0;
+    max-width: 300px;
+  }
+  .mi-cleared-btn {
+    margin-top: 8px;
+    padding: 14px 24px;
+    border-radius: var(--radius-md);
+    background: var(--color-accent);
+    color: #fff;
+    font: 500 15px Inter, system-ui, sans-serif;
+    border: none;
+    cursor: pointer;
+    min-height: 48px;
+    min-width: 180px;
+  }
+  .mi-cleared-btn:active { opacity: 0.8; }
+
+  /* ══════════════════════════════════════════════════════════
      Wave 5C — Shortlist tab: sidebar funnel + decision bar
      + accordion checklist + Ask at the viewing card
      ══════════════════════════════════════════════════════════ */
@@ -4459,6 +4785,421 @@
 
   /* Legacy alias for backward compat — external code calling renderPendingGrid() still works */
   function renderPendingGrid() { renderInboxGrid(); }
+
+  /* ============================== WAVE 6B: MOBILE INBOX ============================== */
+  /* Uses matchMedia to decide whether to render the mobile single-card layout.
+     Called from renderInboxGrid() when the viewport is ≤768px.               */
+
+  var _mobileQuery = window.matchMedia("(max-width: 768px)");
+
+  /* Track per-session skip/look-closer counts for the cleared state summary */
+  var _miSession = { triaged: 0, shortlisted: 0, skipped: 0, queue: [], idx: 0 };
+
+  /* Main entry point — renders mobile inbox into #inbox-grid-root */
+  function _renderMobileInbox() {
+    var root = document.getElementById("inbox-grid-root");
+    if (!root) return;
+    while (root.firstChild) root.removeChild(root.firstChild);
+
+    var entries = (window.state.pending || []).slice()
+      .sort(function(a, b) { return (b.score || 0) - (a.score || 0); });
+
+    /* Cleared state: no pending entries left */
+    if (entries.length === 0) {
+      root.appendChild(_buildMobileCleared());
+      return;
+    }
+
+    /* Re-use or reset queue when data is fresh */
+    if (_miSession.queue.length !== entries.length ||
+        JSON.stringify(_miSession.queue.map(function(e) { return e.id; })) !==
+        JSON.stringify(entries.map(function(e) { return e.id; }))) {
+      _miSession.queue = entries;
+      _miSession.idx = 0;
+    }
+
+    /* If all cards have been cycled through, show cleared */
+    if (_miSession.idx >= _miSession.queue.length) {
+      root.appendChild(_buildMobileCleared());
+      return;
+    }
+
+    var total = _miSession.queue.length;
+    var done  = _miSession.idx;
+    var entry = _miSession.queue[_miSession.idx];
+
+    /* Shell */
+    var shell = document.createElement("div");
+    shell.className = "mi-root";
+
+    /* Progress row */
+    shell.appendChild(_buildMobileProgress(done, total));
+
+    /* Card stack */
+    var stack = document.createElement("div");
+    stack.className = "mi-stack";
+
+    /* Peek card (behind) — only shown when there's a next card */
+    if (done + 1 < total) {
+      var peek = document.createElement("div");
+      peek.className = "mi-card-peek";
+      stack.appendChild(peek);
+    }
+
+    /* Front card */
+    stack.appendChild(_buildMobileCard(entry));
+    shell.appendChild(stack);
+
+    /* Actions */
+    shell.appendChild(_buildMobileActions(entry));
+
+    root.appendChild(shell);
+  }
+
+  /* Progress indicator: "N of M" + 6-segment bar */
+  function _buildMobileProgress(done, total) {
+    var wrap = document.createElement("div");
+    wrap.className = "mi-progress-bar-wrap";
+
+    var label = document.createElement("div");
+    label.className = "mi-progress-label";
+    label.textContent = (done + 1) + " of " + total;
+    wrap.appendChild(label);
+
+    /* 6-segment bar (spec §2.3) — filled proportionally */
+    var segs = document.createElement("div");
+    segs.className = "mi-progress-segments";
+    var NUM_SEGS = 6;
+    var filled = Math.round((done / total) * NUM_SEGS);
+    for (var i = 0; i < NUM_SEGS; i++) {
+      var seg = document.createElement("div");
+      seg.className = "mi-progress-seg" + (i < filled ? " filled" : "");
+      segs.appendChild(seg);
+    }
+    wrap.appendChild(segs);
+
+    return wrap;
+  }
+
+  /* Single card */
+  function _buildMobileCard(entry) {
+    var bucket = window.scoreBucket(entry.score || 0);
+
+    var card = document.createElement("div");
+    card.className = "mi-card";
+
+    /* Photo */
+    var photo = document.createElement("div");
+    photo.className = "mi-photo";
+    var imgUrl = entry.image_url || entry.imageUrl || "";
+    if (imgUrl && (imgUrl.startsWith("http://") || imgUrl.startsWith("https://"))) {
+      var img = document.createElement("img");
+      img.src = imgUrl;
+      img.alt = "";
+      img.loading = "lazy";
+      photo.appendChild(img);
+    } else {
+      var ph = document.createElement("div");
+      ph.className = "mi-photo-placeholder";
+      ph.textContent = "no photo";
+      photo.appendChild(ph);
+    }
+    if (entry.score != null) {
+      var badge = document.createElement("div");
+      badge.className = "mi-score-badge";
+      badge.dataset.scoreBucket = bucket;
+      badge.textContent = String(entry.score);
+      photo.appendChild(badge);
+    }
+    card.appendChild(photo);
+
+    /* Body */
+    var body = document.createElement("div");
+    body.className = "mi-card-body";
+
+    var titleEl = document.createElement("div");
+    titleEl.className = "mi-card-title";
+    titleEl.textContent = entry.title || entry.url || "(untitled)";
+    body.appendChild(titleEl);
+
+    var metaParts = [];
+    if (entry.district) metaParts.push(entry.district);
+    if (entry.area_sqm) metaParts.push(entry.area_sqm + " m²");
+    if (entry.year_built || entry.year) metaParts.push(String(entry.year_built || entry.year));
+    if (entry.floor && entry.total_floors) metaParts.push(entry.floor + "/" + entry.total_floors + " fl.");
+    if (metaParts.length) {
+      var metaEl = document.createElement("div");
+      metaEl.className = "mi-card-meta";
+      metaEl.textContent = metaParts.join(" · ");
+      body.appendChild(metaEl);
+    }
+
+    var priceVal = entry.price_eur || entry.price;
+    if (priceVal) {
+      var priceRow = document.createElement("div");
+      priceRow.className = "mi-price-row";
+      var priceEl = document.createElement("span");
+      priceEl.className = "mi-price";
+      priceEl.textContent = window.fmtEur ? window.fmtEur(priceVal) : (priceVal + " €");
+      priceRow.appendChild(priceEl);
+      if (entry.price_per_sqm) {
+        var sqmEl = document.createElement("span");
+        sqmEl.className = "mi-price-sqm";
+        sqmEl.textContent = entry.price_per_sqm + " €/m²";
+        priceRow.appendChild(sqmEl);
+      }
+      body.appendChild(priceRow);
+    }
+
+    if (entry.verdict) {
+      var verdictEl = document.createElement("div");
+      verdictEl.className = "mi-verdict";
+      verdictEl.style.borderLeftColor = window.scoreColor ? window.scoreColor(entry.score) : "var(--score-60)";
+      verdictEl.textContent = entry.verdict;
+      body.appendChild(verdictEl);
+    }
+
+    card.appendChild(body);
+    return card;
+  }
+
+  /* Action block pinned to bottom of screen */
+  function _buildMobileActions(entry) {
+    var actions = document.createElement("div");
+    actions.className = "mi-actions";
+
+    /* Look closer — primary */
+    var lookBtn = document.createElement("button");
+    lookBtn.type = "button";
+    lookBtn.className = "mi-btn mi-btn-look";
+    lookBtn.textContent = "Look closer";
+    lookBtn.addEventListener("click", function() {
+      lookBtn.disabled = true;
+      lookBtn.style.opacity = "0.5";
+      fetch("/api/pending/" + encodeURIComponent(entry.id) + "/approve", {method: "POST"})
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.ok || d.status) {
+            _miSession.idx++;
+            _miSession.shortlisted++;
+            _miSession.triaged++;
+            window.loadData();
+            /* Switch to shortlist + open panel after data refreshes */
+            setTimeout(function() {
+              window.location.hash = "shortlist";
+              if (window.openDetailPanel) window.openDetailPanel(entry.id);
+            }, 350);
+          } else {
+            lookBtn.disabled = false;
+            lookBtn.style.opacity = "";
+            window.loadData();
+          }
+        })
+        .catch(function() {
+          lookBtn.disabled = false;
+          lookBtn.style.opacity = "";
+        });
+    });
+    actions.appendChild(lookBtn);
+
+    /* Skip — secondary */
+    var skipBtn = document.createElement("button");
+    skipBtn.type = "button";
+    skipBtn.className = "mi-btn mi-btn-skip";
+    skipBtn.textContent = "Skip";
+    skipBtn.addEventListener("click", function() {
+      _showMobileSkipSheet(entry, function(reason) {
+        /* reason may be null — silent path is fine */
+        fetch("/api/pending/" + encodeURIComponent(entry.id) + "/reject", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({reason: reason}),
+        })
+          .then(function() {
+            _miSession.idx++;
+            _miSession.skipped++;
+            _miSession.triaged++;
+            window.loadData();
+          })
+          .catch(function() { window.loadData(); });
+      });
+    });
+    actions.appendChild(skipBtn);
+
+    /* Later — ghost, cycles card to back of queue */
+    var laterBtn = document.createElement("button");
+    laterBtn.type = "button";
+    laterBtn.className = "mi-btn mi-btn-later";
+    laterBtn.textContent = "Later";
+    laterBtn.addEventListener("click", function() {
+      /* Move current entry to end of queue without a backend call */
+      var item = _miSession.queue.splice(_miSession.idx, 1)[0];
+      _miSession.queue.push(item);
+      /* Keep idx at same position (next card slides in), but clamp to end */
+      if (_miSession.idx >= _miSession.queue.length) _miSession.idx = 0;
+      _renderMobileInbox();
+    });
+    actions.appendChild(laterBtn);
+
+    return actions;
+  }
+
+  /* Bottom sheet for skip reason */
+  function _showMobileSkipSheet(entry, onCommit) {
+    var overlay = document.createElement("div");
+    overlay.className = "mi-sheet-overlay";
+
+    var sheet = document.createElement("div");
+    sheet.className = "mi-sheet";
+
+    var handle = document.createElement("div");
+    handle.className = "mi-sheet-handle";
+    sheet.appendChild(handle);
+
+    var title = document.createElement("div");
+    title.className = "mi-sheet-title";
+    title.textContent = "Skipped — what put you off?";
+    sheet.appendChild(title);
+
+    var sub = document.createElement("div");
+    sub.className = "mi-sheet-sub";
+    sub.textContent = "Optional. It only tunes future scoring.";
+    sheet.appendChild(sub);
+
+    var chipsWrap = document.createElement("div");
+    chipsWrap.className = "mi-sheet-chips";
+
+    var REASONS = [
+      {label: "Price",     value: "price"},
+      {label: "Location",  value: "location"},
+      {label: "Condition", value: "condition"},
+      {label: "Layout",    value: "layout"},
+      {label: "Building",  value: "building"},
+      {label: "Other",     value: "other"},
+    ];
+    var selectedReason = null;
+    var committed = false;
+    var cancelled = false;
+
+    REASONS.forEach(function(r) {
+      var chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "mi-chip";
+      chip.textContent = r.label;
+      chip.addEventListener("click", function() {
+        selectedReason = r.value;
+        chipsWrap.querySelectorAll(".mi-chip").forEach(function(c) {
+          c.classList.toggle("selected", c === chip);
+        });
+        /* Selecting a reason auto-commits after a brief moment */
+        clearTimeout(autoTimer);
+        setTimeout(function() { _close(r.value); }, 300);
+      });
+      chipsWrap.appendChild(chip);
+    });
+    sheet.appendChild(chipsWrap);
+
+    /* Footer: dismiss (no reason) + auto-close countdown */
+    var footer = document.createElement("div");
+    footer.className = "mi-sheet-footer";
+
+    var dismissBtn = document.createElement("button");
+    dismissBtn.type = "button";
+    dismissBtn.className = "mi-sheet-dismiss";
+    dismissBtn.textContent = "Skip without reason";
+    dismissBtn.addEventListener("click", function() { _close(null); });
+    footer.appendChild(dismissBtn);
+
+    var autoLabel = document.createElement("div");
+    autoLabel.className = "mi-sheet-auto";
+    autoLabel.textContent = "8s";
+    footer.appendChild(autoLabel);
+
+    sheet.appendChild(footer);
+    overlay.appendChild(sheet);
+    document.body.appendChild(overlay);
+
+    var remaining = 8;
+    var autoTimer = setInterval(function() {
+      if (committed || cancelled) { clearInterval(autoTimer); return; }
+      remaining--;
+      autoLabel.textContent = remaining + "s";
+      if (remaining <= 0) { clearInterval(autoTimer); _close(null); }
+    }, 1000);
+
+    function _close(reason) {
+      if (committed) return;
+      committed = true;
+      clearInterval(autoTimer);
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      onCommit(reason);
+    }
+
+    /* Close on overlay click-outside */
+    overlay.addEventListener("click", function(ev) {
+      if (ev.target === overlay) _close(null);
+    });
+  }
+
+  /* Cleared state: all inbox items have been triaged */
+  function _buildMobileCleared() {
+    var n = _miSession.triaged;
+    var x = _miSession.shortlisted;
+    var y = _miSession.skipped;
+
+    var wrap = document.createElement("div");
+    wrap.className = "mi-cleared";
+
+    var heading = document.createElement("h2");
+    heading.className = "mi-cleared-heading";
+    heading.textContent = "Inbox cleared";
+    wrap.appendChild(heading);
+
+    var sub = document.createElement("p");
+    sub.className = "mi-cleared-sub";
+    if (n > 0) {
+      sub.textContent = "You triaged " + n + " in this session: " +
+        x + " shortlisted \xB7 " + y + " skipped";
+    } else {
+      sub.textContent = "Nothing new in the inbox right now.";
+    }
+    wrap.appendChild(sub);
+
+    /* Shortlist count from live data */
+    var shortlistCount = (window.state.properties || []).length;
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "mi-cleared-btn";
+    btn.textContent = "Open shortlist \xB7 " + shortlistCount;
+    btn.addEventListener("click", function() {
+      _miSession = { triaged: 0, shortlisted: 0, skipped: 0, queue: [], idx: 0 };
+      window.location.hash = "shortlist";
+    });
+    wrap.appendChild(btn);
+
+    return wrap;
+  }
+
+  /* ── Patch renderInboxGrid to branch on mobile ── */
+  var _renderInboxGridDesktop = renderInboxGrid;
+  renderInboxGrid = function() {
+    if (_mobileQuery.matches) {
+      _renderMobileInbox();
+    } else {
+      _renderInboxGridDesktop();
+    }
+  };
+  /* Ensure alias stays in sync */
+  window.renderPendingGrid = renderInboxGrid;
+
+  /* Listen for orientation/resize so the layout re-renders when crossing breakpoint */
+  _mobileQuery.addEventListener("change", function() {
+    /* Only re-render when inbox tab is active */
+    var activeTab = document.querySelector(".tab-nav button.active");
+    if (activeTab && activeTab.dataset.tab === "inbox") {
+      renderInboxGrid();
+    }
+  });
 
     /* Wave 5B: Rejected tab removed. Rejected items will appear in Shortlist sidebar (Wave 5C). */
   function renderRejectedGrid() { /* no-op */ }
