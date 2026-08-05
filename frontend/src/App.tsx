@@ -12,11 +12,19 @@
 
 import { useEffect } from 'react'
 import { Shell } from './components/layout/Shell'
+import { ErrorBoundary } from './components/layout/ErrorBoundary'
 import { Overview } from './routes/Overview'
 import { Inbox } from './routes/Inbox'
 import { Shortlist } from './routes/Shortlist'
 import { Settings } from './routes/Settings'
-import { useAppStore } from './lib/state'
+import { useAppStore, type TabId } from './lib/state'
+
+const ROUTES: Record<TabId, { label: string; Component: () => JSX.Element }> = {
+  overview:  { label: 'Overview',  Component: Overview },
+  inbox:     { label: 'Inbox',     Component: Inbox },
+  shortlist: { label: 'Shortlist', Component: Shortlist },
+  settings:  { label: 'Settings',  Component: Settings },
+}
 
 export function App() {
   const { activeTab, syncFromHash } = useAppStore()
@@ -28,17 +36,16 @@ export function App() {
     return () => window.removeEventListener('hashchange', handler)
   }, [syncFromHash])
 
-  // Render the active tab's route
-  const RouteComponent = {
-    overview:  Overview,
-    inbox:     Inbox,
-    shortlist: Shortlist,
-    settings:  Settings,
-  }[activeTab]
+  const route = ROUTES[activeTab]
+  const RouteComponent = route.Component
 
   return (
     <Shell>
-      <RouteComponent />
+      {/* Keyed on activeTab so switching tabs resets the boundary — a fresh
+          error state per tab instead of a sticky "Retry" that doesn't remount. */}
+      <ErrorBoundary key={activeTab} label={route.label}>
+        <RouteComponent />
+      </ErrorBoundary>
     </Shell>
   )
 }
