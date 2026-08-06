@@ -21,7 +21,7 @@ import type { Entry, SettingsData, RenovationItem } from '../types/api'
 
 /** Extract a numeric setting value by key from SettingsData.fields */
 function settingNum(settings: SettingsData | undefined, key: string, fallback = 0): number {
-  const field = settings?.fields.find((f) => f.key === key)
+  const field = settings?.fields?.find((f) => f.key === key)
   if (!field) return fallback
   const v = field.value
   if (typeof v === 'number') return v
@@ -120,7 +120,7 @@ export function rankByAllIn(
   entries: Entry[],
   settings: SettingsData | undefined,
 ): Entry[] {
-  const rankSetting = settings?.fields.find((f) => f.key === 'rank_by_all_in')
+  const rankSetting = settings?.fields?.find((f) => f.key === 'rank_by_all_in')
   if (!rankSetting || rankSetting.value !== true) {
     // Default: sort by score descending
     return [...entries].sort((a, b) => (b.score ?? 0) - (a.score ?? 0))

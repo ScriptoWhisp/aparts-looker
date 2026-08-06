@@ -85,7 +85,7 @@ export function ScatterSVG({ entries, settings }: ScatterSVGProps) {
   const priceMax = Math.max(...prices)
 
   // Budget ceiling from settings or default 265k
-  const budgetField = settings?.fields.find((f) => f.key === 'max_price_eur')
+  const budgetField = settings?.fields?.find((f) => f.key === 'max_price_eur')
   const budget = typeof budgetField?.value === 'number' ? budgetField.value : 265_000
   const budgetY = scaleY(budget, priceMin, priceMax)
   const showBudgetLine = budget >= priceMin && budget <= priceMax * 1.1
