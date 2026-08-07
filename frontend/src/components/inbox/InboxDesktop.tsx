@@ -260,9 +260,10 @@ export function InboxDesktop({ entries }: InboxDesktopProps) {
   }, [queue.length, selectedIndex])
 
   async function handleLookCloser(id: string) {
+    const entry = queue.find((e) => e.id === id)
     try {
       await approveEntry(id)
-      recordLookCloser(id)
+      recordLookCloser(id, entry?.title ?? id, entry?.score ?? null)
       void client.invalidateQueries({ queryKey: QUERY_KEYS.appData })
       setSelectedListingId(id)
       setTab('shortlist')
@@ -276,9 +277,10 @@ export function InboxDesktop({ entries }: InboxDesktopProps) {
   }
 
   async function confirmSkip(id: string, reason: string | null) {
+    const entry = queue.find((e) => e.id === id)
     try {
       await rejectEntry(id, reason ?? undefined)
-      recordSkip(id)
+      recordSkip(id, entry?.title ?? id, entry?.score ?? null, reason ?? undefined)
       void client.invalidateQueries({ queryKey: QUERY_KEYS.appData })
     } catch (err) {
       console.error('reject failed', err)
