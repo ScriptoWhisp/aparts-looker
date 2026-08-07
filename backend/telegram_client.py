@@ -8,6 +8,18 @@ button that routes directly to the Inbox tab (`#inbox`).  All triage happens in 
 web app.  Callback_query processing (approve:/reject:/rr:) has been deleted from
 agent_job.py — if a stale pre-deploy card triggers a callback, answer_callback_query
 returns a user-friendly message and no state is mutated.
+
+Wave 8B: Two-message flow per scrape run.
+  1. Full photo card(s) for the top hit(s) (score >= TELEGRAM_MIN_SCORE_PHOTO).
+     Caption format: "{score} · {title}\n{price} € · {area} m² · {district}\n\n{verdict}\n\nOpen in Aparts Looker ↗"
+     No inline_keyboard at all — the deep-link is in the caption body.
+  2. Digest follow-up ("N more above X today. Open inbox ↗") for anything that
+     qualified for text-tier but was not sent as a photo card, including overflow
+     when photo-tier hits exceed TELEGRAM_PHOTO_CARDS_PER_RUN (default 3).
+
+  process_ingest_batch() in ingest_handler.py orchestrates the two-pass logic;
+  send_pending_card() now handles photo-tier only; send_digest() handles the digest.
+  Text-tier per-listing sends removed entirely.
 """
 
 from __future__ import annotations
@@ -174,19 +186,40 @@ def _telegram_is_silenced() -> tuple[bool, str]:
     return False, ""
 
 
+def _build_inbox_url() -> str:
+    """Return the Inbox deep-link URL (WEB_BASE_URL + /#inbox), or "" if not configured.
+
+    Read via config.WEB_BASE_URL at call time (not import time) so hot-edits via
+    /api/settings take effect without a restart.
+    """
+    if not config.WEB_BASE_URL:
+        return ""
+    base = config.WEB_BASE_URL.rstrip("/")
+    if not base.startswith("http"):
+        base = "https://" + base
+    return f"{base}/#inbox"
+
+
 def send_pending_card(listing: Listing, evaluation: dict) -> tuple[int | None, int | None]:
-    """Tiered pending notification. Returns (message_id, chat_id) or (None, None).
+    """Send a photo-tier card for a single listing.  Returns (message_id, chat_id) or (None, None).
 
-    Tiers:
-      score >= TELEGRAM_MIN_SCORE_PHOTO (default 80): full photo card w/ buttons
-      score >= TELEGRAM_MIN_SCORE_TEXT  (default 65): compact one-line text
-      score below both:                                silent (dashboard only)
+    Wave 8B: photo-tier only.  Text-tier per-listing sends removed — those are
+    now rolled into a single digest message via send_digest().
 
-    Any AI-flagged high-severity risk suppresses delivery entirely regardless of
-    score — user shouldn't get pinged about listings the AI already called out.
+    Eligibility check (score >= TELEGRAM_MIN_SCORE_PHOTO) is the CALLER's responsibility
+    (ingest_handler.process_ingest_batch performs the two-pass sort). This function still
+    guards against missing credentials, silence, and high-severity AI risks.
 
-    Silence toggle: if agent_state.telegram_silenced_until is in the future,
-    no card is sent (button in the dashboard sets this).
+    Caption format (per Daniel's mockup, frame 4):
+      {score} · {title}
+      {price} € · {area} m² · {district}
+
+      {verdict}
+
+      Open in Aparts Looker ↗   <- only when WEB_BASE_URL is set; omitted otherwise
+
+    No inline_keyboard.  The deep-link is inside the caption body.
+    If listing.image_url is set, sendPhoto is used; otherwise sendMessage fallback.
     """
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         return None, None
@@ -201,7 +234,7 @@ def send_pending_card(listing: Listing, evaluation: dict) -> tuple[int | None, i
     score = evaluation.get("score", 0)
     verdict = evaluation.get("verdict", "")
 
-    # High-severity risk override — never spam listings the AI already flags.
+    # High-severity risk override — never ping listings the AI already called out.
     risks = evaluation.get("risks") or []
     high_risks = [r for r in risks if isinstance(r, dict) and r.get("severity") == "high"]
     if high_risks:
@@ -211,88 +244,55 @@ def send_pending_card(listing: Listing, evaluation: dict) -> tuple[int | None, i
         )
         return None, None
 
-    if score < config.TELEGRAM_MIN_SCORE_TEXT:
-        log.info(
-            "Skipping Telegram for %s: score %s < text threshold %s",
-            listing.id, score, config.TELEGRAM_MIN_SCORE_TEXT,
-        )
-        return None, None
-
     price = listing.price_eur or 0
-    price_m2 = listing.price_per_sqm or 0
-    rooms = listing.rooms if listing.rooms is not None else "?"
     area = listing.area_sqm if listing.area_sqm is not None else "?"
+    district = getattr(listing, "district", "") or ""
 
-    # Photo tier: full card with keyboard.
-    # Text tier: single line, no photo, but still gets verdict + a dashboard
-    # link — glance-and-move-on, not glance-and-be-mystified.
-    is_photo_tier = score >= config.TELEGRAM_MIN_SCORE_PHOTO
+    # Build caption per Daniel's mockup (frame 4).
+    title_str = listing.title or listing.url
+    line1 = f"{score} · {title_str}"
+    line2_parts = [f"{price:,} €", f"{area} m²"]
+    if district:
+        line2_parts.append(district)
+    line2 = " · ".join(line2_parts)
+    caption_parts = [line1, line2, "", verdict]
+    inbox_url = _build_inbox_url()
+    if inbox_url:
+        caption_parts.extend(["", f"Open in Aparts Looker ↗\n{inbox_url}"])
 
-    # Build the Inbox deep-link (Wave 6B: routes to the Inbox tab, not the detail panel).
-    # The frontend's hash-routing picks up #inbox and renders the mobile triage surface.
-    # When WEB_BASE_URL is unset cards still arrive without a tap-through button.
-    inbox_url = ""
-    if config.WEB_BASE_URL:
-        base = config.WEB_BASE_URL.rstrip("/")
-        if not base.startswith("http"):
-            base = "https://" + base
-        inbox_url = f"{base}/#inbox"
+    caption = "\n".join(caption_parts)
 
-    if is_photo_tier:
-        caption = (
-            f"{score}/100 | {verdict} | {price:,} EUR · {price_m2:,}/m² | "
-            f"{rooms} rooms · {area} m² | {listing.title or listing.url}"
-        )
-        # Wave 6B: no Approve/Reject buttons — notifier only.
-        # One "Open Inbox" deep-link (if WEB_BASE_URL set) + kv.ee link.
-        buttons = []
-        if inbox_url:
-            buttons.append({"text": "Open Inbox", "url": inbox_url})
-        buttons.append({"text": "kv.ee", "url": listing.url})
-        reply_markup = {"inline_keyboard": [buttons]}
-    else:
-        # Compact text tier — one-liner summary + links.
-        parts = [
-            f"[{score}] {listing.title or listing.id}",
-            f"→ {verdict}" if verdict else "",
-            f"{price:,}€ ({price_m2:,}€/m²) · {rooms}r · {area}m²",
-        ]
-        caption = "\n".join(p for p in parts if p)
-        links = [f"kv.ee: {listing.url}"]
-        if inbox_url:
-            links.append(f"inbox: {inbox_url}")
-        caption = caption + "\n" + " · ".join(links)
-        # Text tier: inline keyboard with Open Inbox + kv.ee when URL is configured.
-        if inbox_url:
-            reply_markup = {"inline_keyboard": [[
-                {"text": "Open Inbox", "url": inbox_url},
-                {"text": "kv.ee", "url": listing.url},
-            ]]}
-        else:
-            reply_markup = None
-
+    # No inline_keyboard in Wave 8B — deep-link lives in caption body.
     try:
-        if is_photo_tier and listing.image_url:
+        if listing.image_url:
             payload = {
                 "chat_id": TELEGRAM_CHAT_ID,
                 "photo": listing.image_url,
                 "caption": caption,
-                "reply_markup": reply_markup,
+                "parse_mode": "Markdown",
             }
             resp = requests.post(f"{API_BASE}/sendPhoto", json=payload, timeout=15)
+            if resp.status_code != 200:
+                # Photo URL unreachable — fall back to text so listing still surfaces.
+                payload_fallback = {
+                    "chat_id": TELEGRAM_CHAT_ID,
+                    "text": caption,
+                    "parse_mode": "Markdown",
+                    "disable_web_page_preview": True,
+                }
+                resp = requests.post(f"{API_BASE}/sendMessage", json=payload_fallback, timeout=15)
         else:
             payload = {
                 "chat_id": TELEGRAM_CHAT_ID,
                 "text": caption,
-                "disable_web_page_preview": not is_photo_tier,
+                "parse_mode": "Markdown",
+                "disable_web_page_preview": True,
             }
-            if reply_markup:
-                payload["reply_markup"] = reply_markup
             resp = requests.post(f"{API_BASE}/sendMessage", json=payload, timeout=15)
+
         if resp.status_code == 200:
             result = resp.json().get("result", {})
             return result.get("message_id"), result.get("chat", {}).get("id")
-        # Surface the failure — previously this was swallowed silently.
         try:
             body = resp.json()
         except Exception:
@@ -304,6 +304,59 @@ def send_pending_card(listing: Listing, evaluation: dict) -> tuple[int | None, i
     except requests.RequestException as exc:
         log.error("Telegram send_pending_card request failed: %s (listing=%s)", exc, listing.id)
     return None, None
+
+
+def send_digest(count: int, threshold: int) -> None:
+    """Send the 'N more above X today. Open inbox' digest follow-up message.
+
+    Called once per scrape run after all photo cards have been sent, for listings
+    that qualified for text tier (score >= TELEGRAM_MIN_SCORE_TEXT) but were not
+    sent as a full photo card — either because their score was below photo-tier,
+    or because they were overflow when the photo-card cap (TELEGRAM_PHOTO_CARDS_PER_RUN)
+    was reached.
+
+    "today" semantics (Wave 8B — MVP option a):
+      count = overflow from *this scrape run only* (not an Inbox-cumulative count).
+      May send "3 more above 75 today" in the morning and "2 more above 75 today"
+      at noon — each is self-contained per-scrape and accurate to that run.
+    # TODO: switch to Inbox-cumulative counting when we track sent-digest state per day.
+
+    No message is sent when count <= 0 or Telegram is not configured/silenced.
+    """
+    if count <= 0:
+        return
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        return
+
+    silenced, until = _telegram_is_silenced()
+    if silenced:
+        log.info("Telegram silenced until %s — suppressing digest", until)
+        return
+
+    inbox_url = _build_inbox_url()
+    text = f"{count} more above {threshold} today."
+    if inbox_url:
+        text += f" [Open inbox]({inbox_url})"
+
+    try:
+        resp = requests.post(
+            f"{API_BASE}/sendMessage",
+            json={
+                "chat_id": TELEGRAM_CHAT_ID,
+                "text": text,
+                "parse_mode": "Markdown",
+                "disable_web_page_preview": True,
+            },
+            timeout=15,
+        )
+        if resp.status_code != 200:
+            try:
+                body = resp.json()
+            except Exception:
+                body = resp.text[:200]
+            log.error("Telegram send_digest HTTP %s: %s", resp.status_code, body)
+    except requests.RequestException as exc:
+        log.error("Telegram send_digest request failed: %s", exc)
 
 
 def answer_callback_query(callback_query_id: str, text: str = "") -> None:
