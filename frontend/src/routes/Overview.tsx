@@ -19,6 +19,7 @@ import { useSettings } from '../lib/queries'
 import { fmtEur, fmtDate } from '../lib/format'
 import { scoreColor, scoreTextClass } from '../lib/score'
 import { useAppStore } from '../lib/state'
+import { useMediaQuery } from '../hooks/useMediaQuery'
 import type { Entry } from '../types/api'
 import { ListingsMap } from '../components/overview/ListingsMap'
 import { HistogramSVG } from '../components/overview/HistogramSVG'
@@ -278,6 +279,7 @@ export function Overview() {
   const best = selectBestEntry(data)
   const allShortlisted = selectShortlisted(data)
   const inboxEntries = selectInbox(data)
+  const isMobile = useMediaQuery('(max-width: 767px)')
 
   // All entries for map and charts
   const allEntries = [...allShortlisted, ...inboxEntries]
@@ -300,6 +302,38 @@ export function Overview() {
     )
   }
 
+  // ── Mobile layout (< 768px): single-column stack, no map ──────────────────
+  if (isMobile) {
+    return (
+      <div className="flex flex-col gap-3 p-3 overflow-y-auto" style={{ minHeight: 'calc(100dvh - 48px)' }}>
+        {/* BEST hero card — full width */}
+        <BestHeroCard entry={best} />
+
+        {/* This week stats */}
+        <ThisWeekStats data={data} />
+
+        {/* Charts — stacked, full width, reduced height */}
+        <div className="flex flex-col gap-3">
+          <div className="bg-sunken rounded-lg shadow-hairline p-3.5" style={{ height: '120px' }}>
+            <HistogramSVG entries={allEntries} />
+          </div>
+          <div className="bg-sunken rounded-lg shadow-hairline p-3.5" style={{ height: '120px' }}>
+            <ScatterSVG entries={allEntries} settings={settings} />
+          </div>
+        </div>
+
+        {/* Calibration panel */}
+        <CalibrationPanel entries={allEntries} />
+
+        {/* Next up list — reduced height for scroll comfort */}
+        <div style={{ minHeight: '200px' }}>
+          <NextUpList entries={allShortlisted} />
+        </div>
+      </div>
+    )
+  }
+
+  // ── Desktop layout (≥ 768px): two-column grid with map ────────────────────
   return (
     <div
       className="grid gap-3 p-4"
