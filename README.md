@@ -126,5 +126,5 @@ The `data/` volume is untouched — only the code is updated.
 
 - Cheapest VPS: €3–5/month (Hetzner CX22, Contabo VPS S, etc.)
 - Domain: ~€10/year, or a free subdomain
-- Anthropic API (Haiku): fractions of a cent per listing
+- Anthropic API (Haiku): fractions of a cent per listing, so 1€ per 100 listings
 - Telegram, Gmail: free
