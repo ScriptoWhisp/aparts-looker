@@ -462,6 +462,14 @@ def process_ingest_batch(listing_dicts: list[dict]) -> dict:
     rollover during a large batch doesn't split the same batch's entries across two dates.
     Phase 3 (D-14, D-15, D-16, D-17, D-18): _record_and_check_price_drop replaces bare
     record_price_in_data calls; _mark_removed_listings runs post-loop.
+
+    Wave 8B: Telegram two-pass.
+    After all listings are evaluated and persisted, the batch is sorted by score descending.
+    Top-N (config.TELEGRAM_PHOTO_CARDS_PER_RUN) listings at or above TELEGRAM_MIN_SCORE_PHOTO
+    get a full photo card via send_pending_card(). All remaining listings at or above
+    TELEGRAM_MIN_SCORE_TEXT (including photo-tier overflow) get a single digest message
+    via send_digest(). Listings below both thresholds are silent (dashboard only).
+    High-severity AI risk suppression is handled per-card inside send_pending_card().
     """
     log.info("Ingest batch received: %d listings", len(listing_dicts))
 
@@ -473,6 +481,10 @@ def process_ingest_batch(listing_dicts: list[dict]) -> dict:
     app_data = data_store.load_app_data()
     # Single date snapshot for the entire batch (D-12, RESEARCH Pattern 5)
     today_str = _date.today().isoformat()
+
+    # Accumulate (listing, evaluation) pairs for new listings that pass the text threshold.
+    # Used by the two-pass Telegram send at the end of the batch.
+    telegram_candidates: list[tuple] = []
 
     for raw_dict in listing_dicts:
         try:
@@ -497,7 +509,6 @@ def process_ingest_batch(listing_dicts: list[dict]) -> dict:
         # anyway. If an out-of-bounds listing arrives here, it's a scraper
         # URL-builder bug — fix it there, not by adding a backend backstop
         # that would drift out of sync and cause false alarms.
-
 
         try:
             log.info("Evaluating listing %s: %s", listing.id, listing.title)
@@ -555,34 +566,9 @@ def process_ingest_batch(listing_dicts: list[dict]) -> dict:
             if reno_items:
                 data_store.write_renovation_items(listing.id, reno_items)
 
-            # send_pending_card is provided by Plan 02-02. Until then, the lazy
-            # getattr fallback returns (None, None) so this module ships before
-            # telegram_client grows the new function (never-raise contract).
-            # Telegram HTTP call — OUTSIDE any DB session (session-scope discipline, Wave 4)
-            _send_card = getattr(telegram_client, "send_pending_card", lambda l, e: (None, None))
-            try:
-                tg_message_id, tg_chat_id = _send_card(listing, evaluation)
-                log.info(
-                    "Telegram send_pending_card for %s → message_id=%s chat_id=%s",
-                    listing.id, tg_message_id, tg_chat_id,
-                )
-            except Exception:
-                log.exception("Telegram send_pending_card failed for %s", listing.id)
-                tg_message_id, tg_chat_id = None, None
-
             # Reload app_data to pick up add_to_pending / write_checklist_ai writes.
             # load_app_data() opens + closes its own session — no session held here.
-            # Also apply the Telegram message_id patch in the same reload so we have a
-            # single consistent state to mutate price_history into (D-12).
             app_data = data_store.load_app_data()
-            if tg_message_id is not None:
-                # Patch the stored pending entry with the Telegram message reference
-                # so edit_card_resolved can update it after approve/reject.
-                for entry in app_data["pending"]:
-                    if entry.get("id") == listing.id:
-                        entry["tg_message_id"] = tg_message_id
-                        entry["tg_chat_id"] = tg_chat_id
-                        break
 
             # Persist coords + commute (already computed pre-evaluation above).
             # In-place mutation of app_data['pending'] entry mirrors _handle_price_drop pattern
@@ -600,6 +586,13 @@ def process_ingest_batch(listing_dicts: list[dict]) -> dict:
             # (D-11, D-12, D-14, RESEARCH Pattern 5).
             _record_and_check_price_drop(app_data, listing, today_str)
 
+            # Wave 8B: collect listings that qualify for at least text-tier Telegram.
+            # Actual send happens in the two-pass block below, after all listings
+            # are evaluated, so the top-N photo cards get priority ordering.
+            score = evaluation.get("score", 0)
+            if score >= config.TELEGRAM_MIN_SCORE_TEXT:
+                telegram_candidates.append((listing, evaluation, score))
+
         except Exception:
             log.exception("Failed to process listing %s — skipping", listing.id)
 
@@ -611,6 +604,50 @@ def process_ingest_batch(listing_dicts: list[dict]) -> dict:
     # Persist accumulated price_history mutations from this batch (D-11, D-12)
     # save_app_data uses the compat shim (Wave 5 will optimize to per-row writes)
     data_store.save_app_data(app_data)
+
+    # ── Wave 8B: two-pass Telegram ──────────────────────────────────────────
+    # Sort by score descending so the highest-signal listings get photo cards.
+    telegram_candidates.sort(key=lambda t: t[2], reverse=True)
+
+    photo_cap = config.TELEGRAM_PHOTO_CARDS_PER_RUN
+    photo_tier = [t for t in telegram_candidates if t[2] >= config.TELEGRAM_MIN_SCORE_PHOTO]
+    text_tier_only = [t for t in telegram_candidates if t[2] < config.TELEGRAM_MIN_SCORE_PHOTO]
+
+    # Pass 1: send photo cards for the top-N photo-tier listings.
+    photo_sent = 0
+    for listing, evaluation, score in photo_tier[:photo_cap]:
+        try:
+            tg_message_id, tg_chat_id = telegram_client.send_pending_card(listing, evaluation)
+            log.info(
+                "Telegram photo card for %s (score=%s) → message_id=%s",
+                listing.id, score, tg_message_id,
+            )
+            if tg_message_id is not None:
+                photo_sent += 1
+                # Patch the pending entry with the Telegram reference (best-effort reload).
+                app_data_patch = data_store.load_app_data()
+                for entry in app_data_patch.get("pending", []):
+                    if entry.get("id") == listing.id:
+                        entry["tg_message_id"] = tg_message_id
+                        entry["tg_chat_id"] = tg_chat_id
+                        break
+                data_store.save_app_data(app_data_patch)
+        except Exception:
+            log.exception("Telegram photo card failed for %s", listing.id)
+
+    # Pass 2: digest for overflow photo-tier + all text-tier-only listings.
+    overflow_count = max(0, len(photo_tier) - photo_cap)
+    digest_count = overflow_count + len(text_tier_only)
+    if digest_count > 0:
+        try:
+            telegram_client.send_digest(digest_count, config.TELEGRAM_MIN_SCORE_TEXT)
+            log.info(
+                "Telegram digest sent: %d listings (overflow=%d, text-only=%d)",
+                digest_count, overflow_count, len(text_tier_only),
+            )
+        except Exception:
+            log.exception("Telegram send_digest failed")
+    # ────────────────────────────────────────────────────────────────────────
 
     return {"ok": True, "processed": len(listing_dicts)}
 
