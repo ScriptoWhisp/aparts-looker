@@ -29,6 +29,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useSettings } from '../lib/queries'
 import { saveSettings } from '../lib/api'
 import { QUERY_KEYS } from '../lib/queries'
+import { useMediaQuery } from '../hooks/useMediaQuery'
 import type { SettingsField } from '../types/api'
 
 // ── Category definitions ───────────────────────────────────────────────────
@@ -372,6 +373,7 @@ export function Settings() {
 
   const hasChanges = Object.keys(localValues).length > 0
   const activeCategory = CATEGORIES.find((c) => c.id === activeCat) ?? CATEGORIES[0]
+  const isMobile = useMediaQuery('(max-width: 767px)')
 
   if (isLoading) {
     return (
@@ -381,6 +383,78 @@ export function Settings() {
     )
   }
 
+  // ── Shared Save button (used in both layouts) ────────────────────────────
+  const saveButton = (
+    <button
+      type="button"
+      onClick={handleSave}
+      disabled={!hasChanges || saving}
+      className={[
+        'px-4 py-2 rounded-md font-sans font-medium text-[13px] transition-colors duration-fast flex-shrink-0',
+        hasChanges && !saving
+          ? 'bg-accent text-bg cursor-pointer hover:bg-accent/80'
+          : 'bg-border text-muted cursor-not-allowed opacity-50',
+      ].join(' ')}
+    >
+      {saving ? 'Saving…' : 'Save'}
+    </button>
+  )
+
+  // ── Mobile layout (< 768px) ───────────────────────────────────────────────
+  if (isMobile) {
+    return (
+      <div className="flex flex-col h-[calc(100vh-48px)]">
+        {/* Horizontal category strip — scrollable pills */}
+        <div className="flex-shrink-0 border-b border-border overflow-x-auto">
+          <div className="flex gap-2 px-3 py-2.5 w-max min-w-full">
+            {CATEGORIES.map((cat) => (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => setActiveCat(cat.id)}
+                className={[
+                  'flex-shrink-0 px-3 py-1.5 rounded-full text-[13px] font-sans transition-colors duration-fast whitespace-nowrap',
+                  activeCat === cat.id
+                    ? 'bg-accent/15 text-accent-lt font-medium border border-accent/30'
+                    : 'text-text-3 bg-sunken border border-border hover:border-border-strong hover:text-text',
+                ].join(' ')}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Form pane — full width, scrollable */}
+        <div className="flex-1 overflow-auto p-4 relative">
+          {/* Header row: title + Save */}
+          <div className="flex items-start justify-between mb-5">
+            <div>
+              <h2 className="font-sans font-medium text-[20px] text-text leading-tight">
+                {activeCategory.label}
+              </h2>
+              <p className="font-sans text-[12px] text-muted mt-0.5">
+                {activeCategory.subtitle}
+              </p>
+            </div>
+            {saveButton}
+          </div>
+
+          <CategoryForm
+            category={activeCategory}
+            allFields={settingsData?.fields ?? []}
+            values={effectiveValues}
+            onChange={handleChange}
+          />
+        </div>
+
+        {/* Toast */}
+        {toast && <Toast message={toast.msg} type={toast.type} />}
+      </div>
+    )
+  }
+
+  // ── Desktop layout (≥ 768px) — two-column grid ────────────────────────────
   return (
     <div
       className="grid h-[calc(100vh-48px)]"
@@ -417,19 +491,7 @@ export function Settings() {
               {activeCategory.subtitle}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={!hasChanges || saving}
-            className={[
-              'px-4 py-2 rounded-md font-sans font-medium text-[13px] transition-colors duration-fast',
-              hasChanges && !saving
-                ? 'bg-accent text-bg cursor-pointer hover:bg-accent/80'
-                : 'bg-border text-muted cursor-not-allowed opacity-50',
-            ].join(' ')}
-          >
-            {saving ? 'Saving…' : 'Save'}
-          </button>
+          {saveButton}
         </div>
 
         {/* Form */}
