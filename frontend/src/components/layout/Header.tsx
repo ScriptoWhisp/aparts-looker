@@ -12,6 +12,7 @@ import { useAppData, useRefreshAll, selectPendingCount } from '../../lib/queries
 import { fmtRelative } from '../../lib/format'
 import { triggerCheck } from '../../lib/api'
 import { useState } from 'react'
+import { useMediaQuery } from '../../hooks/useMediaQuery'
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'overview',  label: 'Overview' },
@@ -25,6 +26,7 @@ export function Header() {
   const { data } = useAppData()
   const refreshAll = useRefreshAll()
   const [checking, setChecking] = useState(false)
+  const isMobile = useMediaQuery('(max-width: 767px)')
 
   const pendingCount = selectPendingCount(data)
   const lastCheck = data?.last_check ?? null
@@ -54,33 +56,37 @@ export function Header() {
         </span>
       </div>
 
-      {/* Tab navigation */}
-      <nav className="flex gap-0.5 flex-1">
-        {TABS.map((tab) => {
-          const isActive = activeTab === tab.id
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setTab(tab.id)}
-              className={[
-                'inline-flex items-center gap-1.5 border-none rounded-md px-2.5 py-1.5',
-                'font-sans text-[13px] font-normal cursor-pointer whitespace-nowrap',
-                'transition-[background,color] duration-fast ease-spec',
-                isActive
-                  ? 'bg-accent/[0.14] text-accent-lt font-medium'
-                  : 'bg-transparent text-text-3 hover:text-text',
-              ].join(' ')}
-            >
-              {tab.label}
-              {tab.id === 'inbox' && pendingCount > 0 && (
-                <span className="font-mono text-[10px] px-[5px] py-[1px] rounded-sm bg-status-new/20 text-status-new border border-status-new/30">
-                  {pendingCount}
-                </span>
-              )}
-            </button>
-          )
-        })}
-      </nav>
+      {/* Tab navigation — hidden on mobile (bottom nav used instead) */}
+      {!isMobile && (
+        <nav className="flex gap-0.5 flex-1">
+          {TABS.map((tab) => {
+            const isActive = activeTab === tab.id
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setTab(tab.id)}
+                className={[
+                  'inline-flex items-center gap-1.5 border-none rounded-md px-2.5 py-1.5',
+                  'font-sans text-[13px] font-normal cursor-pointer whitespace-nowrap',
+                  'transition-[background,color] duration-fast ease-spec',
+                  isActive
+                    ? 'bg-accent/[0.14] text-accent-lt font-medium'
+                    : 'bg-transparent text-text-3 hover:text-text',
+                ].join(' ')}
+              >
+                {tab.label}
+                {tab.id === 'inbox' && pendingCount > 0 && (
+                  <span className="font-mono text-[10px] px-[5px] py-[1px] rounded-sm bg-status-new/20 text-status-new border border-status-new/30">
+                    {pendingCount}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </nav>
+      )}
+      {/* Spacer on mobile so right side stays pushed right */}
+      {isMobile && <div className="flex-1" />}
 
       {/* Right side: scrape meta + refresh */}
       <div className="flex items-center gap-4 ml-auto flex-shrink-0">

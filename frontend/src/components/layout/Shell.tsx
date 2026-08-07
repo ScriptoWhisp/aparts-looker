@@ -11,6 +11,8 @@
  */
 
 import { Header } from './Header'
+import { MobileBottomNav } from './MobileBottomNav'
+import { useMediaQuery } from '../../hooks/useMediaQuery'
 import type { ReactNode } from 'react'
 
 interface ShellProps {
@@ -18,12 +20,15 @@ interface ShellProps {
 }
 
 export function Shell({ children }: ShellProps) {
+  const isMobile = useMediaQuery('(max-width: 767px)')
+
   return (
     <div className="flex flex-col min-h-screen bg-app">
       <Header />
-      <main className="flex-1 min-h-0">
+      <main className={['flex-1 min-h-0', isMobile ? 'pb-14' : ''].join(' ')}>
         {children}
       </main>
+      {isMobile && <MobileBottomNav />}
     </div>
   )
 }
