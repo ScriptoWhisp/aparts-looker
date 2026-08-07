@@ -302,3 +302,87 @@ git add -A && git commit -m "chore: delete frontend-legacy/ (vanilla JS, superse
 ```
 
 The vanilla JS frontend has been fully superseded. The `frontend-legacy/` directory is kept for 1 week as a reference in case rollback is needed.
+
+---
+
+## Testing — Vitest QA Setup
+
+**Date:** 2026-08-07
+**Status:** Complete. 106 tests passing, 0 failing.
+
+### Toolchain
+
+| Package | Purpose |
+|---------|---------|
+| `vitest` | Test runner (uses Vite config, fast ESM-native) |
+| `@testing-library/react` | Component rendering + querying |
+| `@testing-library/jest-dom` | DOM matchers (`toBeInTheDocument`, etc.) |
+| `@testing-library/user-event` | Realistic user interactions |
+| `jsdom` | DOM environment for Vitest |
+| `@vitest/ui` | Browser-based test explorer (`npm run test:ui`) |
+| `msw` (v2) | Mock Service Worker — intercepts `/api/*` fetch calls |
+
+### Test commands
+
+```bash
+npm test               # one-shot run (CI + post-commit hook)
+npm run test:watch     # watch mode for dev feedback
+npm run test:ui        # browser-based interactive explorer
+npm run test:coverage  # v8 coverage report
+```
+
+### Test files
+
+| File | Tests | What it covers |
+|------|-------|----------------|
+| `cost.test.ts` | 17 | `computeAllIn`, `settingNum`, `rankByAllIn` — pure logic, no DOM |
+| `App.test.tsx` | 18 | Hash routing, tab mount under empty/full/malformed data, ErrorBoundary |
+| `ScatterSVG.test.tsx` | 11 | Crash guards for undefined settings, dot rendering, budget line |
+| `ChecklistCard.test.tsx` | 14 | groups shape, ai_checklist_fills fallback, empty state, flag-first open |
+| `HeroRow.test.tsx` | 12 | Render shapes, own_score slider POST, cost display |
+| `SidebarFunnel.test.tsx` | 9 | Group counts, Dropped collapsed, filter input, onSelect callback |
+| `Overview.test.tsx` | 13 | BEST hero, This week stats, Next up, CalibrationPanel gating |
+| `Inbox.test.tsx` | 12 | Desktop 3-col grid, skip flow (6 chips + cancel), keyboard L fires approve |
+
+**Total: 106 tests, 8 test files.**
+
+### What Vitest catches
+
+- **Runtime crashes on undefined** — the `.find()` on `settings.fields` bug (the original production crash) is caught by `settingNum` and all component tests using `mockSettingsMalformed`
+- **API contract regressions** — `mockSettingsMalformed` has `{schema: [...]}` instead of `{fields: [...]}`. Any component that does `.fields.find()` without optional chaining will throw and fail the test
+- **Routing breakage** — `#pending → inbox`, `#detail → shortlist` backward compat is regression-tested
+- **Logic bugs** — `computeAllIn`: wrong contingency rate, missing `applies=false` guard, per-sqm vs flat rate confusion
+- **Empty state correctness** — each route has tests for zero-data inputs
+- **Uncaught component throws** — ErrorBoundary integration test verifies the fallback UI
+
+### What Vitest does NOT catch (requires Playwright or manual QA)
+
+- **Visual layout and Tailwind styling** — jsdom does not evaluate CSS; pixel-level layout bugs are invisible
+- **Framer Motion swipe gestures** — drag events cannot be realistically simulated in jsdom
+- **Leaflet map rendering** — ListingsMap is mocked out entirely; pin placement, district overlays, isochrone ring need a real browser
+- **Animation timing** — CSS transitions/animations do not run in jsdom
+- **Mobile touch interactions** — `matchMedia` is stubbed; actual iOS viewport behavior needs Playwright on a mobile profile
+
+### How to add tests for new components
+
+See `frontend/README.md` — "Adding tests for new components" section.
+
+The key pattern:
+1. Use `mockSettingsMalformed` to prove graceful degradation on old API shapes
+2. Use `renderWithProviders()` with `queryCache` to skip async loading in tests
+3. Mock framer-motion with the standard stub if the component uses `AnimatePresence`
+4. Override MSW handlers per-test with `server.use(http.get(...))` for edge cases
+
+### Commits
+
+| Hash | Message |
+|------|---------|
+| `2ee0e6b` | `chore(frontend): install vitest + testing-library + msw devDeps` |
+| `a4ae49d` | `feat(test): vitest config + jsdom setup + MSW server` |
+| `9243df0` | `feat(test): fixture data (empty / partial / full / malformed)` |
+| `c986b0e` | `test(app): route mount regression net across empty/full/malformed data` |
+| `a2cfff1` | `test(cost): pure logic — computeAllIn + settingNum + rankByAllIn` |
+| `442e05e` | `test(shortlist): SidebarFunnel + HeroRow + ChecklistCard` |
+| `0e5607a` | `test(overview): route smoke + ScatterSVG + calibration gating` |
+| `39d6d0e` | `test(inbox): desktop grid + skip flow + keyboard approve` |
+| `522f3c5` | `docs(frontend): README with test workflow + exclude test/ from tsc build` |
