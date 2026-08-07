@@ -571,3 +571,46 @@ Digest count = overflow from *this scrape run only*. Two separate runs may both 
 | `787e3be` | `feat(ingest): two-pass telegram — top-N photo cards + digest for the rest` |
 | `b2f2ecc` | `feat(settings): add TELEGRAM_PHOTO_CARDS_PER_RUN with default 3` |
 | `d4d1e6d` | `test(telegram): coverage for digest logic + cap + silenced suppression` |
+
+---
+
+## Wave 9 — Mobile Responsive Fixes (COMPLETE)
+
+**Date:** 2026-08-07
+**Status:** Complete. All 5 bugs fixed, 121 unit tests pass, TypeScript build clean.
+
+### What shipped
+
+| Bug | Fix | File(s) |
+|-----|-----|---------|
+| Double-euro `€ €` in all price displays | `fmtEur` now strips both leading AND trailing `€` before re-appending one symbol. The et-EE ICU locale places `€` at the end; old regex only handled leading `€`. | `src/lib/format.ts` |
+| InboxMobile PeekCard shows dim photo only, no text | Rewrote PeekCard to render full content (photo + title + meta + price + verdict) — same shape as SwipeCard. Peek is `opacity-40`, `scale-0.95`, `pointer-events-none` behind front card at `z-10`. | `src/components/inbox/InboxMobile.tsx` |
+| Overview mobile: broken two-column grid with tiny map strip | Added `isMobile` check; mobile renders `flex flex-col` stack: BEST hero → stats → charts (120px stacked) → calibration → NextUpList. Map hidden on mobile. Desktop layout unchanged. | `src/routes/Overview.tsx` |
+| Shortlist mobile: sidebar + empty main pane side-by-side | Mobile now renders EITHER sidebar (no selection) OR main pane (selection active) — never both. Uses `useMediaQuery('(max-width: 767px)')`. Desktop unchanged. | `src/routes/Shortlist.tsx` |
+| Settings mobile: 200px sidebar leaves ~175px for form | Mobile renders horizontal scrollable pill strip for categories, full-width form pane below. Desktop unchanged (200px sidebar grid). | `src/routes/Settings.tsx` |
+
+### Regression test net added
+
+New permanent file: `frontend/e2e/mobile-snapshots.spec.ts`
+
+| Test | Assertion |
+|------|-----------|
+| Overview: no narrow elements | No div/canvas narrower than 60px; Leaflet map absent |
+| Overview: single euro in price | `bodyText` must not contain `"€ €"` |
+| Shortlist: main pane absent without selection | NoSelection placeholder not in DOM on mobile |
+| Shortlist: sidebar hidden after tap | After row tap, Back button visible; sidebar row hidden |
+| Settings: horizontal category strip | All 5 category pills visible; `aside` not 200px wide |
+| Inbox: front card title visible | `"Spacious 2BR in Kesklinn"` visible on page |
+| Inbox: peek card title in DOM | `"Cozy studio near Viru Gate"` count > 0 |
+| Inbox: no double-euro | `bodyText` must not contain `"€ €"` |
+
+### Commits
+
+| Hash | Message |
+|------|---------|
+| `b54ca53` | `fix(format): strip double-€ suffix in price rendering` |
+| `fe8a27b` | `fix(inbox-mobile): peek card renders full content, promotes to front on advance` |
+| `cf00594` | `feat(overview-mobile): stack layout, hide map, full-width charts + hero` |
+| `a640021` | `feat(shortlist-mobile): sidebar OR main pane, back button on selection` |
+| `0a5fc19` | `feat(settings-mobile): horizontal category strip + full-width form` |
+| `c9be12d` | `test(e2e): mobile snapshot regression net across 4 tabs` |
