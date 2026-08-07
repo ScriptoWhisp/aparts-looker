@@ -16,6 +16,14 @@ export type TabId = 'overview' | 'inbox' | 'shortlist' | 'settings'
 // ── Inbox session state ────────────────────────────────────────────────────
 // Persists while the tab is open; resets on page refresh.
 
+export interface InboxDecision {
+  id: string
+  title: string
+  score: number | null
+  outcome: 'shortlisted' | 'skipped'
+  reason?: string
+}
+
 interface InboxSessionState {
   triaged: number
   shortlisted: number
@@ -24,9 +32,11 @@ interface InboxSessionState {
   decidedIds: Set<string>
   // Ids of entries deferred with "Later" (moved to back of queue)
   laterIds: string[]
+  // Ordered list of decisions made this session (for cleared state display)
+  decisions: InboxDecision[]
 
-  recordLookCloser: (id: string) => void
-  recordSkip: (id: string) => void
+  recordLookCloser: (id: string, title: string, score: number | null) => void
+  recordSkip: (id: string, title: string, score: number | null, reason?: string) => void
   recordLater: (id: string) => void
   resetSession: () => void
 }
@@ -37,19 +47,22 @@ export const useInboxSession = create<InboxSessionState>((set) => ({
   skipped: 0,
   decidedIds: new Set<string>(),
   laterIds: [],
+  decisions: [],
 
-  recordLookCloser: (id) =>
+  recordLookCloser: (id, title, score) =>
     set((s) => ({
       triaged: s.triaged + 1,
       shortlisted: s.shortlisted + 1,
       decidedIds: new Set([...s.decidedIds, id]),
+      decisions: [...s.decisions, { id, title, score, outcome: 'shortlisted' }],
     })),
 
-  recordSkip: (id) =>
+  recordSkip: (id, title, score, reason) =>
     set((s) => ({
       triaged: s.triaged + 1,
       skipped: s.skipped + 1,
       decidedIds: new Set([...s.decidedIds, id]),
+      decisions: [...s.decisions, { id, title, score, outcome: 'skipped', reason }],
     })),
 
   recordLater: (id) =>
@@ -58,7 +71,7 @@ export const useInboxSession = create<InboxSessionState>((set) => ({
     })),
 
   resetSession: () =>
-    set({ triaged: 0, shortlisted: 0, skipped: 0, decidedIds: new Set(), laterIds: [] }),
+    set({ triaged: 0, shortlisted: 0, skipped: 0, decidedIds: new Set(), laterIds: [], decisions: [] }),
 }))
 
 // Hash → canonical tab mapping (backward compat with vanilla frontend)
