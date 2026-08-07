@@ -25,13 +25,10 @@ RUN pip install --no-cache-dir -r requirements.txt && \
 
 COPY backend/ .
 
-# Frontend static assets from the React build stage (replaces the old
-# COPY frontend/ ./static/ which copied the vanilla JS files).
+# Frontend static assets from the React build stage. Vite copies
+# frontend/public/* → dist/ verbatim, so tallinn-districts.geojson
+# lives under dist/ and lands here in one COPY.
 COPY --from=frontend-build /build/dist/ ./static/
-
-# Copy the geojson data file that was in the old frontend/ root
-# (now in frontend-legacy/ for reference; the map is served from static).
-COPY frontend-legacy/tallinn-districts.geojson ./static/tallinn-districts.geojson
 
 RUN chmod +x /app/entrypoint.sh
 
