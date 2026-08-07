@@ -2,7 +2,7 @@
 
 Function names are the source of truth per 06-VALIDATION.md § Per-Task Verification Map.
 Mocking strategy: monkeypatch brief_generator.requests.post with a MagicMock that returns
-a canned Anthropic response shape (mirrors test_pending.py::test_send_pending_card_buttons).
+a canned Anthropic response shape (mirrors test_pending.py::test_send_pending_card_caption_format).
 """
 
 import pytest
