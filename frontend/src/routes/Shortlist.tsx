@@ -142,6 +142,9 @@ export function Shortlist() {
     return [a, b] as [Entry, Entry]
   }, [compareIds, allEntries])
 
+  // Hooks MUST come before any conditional return per Rules of Hooks (React #310).
+  const isMobile = useMediaQuery('(max-width: 767px)')
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-48px)]">
@@ -149,8 +152,6 @@ export function Shortlist() {
       </div>
     )
   }
-
-  const isMobile = useMediaQuery('(max-width: 767px)')
 
   // Mobile: show EITHER sidebar OR main pane — never both side by side.
   // Desktop: always show both in the two-column grid.
