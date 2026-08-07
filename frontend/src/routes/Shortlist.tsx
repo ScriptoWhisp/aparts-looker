@@ -16,6 +16,7 @@
 import { useState, useMemo } from 'react'
 import { useAppData, useSettings, selectShortlisted } from '../lib/queries'
 import { useAppStore } from '../lib/state'
+import { useMediaQuery } from '../hooks/useMediaQuery'
 import { rankByAllIn } from '../lib/cost'
 import type { Entry } from '../types/api'
 import { SidebarFunnel } from '../components/shortlist/SidebarFunnel'
@@ -149,51 +150,69 @@ export function Shortlist() {
     )
   }
 
-  // Mobile: show sidebar OR main pane (not both)
-  // Desktop: always show both (grid 284px + flex-1)
-  const showSidebarOnMobile = !selectedEntry
-  const showMainOnMobile = !!selectedEntry
+  const isMobile = useMediaQuery('(max-width: 767px)')
+
+  // Mobile: show EITHER sidebar OR main pane — never both side by side.
+  // Desktop: always show both in the two-column grid.
+  const showSidebar = !isMobile || !selectedEntry
+  const showMain   = !isMobile || !!selectedEntry
 
   return (
     <>
-      <div className="grid grid-cols-[284px_1fr] h-[calc(100vh-48px)]">
-        {/* Sidebar — always visible on desktop, toggles on mobile */}
-        <div
-          className={[
-            'h-full overflow-hidden',
-            showSidebarOnMobile ? 'block' : 'hidden',
-            'md:block',
-          ].join(' ')}
-        >
-          <SidebarFunnel
-            entries={allEntries}
-            selectedId={selectedListingId}
-            onSelect={handleSelect}
-            onCompare={handleCompare}
-          />
-        </div>
-
-        {/* Main pane */}
-        <div
-          className={[
-            'h-full overflow-hidden',
-            showMainOnMobile ? 'block' : 'hidden',
-            'md:block',
-          ].join(' ')}
-        >
-          {selectedEntry ? (
-            <MainPane
-              entry={selectedEntry}
-              settings={settings}
-              onBack={handleBack}
+      {isMobile ? (
+        /* ── Mobile: full-width single pane ─────────────────────────── */
+        <div className="h-[calc(100vh-48px)] overflow-hidden">
+          {showSidebar && (
+            <SidebarFunnel
+              entries={allEntries}
+              selectedId={selectedListingId}
+              onSelect={handleSelect}
+              onCompare={handleCompare}
             />
-          ) : allEntries.length === 0 ? (
-            <EmptySidebar />
-          ) : (
-            <NoSelection />
+          )}
+          {showMain && (
+            selectedEntry ? (
+              <MainPane
+                entry={selectedEntry}
+                settings={settings}
+                onBack={handleBack}
+              />
+            ) : allEntries.length === 0 ? (
+              <EmptySidebar />
+            ) : (
+              <NoSelection />
+            )
           )}
         </div>
-      </div>
+      ) : (
+        /* ── Desktop: two-column grid ────────────────────────────────── */
+        <div className="grid grid-cols-[284px_1fr] h-[calc(100vh-48px)]">
+          {/* Sidebar */}
+          <div className="h-full overflow-hidden">
+            <SidebarFunnel
+              entries={allEntries}
+              selectedId={selectedListingId}
+              onSelect={handleSelect}
+              onCompare={handleCompare}
+            />
+          </div>
+
+          {/* Main pane */}
+          <div className="h-full overflow-hidden">
+            {selectedEntry ? (
+              <MainPane
+                entry={selectedEntry}
+                settings={settings}
+                onBack={handleBack}
+              />
+            ) : allEntries.length === 0 ? (
+              <EmptySidebar />
+            ) : (
+              <NoSelection />
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Compare overlay — rendered outside the grid (portal-like fixed positioning) */}
       {compareEntries && (
