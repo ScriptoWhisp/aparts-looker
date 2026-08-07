@@ -39,9 +39,10 @@ _SCHEMA = {
     # trusts whatever the scraper sends.
 
     # ---- Telegram delivery ----
-    "telegram_min_score_photo": ("TELEGRAM_MIN_SCORE_PHOTO", int, "telegram", "Photo card threshold", "Score ≥ this: full photo card", 0, 100),
-    "telegram_min_score_text":  ("TELEGRAM_MIN_SCORE_TEXT",  int, "telegram", "Text card threshold",  "Score ≥ this: compact text",     0, 100),
-    "draft_score_threshold":    ("DRAFT_SCORE_THRESHOLD",    int, "telegram", "Auto-draft threshold", "Score ≥ this: eligible for Gmail draft", 0, 100),
+    "telegram_min_score_photo":    ("TELEGRAM_MIN_SCORE_PHOTO",    int, "telegram", "Photo card threshold",    "Score >= this: full photo card (no buttons)",              0, 100),
+    "telegram_min_score_text":     ("TELEGRAM_MIN_SCORE_TEXT",     int, "telegram", "Digest threshold",        "Score >= this (but < photo): rolled into digest message",  0, 100),
+    "telegram_photo_cards_per_run":("TELEGRAM_PHOTO_CARDS_PER_RUN", int, "telegram", "Max photo cards/run",    "Overflow above threshold rolls into digest message",        1, 20),
+    "draft_score_threshold":       ("DRAFT_SCORE_THRESHOLD",       int, "telegram", "Auto-draft threshold",    "Score >= this: eligible for Gmail draft",                  0, 100),
 
     # ---- AI evaluator ----
     "ai_max_tokens":            ("AI_MAX_TOKENS",            int, "ai", "Claude max tokens",       "Output cap — raise if verdicts get truncated on long ads", 500, 20000),

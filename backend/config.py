@@ -38,12 +38,15 @@ DRAFT_SCORE_THRESHOLD = int(os.environ.get("DRAFT_SCORE_THRESHOLD", "60"))
 # and the scraper's UI. Backend trusts what the scraper sends.
 
 # Telegram tiered delivery thresholds.
-#   >= PHOTO: full card with photo + inline keyboard (highest signal listings)
-#   >= TEXT:  compact one-line text notification (worth a glance)
+#   >= PHOTO: full photo card (no inline keyboard — deeplink in caption body)
+#   >= TEXT:  rolled into a single digest message ("N more above X today.")
 #   below both: silent — still in the dashboard, not in Telegram
 # High-severity risks flagged by the AI suppress delivery regardless of score.
 TELEGRAM_MIN_SCORE_PHOTO = int(os.environ.get("TELEGRAM_MIN_SCORE_PHOTO", "80"))
 TELEGRAM_MIN_SCORE_TEXT = int(os.environ.get("TELEGRAM_MIN_SCORE_TEXT", "65"))
+# Max full photo cards per scrape run (Wave 8B). When the batch has more
+# photo-tier hits than this cap, the overflow rolls into the digest message.
+TELEGRAM_PHOTO_CARDS_PER_RUN = int(os.environ.get("TELEGRAM_PHOTO_CARDS_PER_RUN", "3"))
 
 # ---- Cost-of-ownership assumptions ----
 # Defaults tuned for Tallinn 2025-2026 market: 20% down, 4.5% Euribor+margin,
