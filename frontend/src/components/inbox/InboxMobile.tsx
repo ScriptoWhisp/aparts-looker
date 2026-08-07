@@ -1,37 +1,41 @@
 /**
- * InboxMobile — single-card swipe triage for mobile (≤767px).
+ * InboxMobile — Tinder-style swipe triage for mobile (≤767px).
  *
- * SPEC §2.3 mobile layout + mockup 3a. This is the primary triage surface.
+ * Wave 8A rework — behavior changes:
+ *   1. After approve/skip: STAY on Inbox, advance to next card (no hash change)
+ *   2. Skip flow: card slides off first → sheet appears → explicit Next button (no auto-close)
+ *   3. Swipe indicators: full-card color-tinted overlay with big centered text
+ *   4. All-in cost line in card body
+ *   5. Cleared state: decision list with score, title, outcome tag
  *
- * Motion: Framer Motion drag="x" for horizontal swipe. Handles iOS Safari
- * bounce-scroll correctly (no manual touch event handlers needed).
- *
+ * Motion: Framer Motion drag="x" for swipe. AnimatePresence for enter/exit.
  * Sheet: vaul Drawer for skip reason picker.
  *
  * Layout:
- *   - Top: "N of M" progress bar (6 segment)
- *   - Middle: card stack (peek card behind + front card)
- *   - Bottom: Look closer / Skip / Later buttons (pinned)
- *   - Directional hint pills: "Look closer" (right) + "Skip" (left)
+ *   - Header: "Inbox" title + "N of M" right-aligned
+ *   - Progress bar below header (N segments)
+ *   - Card stack: front card (draggable) + peek card behind
+ *   - Bottom action strip (pinned, above bottom-nav): Look closer / Skip / Later
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion, useMotionValue, useTransform, AnimatePresence } from 'framer-motion'
 import { Drawer } from 'vaul'
 import { useQueryClient } from '@tanstack/react-query'
 import type { Entry } from '../../types/api'
 import { approveEntry, rejectEntry, triggerCheck } from '../../lib/api'
 import { QUERY_KEYS } from '../../lib/queries'
+import { useSettings } from '../../lib/queries'
 import { ScoreBadge } from '../shared/ScoreBadge'
 import { scoreColor } from '../../lib/score'
 import { fmtEur } from '../../lib/format'
+import { computeAllIn } from '../../lib/cost'
 import { useAppStore, useInboxSession } from '../../lib/state'
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
-const SWIPE_THRESHOLD_PX = 100
-const SWIPE_VELOCITY_THRESHOLD = 500
-const SKIP_REASON_TIMEOUT_S = 8
+const SWIPE_THRESHOLD_PX = 80
+const SWIPE_VELOCITY_THRESHOLD = 400
 
 const SKIP_REASONS = ['Price', 'Location', 'Condition', 'Layout', 'Building', 'Other']
 
@@ -40,9 +44,10 @@ const SKIP_REASONS = ['Price', 'Location', 'Condition', 'Layout', 'Building', 'O
 function metaLine(e: Entry): string {
   const parts: string[] = []
   if (e.district) parts.push(e.district)
+  if (e.rooms) parts.push(`${e.rooms} tuba`)
   if (e.area_sqm) parts.push(`${e.area_sqm} m²`)
   if (e.year_built) parts.push(`${e.year_built}`)
-  if (e.floor != null && e.floors_total != null) parts.push(`fl ${e.floor}/${e.floors_total}`)
+  if (e.floor != null && e.floors_total != null) parts.push(`${e.floor}/${e.floors_total}`)
   return parts.join(' · ')
 }
 
@@ -54,33 +59,54 @@ function pricePerSqm(e: Entry): string {
 // ── Progress bar ────────────────────────────────────────────────────────────
 
 interface ProgressBarProps {
-  current: number  // 1-indexed (current card being triaged)
+  current: number  // 1-indexed position in triage
   total: number
 }
 
 function ProgressBar({ current, total }: ProgressBarProps) {
-  const segments = Math.min(total, 6)
+  const segments = Math.min(total, 8)
   const filledCount = Math.round((current / total) * segments)
 
   return (
-    <div className="flex flex-col gap-1.5 px-3 pt-3 pb-2 flex-shrink-0">
-      <div className="flex items-center justify-between">
-        <span className="font-mono text-[11px] text-muted">
-          {current} of {total}
-        </span>
-      </div>
-      <div className="flex gap-1">
-        {Array.from({ length: segments }).map((_, i) => (
-          <div
-            key={i}
-            className={[
-              'flex-1 h-[2px] rounded-full transition-colors duration-base',
-              i < filledCount ? 'bg-accent' : 'bg-border',
-            ].join(' ')}
-          />
-        ))}
-      </div>
+    <div className="flex gap-1 px-3 pb-2">
+      {Array.from({ length: segments }).map((_, i) => (
+        <div
+          key={i}
+          className={[
+            'flex-1 h-[2px] rounded-full transition-colors duration-base',
+            i < filledCount ? 'bg-accent' : 'bg-border-strong',
+          ].join(' ')}
+        />
+      ))}
     </div>
+  )
+}
+
+// ── All-in cost line ────────────────────────────────────────────────────────
+
+interface AllInLineProps {
+  entry: Entry
+}
+
+function AllInLine({ entry }: AllInLineProps) {
+  const { data: settings } = useSettings()
+  const result = computeAllIn(entry, settings)
+
+  if (result.noItems) {
+    return (
+      <p className="font-mono text-[11px] text-muted leading-none">
+        all-in unknown
+      </p>
+    )
+  }
+
+  const allInK = Math.round(result.allIn / 1000)
+  const district = entry.district ?? ''
+
+  return (
+    <p className="font-mono text-[11px] text-accent-lt leading-none">
+      all-in ≈ {allInK}k{district ? ` · incl. reno est.` : ''}
+    </p>
   )
 }
 
@@ -89,93 +115,57 @@ function ProgressBar({ current, total }: ProgressBarProps) {
 interface SkipDrawerProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  skippedTitle: string | null
   onConfirm: (reason: string | null) => void
   onUndo: () => void
 }
 
-function SkipDrawer({ open, onOpenChange, onConfirm, onUndo }: SkipDrawerProps) {
+function SkipDrawer({ open, onOpenChange, skippedTitle, onConfirm, onUndo }: SkipDrawerProps) {
   const [selected, setSelected] = useState<string | null>(null)
-  const [countdown, setCountdown] = useState(SKIP_REASON_TIMEOUT_S)
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Auto-close after SKIP_REASON_TIMEOUT_S seconds
+  // Reset chip selection when drawer opens for a new card
   useEffect(() => {
-    if (!open) {
-      setSelected(null)
-      setCountdown(SKIP_REASON_TIMEOUT_S)
-      return
-    }
-
-    setCountdown(SKIP_REASON_TIMEOUT_S)
-
-    timerRef.current = setTimeout(() => {
-      onConfirm(selected)
-    }, SKIP_REASON_TIMEOUT_S * 1000)
-
-    intervalRef.current = setInterval(() => {
-      setCountdown((c) => Math.max(0, c - 1))
-    }, 1000)
-
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current)
-      if (intervalRef.current) clearInterval(intervalRef.current)
-    }
-  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  function clearTimers() {
-    if (timerRef.current) clearTimeout(timerRef.current)
-    if (intervalRef.current) clearInterval(intervalRef.current)
-  }
+    if (open) setSelected(null)
+  }, [open])
 
   function handleUndo() {
-    clearTimers()
     onUndo()
   }
 
-  function handleChipSelect(reason: string) {
-    clearTimers()
-    setSelected(reason)
-    // Chip selection does NOT auto-close — user can still hit Undo or just wait
-    // Restart timer after chip selection
-    timerRef.current = setTimeout(() => {
-      onConfirm(reason)
-    }, SKIP_REASON_TIMEOUT_S * 1000)
-    intervalRef.current = setInterval(() => {
-      setCountdown((c) => Math.max(0, c - 1))
-    }, 1000)
-    setCountdown(SKIP_REASON_TIMEOUT_S)
+  function handleNext() {
+    onConfirm(selected)
   }
 
   return (
     <Drawer.Root open={open} onOpenChange={onOpenChange}>
       <Drawer.Portal>
-        <Drawer.Overlay className="fixed inset-0 bg-black/60 z-[3000]" />
+        {/* No full-screen overlay — next card visible behind sheet */}
+        <Drawer.Overlay className="fixed inset-0 z-[3000]" style={{ background: 'rgba(0,0,0,0.3)' }} />
         <Drawer.Content
-          className="fixed bottom-0 left-0 right-0 z-[3001] bg-surface rounded-t-xl p-4 pb-10 shadow-lg"
-          style={{ outline: 'none' }}
+          className="fixed bottom-0 left-0 right-0 z-[3001] bg-surface rounded-t-xl p-4 shadow-lg"
+          style={{ outline: 'none', paddingBottom: 'calc(16px + env(safe-area-inset-bottom))' }}
         >
           {/* Grab handle */}
           <div className="mx-auto w-9 h-1 bg-border-strong rounded-full mb-4" />
 
           <h3 className="font-sans font-medium text-[16px] text-text mb-1">
-            Skipped — what put you off?
+            Skipped {skippedTitle}
           </h3>
           <p className="text-[12px] text-text-3 mb-4">
-            Optional. It only tunes future scoring.
+            What put you off? Optional — it only tunes what gets scored high next time.
           </p>
 
           {/* Reason chips */}
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 mb-6">
             {SKIP_REASONS.map((r) => (
               <button
                 key={r}
-                onClick={() => handleChipSelect(r)}
+                onClick={() => setSelected(selected === r ? null : r)}
                 className={[
-                  'px-3 py-2 rounded-sm text-[13px] font-sans border transition-colors duration-fast cursor-pointer',
+                  'px-4 py-2 rounded-sm text-[13px] font-sans transition-colors duration-fast cursor-pointer',
                   selected === r
-                    ? 'bg-accent/20 border-accent/50 text-accent-lt'
-                    : 'bg-sunken border-border-strong text-text-3 hover:border-border hover:text-text',
+                    ? 'bg-accent text-white border-transparent'
+                    : 'bg-sunken border border-border-strong text-text-3 hover:border-border hover:text-text',
                 ].join(' ')}
               >
                 {r}
@@ -183,17 +173,20 @@ function SkipDrawer({ open, onOpenChange, onConfirm, onUndo }: SkipDrawerProps) 
             ))}
           </div>
 
-          {/* Footer: undo + countdown */}
-          <div className="mt-6 flex items-center gap-3">
+          {/* Actions: Undo (left) + Next (right) */}
+          <div className="flex gap-2">
             <button
               onClick={handleUndo}
-              className="h-9 px-4 rounded-md font-sans text-[13px] font-normal border border-border-strong bg-transparent text-text-3 hover:bg-white/[0.06] hover:text-text transition-colors duration-fast cursor-pointer"
+              className="flex-1 h-11 rounded-md font-sans text-[14px] font-normal border border-border-strong bg-transparent text-text-3 hover:bg-white/[0.06] hover:text-text transition-colors duration-fast cursor-pointer"
             >
               Undo
             </button>
-            <span className="font-mono text-[11px] text-faint">
-              auto-closes {countdown}s
-            </span>
+            <button
+              onClick={handleNext}
+              className="flex-1 h-11 rounded-md font-sans text-[14px] font-medium bg-transparent border border-accent text-accent-lt hover:bg-accent/10 transition-colors duration-fast cursor-pointer"
+            >
+              Next
+            </button>
           </div>
         </Drawer.Content>
       </Drawer.Portal>
@@ -207,184 +200,238 @@ type DismissDirection = 'left' | 'right' | null
 
 interface SwipeCardProps {
   entry: Entry
-  onLookCloser: () => void
-  onSkip: () => void
+  exitDirection: DismissDirection
+  onDismiss: (direction: 'left' | 'right') => void
 }
 
-function SwipeCard({ entry: e, onLookCloser, onSkip }: SwipeCardProps) {
+function SwipeCard({ entry: e, exitDirection, onDismiss }: SwipeCardProps) {
   const x = useMotionValue(0)
-  const rotate = useTransform(x, [-200, 0, 200], [-15, 0, 15])
+  const rotate = useTransform(x, [-200, 0, 200], [-10, 0, 10])
 
-  // Hint pill opacities
-  const lookCloserHintOpacity = useTransform(x, [0, 80, 160], [0, 0.7, 1])
-  const skipHintOpacity = useTransform(x, [-160, -80, 0], [1, 0.7, 0])
+  // Overlay opacity: 0 at center, 1 at ±120px drag
+  const lookCloserOpacity = useTransform(x, [30, 120], [0, 1])
+  const skipOpacity = useTransform(x, [-120, -30], [1, 0])
 
-  // Background color tint on drag
-  const lookCloserTint = useTransform(x, [0, 160], ['rgba(79,185,141,0)', 'rgba(79,185,141,0.12)'])
-  const skipTint = useTransform(x, [-160, 0], ['rgba(196,99,95,0.12)', 'rgba(196,99,95,0)'])
-
-  const [dismissed, setDismissed] = useState<DismissDirection>(null)
-
-  // Screen width for fling animation
-  const W = typeof window !== 'undefined' ? window.innerWidth + 200 : 600
+  const W = typeof window !== 'undefined' ? window.innerWidth + 300 : 700
 
   function handleDragEnd(_event: unknown, info: { offset: { x: number }; velocity: { x: number } }) {
     const { offset, velocity } = info
     if (offset.x > SWIPE_THRESHOLD_PX || velocity.x > SWIPE_VELOCITY_THRESHOLD) {
-      setDismissed('right')
+      onDismiss('right')
     } else if (offset.x < -SWIPE_THRESHOLD_PX || velocity.x < -SWIPE_VELOCITY_THRESHOLD) {
-      setDismissed('left')
+      onDismiss('left')
     }
-    // else: snap back (framer-motion handles this automatically with dragConstraints)
   }
 
-  // Trigger callbacks after dismiss animation
-  useEffect(() => {
-    if (dismissed === 'right') {
-      const t = setTimeout(onLookCloser, 280)
-      return () => clearTimeout(t)
-    }
-    if (dismissed === 'left') {
-      const t = setTimeout(onSkip, 280)
-      return () => clearTimeout(t)
-    }
-  }, [dismissed, onLookCloser, onSkip])
+  const isDismissed = exitDirection !== null
+  const exitX = exitDirection === 'right' ? W : exitDirection === 'left' ? -W : 0
 
   return (
-    <div className="absolute inset-0">
-      {/* Hint pills — absolute, behind card during drag */}
+    <motion.div
+      drag={isDismissed ? false : 'x'}
+      dragConstraints={{ left: 0, right: 0 }}
+      dragElastic={0.6}
+      onDragEnd={handleDragEnd}
+      style={{ x, rotate }}
+      animate={isDismissed ? { x: exitX, opacity: 0, rotate: exitDirection === 'right' ? 15 : -15 } : { x: 0, opacity: 1 }}
+      initial={{ x: 0, opacity: 1 }}
+      transition={
+        isDismissed
+          ? { type: 'tween', duration: 0.22 }
+          : { type: 'spring', stiffness: 400, damping: 30 }
+      }
+      className="absolute inset-0 bg-sunken rounded-xl overflow-hidden flex flex-col cursor-grab active:cursor-grabbing touch-none select-none z-20"
+    >
+      {/* Look-closer tint overlay (drag right) */}
       <motion.div
-        className="absolute top-5 left-3 z-10 px-3 py-1.5 rounded-full bg-score-best/20 border border-score-best/40 pointer-events-none"
-        style={{ opacity: lookCloserHintOpacity }}
+        className="absolute inset-0 pointer-events-none z-30 rounded-xl flex items-center justify-center"
+        style={{ opacity: lookCloserOpacity, backgroundColor: 'rgba(79,185,141,0.18)' }}
       >
-        <span className="font-sans text-[12px] font-medium text-score-best">Look closer</span>
+        <span className="font-sans font-semibold text-[22px] text-score-best drop-shadow">
+          Look closer
+        </span>
       </motion.div>
 
+      {/* Skip tint overlay (drag left) */}
       <motion.div
-        className="absolute top-5 right-3 z-10 px-3 py-1.5 rounded-full bg-status-skip/20 border border-status-skip/40 pointer-events-none"
-        style={{ opacity: skipHintOpacity }}
+        className="absolute inset-0 pointer-events-none z-30 rounded-xl flex items-center justify-center"
+        style={{ opacity: skipOpacity, backgroundColor: 'rgba(196,99,95,0.18)' }}
       >
-        <span className="font-sans text-[12px] font-medium text-status-skip">Skip</span>
+        <span className="font-sans font-semibold text-[22px] text-score-bad drop-shadow">
+          Skip
+        </span>
       </motion.div>
 
-      {/* Card */}
-      <motion.div
-        drag={dismissed ? false : 'x'}
-        dragConstraints={{ left: 0, right: 0 }}
-        dragElastic={0.7}
-        onDragEnd={handleDragEnd}
-        style={{
-          x,
-          rotate,
-          backgroundColor: dismissed === 'right' ? 'rgba(79,185,141,0.08)'
-            : dismissed === 'left' ? 'rgba(196,99,95,0.08)'
-            : undefined,
-        }}
-        animate={
-          dismissed === 'right' ? { x: W, opacity: 0 }
-          : dismissed === 'left' ? { x: -W, opacity: 0 }
-          : { x: 0, opacity: 1 }
-        }
-        transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-        className="absolute inset-0 bg-sunken rounded-xl overflow-hidden flex flex-col cursor-grab active:cursor-grabbing touch-none select-none z-20"
-      >
-        {/* Drag tint overlays */}
-        <motion.div
-          className="absolute inset-0 pointer-events-none z-10 rounded-xl"
-          style={{ backgroundColor: lookCloserTint }}
-        />
-        <motion.div
-          className="absolute inset-0 pointer-events-none z-10 rounded-xl"
-          style={{ backgroundColor: skipTint }}
-        />
-
-        {/* Photo */}
-        <div className="relative flex-shrink-0 h-[200px] bg-bg overflow-hidden">
-          {e.image_url ? (
-            <img
-              src={e.image_url}
-              alt={e.title}
-              className="w-full h-full object-cover pointer-events-none"
-              draggable={false}
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <span className="text-faint text-[12px] font-mono">no photo</span>
-            </div>
-          )}
-          {/* Score badge */}
-          <div className="absolute top-2 right-2 z-20">
-            <ScoreBadge score={e.score} size="lg" />
+      {/* Photo */}
+      <div className="relative flex-shrink-0 bg-bg overflow-hidden" style={{ height: '55%' }}>
+        {e.image_url ? (
+          <img
+            src={e.image_url}
+            alt={e.title}
+            className="w-full h-full object-cover pointer-events-none"
+            draggable={false}
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <span className="text-faint text-[12px] font-mono">no photo</span>
           </div>
+        )}
+        {/* Score badge top-right */}
+        <div className="absolute top-2 right-2 z-20">
+          <ScoreBadge score={e.score} size="lg" />
         </div>
+      </div>
 
-        {/* Content */}
-        <div className="flex flex-col flex-1 p-4 gap-2 overflow-hidden">
-          {/* Title */}
-          <p className="font-sans font-medium text-[15px] text-text leading-snug line-clamp-2">
-            {e.title || e.address || 'Untitled listing'}
-          </p>
+      {/* Content */}
+      <div className="flex flex-col flex-1 p-4 gap-2 overflow-hidden">
+        {/* Title */}
+        <p className="font-sans font-medium text-[17px] text-text leading-snug line-clamp-2">
+          {e.title || e.address || 'Untitled listing'}
+        </p>
 
-          {/* Meta */}
-          <p className="font-mono text-[11px] text-muted">
-            {metaLine(e) || '—'}
-          </p>
+        {/* Meta */}
+        <p className="font-mono text-[12px] text-text-3">
+          {metaLine(e) || '—'}
+        </p>
 
-          {/* Price */}
-          <div className="flex items-baseline gap-2">
-            <span className="font-mono text-[24px] font-semibold text-text leading-none">
-              {fmtEur(e.price_eur)}
-            </span>
-            {pricePerSqm(e) && (
-              <span className="font-mono text-[11px] text-muted">{pricePerSqm(e)}</span>
-            )}
-          </div>
-
-          {/* Verdict */}
-          {e.verdict && (
-            <p
-              className="text-[12px] text-text-2 leading-snug line-clamp-4 pl-2 border-l-2"
-              style={{ borderColor: scoreColor(e.score) }}
-            >
-              {e.verdict}
-            </p>
+        {/* Price row */}
+        <div className="flex items-baseline gap-2">
+          <span className="font-mono text-[22px] font-semibold text-text leading-none">
+            {fmtEur(e.price_eur)}
+          </span>
+          {pricePerSqm(e) && (
+            <span className="font-mono text-[11px] text-muted">{pricePerSqm(e)}</span>
           )}
         </div>
-      </motion.div>
-    </div>
+
+        {/* All-in line */}
+        <AllInLine entry={e} />
+
+        {/* Verdict */}
+        {e.verdict && (
+          <p
+            className="text-[13px] text-text-2 leading-snug line-clamp-3 pl-2 border-l-2 mt-1"
+            style={{ borderColor: scoreColor(e.score) }}
+          >
+            {e.verdict}
+          </p>
+        )}
+      </div>
+    </motion.div>
+  )
+}
+
+// ── Peek card (behind front card) ──────────────────────────────────────────
+
+interface PeekCardProps {
+  entry: Entry
+}
+
+function PeekCard({ entry: e }: PeekCardProps) {
+  return (
+    <motion.div
+      initial={{ scale: 0.95, y: 8 }}
+      animate={{ scale: 1, y: 0 }}
+      transition={{ type: 'spring', stiffness: 300, damping: 28 }}
+      className="absolute top-1.5 left-0 right-0 bottom-[-6px] bg-sunken rounded-xl z-10 overflow-hidden opacity-50"
+    >
+      {e.image_url && (
+        <img
+          src={e.image_url}
+          alt=""
+          className="w-full h-full object-cover"
+          draggable={false}
+          style={{ height: '55%' }}
+        />
+      )}
+    </motion.div>
   )
 }
 
 // ── Cleared state ───────────────────────────────────────────────────────────
 
+import type { InboxDecision } from '../../lib/state'
+
 interface ClearedStateProps {
-  triaged: number
-  shortlisted: number
-  skipped: number
+  decisions: InboxDecision[]
+  nextCheckTime: string | null
+  startEpoch: number
 }
 
-function ClearedState({ triaged, shortlisted, skipped }: ClearedStateProps) {
+function ClearedState({ decisions, nextCheckTime, startEpoch }: ClearedStateProps) {
   const { setTab } = useAppStore()
+  const shortlisted = decisions.filter((d) => d.outcome === 'shortlisted').length
+  const totalCount = decisions.length
+  const elapsedMin = Math.round((Date.now() - startEpoch) / 60_000)
+
+  // Format next check time
+  const nextCheckLabel = nextCheckTime
+    ? new Date(nextCheckTime).toLocaleTimeString('et-EE', { hour: '2-digit', minute: '2-digit' })
+    : null
 
   return (
-    <div className="flex flex-col items-center justify-center flex-1 px-6 text-center">
-      <div className="bg-sunken rounded-xl p-8 w-full max-w-xs flex flex-col items-center gap-4">
-        <p className="font-mono text-[10px] text-faint uppercase tracking-widest">Done</p>
-        <h2 className="font-sans font-medium text-[18px] text-text leading-snug">
-          You triaged {triaged} in this session
+    <div className="flex flex-col h-full px-4 pt-4 pb-2 overflow-auto">
+      {/* Summary header */}
+      <div className="mb-4">
+        <h2 className="font-sans font-medium text-[22px] text-text leading-tight mb-1">
+          Inbox clear
         </h2>
-        <p className="text-[13px] text-text-3">
-          {shortlisted} shortlisted · {skipped} skipped
+        <p className="font-sans text-[13px] text-text-3">
+          {totalCount} decided in {elapsedMin || 1} minute{elapsedMin !== 1 ? 's' : ''}.
+          {shortlisted > 0 ? ` ${shortlisted > 1 ? `${shortlisted} went` : 'One went'} to the shortlist.` : ''}
+          {nextCheckLabel ? ` Next scrape ${nextCheckLabel}.` : ''}
         </p>
-        {shortlisted > 0 && (
-          <button
-            onClick={() => setTab('shortlist')}
-            className="mt-2 w-full h-12 rounded-md font-sans text-[15px] font-medium bg-accent text-white hover:bg-accent/80 transition-colors duration-fast border-none cursor-pointer"
-          >
-            Open shortlist · {shortlisted}
-          </button>
-        )}
       </div>
+
+      {/* Decision list */}
+      <div className="flex flex-col gap-3 flex-1 min-h-0 overflow-auto mb-4">
+        {decisions.map((d) => (
+          <div
+            key={d.id}
+            className="flex items-center gap-3"
+          >
+            {/* Score */}
+            <span
+              className="font-mono text-[13px] font-semibold flex-none w-8 text-right"
+              style={{ color: scoreColor(d.score) }}
+            >
+              {d.score ?? '—'}
+            </span>
+
+            {/* Title */}
+            <span
+              className={[
+                'font-sans text-[14px] flex-1 min-w-0 truncate',
+                d.outcome === 'skipped' ? 'line-through text-muted opacity-60' : 'text-text',
+              ].join(' ')}
+            >
+              {d.title}
+            </span>
+
+            {/* Outcome tag */}
+            <span
+              className={[
+                'font-mono text-[11px] flex-none px-2 py-0.5 rounded-sm',
+                d.outcome === 'shortlisted'
+                  ? 'text-status-short bg-status-short/10'
+                  : 'text-muted bg-sunken',
+              ].join(' ')}
+            >
+              {d.outcome === 'shortlisted' ? 'shortlisted' : (d.reason?.toLowerCase() ?? 'skipped')}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Open shortlist CTA */}
+      {shortlisted > 0 && (
+        <button
+          onClick={() => setTab('shortlist')}
+          className="w-full py-4 rounded-md font-sans text-[15px] font-medium bg-transparent border border-accent text-accent-lt hover:bg-accent/10 transition-colors duration-fast cursor-pointer flex-none"
+        >
+          Open shortlist · {shortlisted}
+        </button>
+      )}
     </div>
   )
 }
@@ -431,16 +478,18 @@ function EmptyState() {
 
 interface InboxMobileProps {
   entries: Entry[]
+  nextCheckTime?: string | null
 }
 
-export function InboxMobile({ entries }: InboxMobileProps) {
+export function InboxMobile({ entries, nextCheckTime = null }: InboxMobileProps) {
   const client = useQueryClient()
-  const { setTab, setSelectedListingId } = useAppStore()
   const session = useInboxSession()
 
-  // Local queue: starts as sorted entries, Later'd cards go to end
+  // Track session start for elapsed time display
+  const [sessionStartEpoch] = useState(() => Date.now())
+
+  // Local queue starts as sorted entries; Later'd go to end
   const [localQueue, setLocalQueue] = useState<Entry[]>(() => {
-    // Put later'd ids at back, keep everything else
     const later = session.laterIds
     const withoutLater = entries.filter((e) => !later.includes(e.id))
     const laterEntries = later
@@ -449,11 +498,7 @@ export function InboxMobile({ entries }: InboxMobileProps) {
     return [...withoutLater, ...laterEntries]
   })
 
-  // Current index in localQueue (cursor advances as entries are decided)
-  const [cursor] = useState(0)
-
-  // Sync localQueue when entries prop changes (e.g. TanStack Query re-fetch)
-  // Only add new entries that aren't already in our local queue
+  // Sync when entries prop changes (TanStack Query re-fetch)
   useEffect(() => {
     setLocalQueue((prev) => {
       const prevIds = new Set(prev.map((e) => e.id))
@@ -463,155 +508,203 @@ export function InboxMobile({ entries }: InboxMobileProps) {
     })
   }, [entries])
 
-  // Skip drawer state
-  const [showSkipSheet, setShowSkipSheet] = useState(false)
-  const [pendingSkipId, setPendingSkipId] = useState<string | null>(null)
-
-  // Filter out already-decided entries
+  // Active queue (undecided entries in order)
   const active = localQueue.filter((e) => !session.decidedIds.has(e.id))
-  const currentEntry = active[cursor] ?? null
+  const currentEntry = active[0] ?? null
+  const peekEntry = active[1] ?? null
 
-  // When cursor is at end of active queue, if there are Later'd entries,
-  // they're already at end of active — keep showing them
   const isCleared = active.length === 0 && session.triaged > 0
   const isEmpty = entries.length === 0 && session.triaged === 0
 
-  // Peek entry (card behind current)
-  const peekEntry = active[cursor + 1] ?? null
+  // Swipe direction tracking for front card exit animation
+  const [exitDirection, setExitDirection] = useState<DismissDirection>(null)
+  // Prevent multiple rapid triggers
+  const [isTransitioning, setIsTransitioning] = useState(false)
+
+  // Skip drawer state — card already dismissed when drawer opens
+  const [showSkipSheet, setShowSkipSheet] = useState(false)
+  const [pendingSkipId, setPendingSkipId] = useState<string | null>(null)
+  const [pendingSkipTitle, setPendingSkipTitle] = useState<string | null>(null)
+  const [pendingSkipScore, setPendingSkipScore] = useState<number | null>(null)
+
+  // Track the dismissed entry so we can undo back into queue
+  const [lastDismissedEntry, setLastDismissedEntry] = useState<Entry | null>(null)
+
+  const advanceQueue = useCallback((dismissedId: string) => {
+    // Remove from front of active — decidedIds handles exclusion or we splice localQueue
+    setLocalQueue((prev) => prev.filter((e) => e.id !== dismissedId))
+    setExitDirection(null)
+    setIsTransitioning(false)
+  }, [])
 
   const handleLookCloser = useCallback(async () => {
-    if (!currentEntry) return
-    const id = currentEntry.id
-    try {
-      await approveEntry(id)
-      session.recordLookCloser(id)
+    if (!currentEntry || isTransitioning) return
+    const entry = currentEntry
+    const id = entry.id
+    setIsTransitioning(true)
+    setExitDirection('right')
+
+    // Fire-and-forget approve — record optimistically
+    approveEntry(id).catch((err) => console.error('approve failed', err))
+    session.recordLookCloser(id, entry.title || entry.address || 'Untitled', entry.score)
+    void client.invalidateQueries({ queryKey: QUERY_KEYS.appData })
+
+    // Wait for slide-out animation then advance
+    setTimeout(() => advanceQueue(id), 250)
+  }, [currentEntry, isTransitioning, session, client, advanceQueue])
+
+  const handleSwipeDismiss = useCallback((direction: 'left' | 'right') => {
+    if (!currentEntry || isTransitioning) return
+    const entry = currentEntry
+    setIsTransitioning(true)
+    setLastDismissedEntry(entry)
+    setExitDirection(direction)
+
+    if (direction === 'right') {
+      // Approve flow — same as Look closer button
+      approveEntry(entry.id).catch((err) => console.error('approve failed', err))
+      session.recordLookCloser(entry.id, entry.title || entry.address || 'Untitled', entry.score)
       void client.invalidateQueries({ queryKey: QUERY_KEYS.appData })
-      setSelectedListingId(id)
-      setTab('shortlist')
-    } catch (err) {
-      console.error('approve failed', err)
+      setTimeout(() => advanceQueue(entry.id), 250)
+    } else {
+      // Skip flow — card slides off, then sheet appears
+      // Remove from local queue but don't record in session yet (Undo can revert)
+      setTimeout(() => {
+        setLocalQueue((prev) => prev.filter((e) => e.id !== entry.id))
+        setExitDirection(null)
+        setIsTransitioning(false)
+        // Open sheet after card is gone
+        setPendingSkipId(entry.id)
+        setPendingSkipTitle(entry.title || entry.address || 'Untitled')
+        setPendingSkipScore(entry.score)
+        setShowSkipSheet(true)
+      }, 250)
     }
-  }, [currentEntry, session, client, setSelectedListingId, setTab])
+  }, [currentEntry, isTransitioning, session, client, advanceQueue])
 
-  function handleSkip() {
-    if (!currentEntry) return
-    setPendingSkipId(currentEntry.id)
-    setShowSkipSheet(true)
-  }
+  const handleSkipButton = useCallback(() => {
+    if (!currentEntry || isTransitioning) return
+    handleSwipeDismiss('left')
+  }, [currentEntry, isTransitioning, handleSwipeDismiss])
 
-  async function confirmSkip(reason: string | null) {
+  const confirmSkip = useCallback(async (reason: string | null) => {
     const id = pendingSkipId
+    const title = pendingSkipTitle
+    const score = pendingSkipScore
     if (!id) return
     setShowSkipSheet(false)
+    setPendingSkipId(null)
+    setPendingSkipTitle(null)
+    setPendingSkipScore(null)
+    setLastDismissedEntry(null)
     try {
       await rejectEntry(id, reason ?? undefined)
-      session.recordSkip(id)
+      session.recordSkip(id, title ?? 'Untitled', score, reason ?? undefined)
       void client.invalidateQueries({ queryKey: QUERY_KEYS.appData })
     } catch (err) {
       console.error('reject failed', err)
     }
-    setPendingSkipId(null)
-  }
+  }, [pendingSkipId, pendingSkipTitle, pendingSkipScore, session, client])
 
-  function handleUndo() {
-    // Undo: cancel the skip, remove from decided, keep in queue
+  const handleUndo = useCallback(() => {
+    // Restore the just-skipped card to the front of the queue
+    if (lastDismissedEntry) {
+      setLocalQueue((prev) => [lastDismissedEntry, ...prev.filter((e) => e.id !== lastDismissedEntry.id)])
+    }
     setShowSkipSheet(false)
     setPendingSkipId(null)
-    // Don't record anything — the entry stays in queue
-  }
+    setPendingSkipTitle(null)
+    setPendingSkipScore(null)
+    setLastDismissedEntry(null)
+  }, [lastDismissedEntry])
 
-  function handleLater() {
-    if (!currentEntry) return
-    session.recordLater(currentEntry.id)
-    // Move to back of localQueue
+  const handleLater = useCallback(() => {
+    if (!currentEntry || isTransitioning) return
+    const entry = currentEntry
+    session.recordLater(entry.id)
     setLocalQueue((prev) => {
-      const without = prev.filter((e) => e.id !== currentEntry.id)
-      return [...without, currentEntry]
+      const without = prev.filter((e) => e.id !== entry.id)
+      return [...without, entry]
     })
-    // Advance cursor (next card comes forward)
-    // cursor stays same — the queue shifted around us
-    // If we were at the last card, we go back to 0 (the card was moved to end)
-    // Since we filter by decidedIds, advancing isn't needed — just let re-render handle it
-  }
+  }, [currentEntry, isTransitioning, session])
 
   if (isEmpty) return (
-    <div className="flex flex-col h-[calc(100dvh-48px)]">
+    <div className="flex flex-col h-[calc(100dvh-48px-56px)]">
       <EmptyState />
     </div>
   )
 
   if (isCleared) return (
-    <div className="flex flex-col h-[calc(100dvh-48px)]">
+    <div className="flex flex-col h-[calc(100dvh-48px-56px)]">
       <ClearedState
-        triaged={session.triaged}
-        shortlisted={session.shortlisted}
-        skipped={session.skipped}
+        decisions={session.decisions}
+        nextCheckTime={nextCheckTime}
+        startEpoch={sessionStartEpoch}
       />
     </div>
   )
 
-  // Queue length for progress bar (total = original entries + any new, minus decided)
+  // Progress tracking
   const totalForProgress = active.length + session.triaged
   const currentProgress = session.triaged + 1
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-48px)] overflow-hidden">
+    <div className="flex flex-col h-[calc(100dvh-48px-56px)] overflow-hidden" data-testid="inbox-mobile">
+      {/* Header row */}
+      <div className="flex items-baseline justify-between px-3 pt-3 pb-1 flex-shrink-0">
+        <h1 className="font-sans font-medium text-[22px] text-text">Inbox</h1>
+        <span className="font-mono text-[12px] text-muted">
+          {currentProgress} of {totalForProgress}
+        </span>
+      </div>
+
       {/* Progress bar */}
-      {totalForProgress > 0 && (
+      {totalForProgress > 1 && (
         <ProgressBar current={currentProgress} total={totalForProgress} />
       )}
 
       {/* Card stack */}
-      <div className="relative flex-1 mx-3 mb-3 min-h-0">
-        {/* Peek card (behind) */}
-        {peekEntry && (
-          <div className="absolute top-1.5 left-0 right-0 bottom-[-6px] bg-sunken rounded-xl z-10 overflow-hidden">
-            <div className="h-full opacity-40">
-              {peekEntry.image_url && (
-                <img
-                  src={peekEntry.image_url}
-                  alt=""
-                  className="w-full h-[200px] object-cover"
-                  draggable={false}
-                />
-              )}
-            </div>
-          </div>
-        )}
+      <div className="relative flex-1 mx-3 mb-2 min-h-0">
+        {/* Peek card behind */}
+        <AnimatePresence>
+          {peekEntry && !showSkipSheet && (
+            <PeekCard key={`peek-${peekEntry.id}`} entry={peekEntry} />
+          )}
+        </AnimatePresence>
 
-        {/* Front card — keyed by id so Framer Motion resets on card change */}
+        {/* Front card — keyed by id so state resets on card change */}
         <AnimatePresence mode="wait">
           {currentEntry && (
             <SwipeCard
               key={currentEntry.id}
               entry={currentEntry}
-              onLookCloser={handleLookCloser}
-              onSkip={handleSkip}
+              exitDirection={exitDirection}
+              onDismiss={handleSwipeDismiss}
             />
           )}
         </AnimatePresence>
       </div>
 
-      {/* Action bar */}
-      <div className="flex-shrink-0 p-3 flex gap-2">
+      {/* Action strip — pinned above bottom-nav */}
+      <div className="flex-shrink-0 px-4 pt-2 pb-3 flex gap-2">
         <button
           onClick={() => void handleLookCloser()}
-          disabled={!currentEntry}
-          className="flex-1 h-12 rounded-md font-sans text-[15px] font-medium bg-accent text-white hover:bg-accent/80 transition-colors duration-fast border-none cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed"
+          disabled={!currentEntry || isTransitioning}
+          className="flex-1 h-12 rounded-md font-sans text-[15px] font-medium bg-transparent border border-accent text-accent-lt hover:bg-accent/10 transition-colors duration-fast cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed"
         >
           Look closer
         </button>
         <button
-          onClick={handleSkip}
-          disabled={!currentEntry}
-          className="flex-1 h-12 rounded-md font-sans text-[14px] font-normal border border-border-strong bg-transparent text-text-3 hover:bg-white/[0.06] hover:text-text transition-colors duration-fast cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed"
+          onClick={handleSkipButton}
+          disabled={!currentEntry || isTransitioning}
+          className="flex-1 h-12 rounded-md font-sans text-[14px] font-normal border border-border-strong bg-sunken text-text-3 hover:bg-white/[0.06] hover:text-text transition-colors duration-fast cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed"
         >
           Skip
         </button>
         <button
           onClick={handleLater}
-          disabled={!currentEntry}
-          className="px-4 h-12 rounded-md font-sans text-[13px] font-normal bg-transparent text-faint hover:text-text-3 transition-colors duration-fast border-none cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed"
+          disabled={!currentEntry || isTransitioning}
+          className="w-16 h-12 rounded-md font-sans text-[13px] font-normal bg-transparent text-faint hover:text-text-3 transition-colors duration-fast border-none cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed"
         >
           Later
         </button>
@@ -621,12 +714,13 @@ export function InboxMobile({ entries }: InboxMobileProps) {
       <SkipDrawer
         open={showSkipSheet}
         onOpenChange={(open) => {
+          // Drawer dismissed via swipe-down: treat as Next with no reason
           if (!open && showSkipSheet) {
-            // Drawer dismissed without undo — treat as confirm with no reason
             void confirmSkip(null)
           }
           setShowSkipSheet(open)
         }}
+        skippedTitle={pendingSkipTitle}
         onConfirm={(reason) => void confirmSkip(reason)}
         onUndo={handleUndo}
       />

@@ -42,7 +42,7 @@ export function Inbox() {
   const entries = selectInbox(data)
 
   if (isMobile) {
-    return <InboxMobile entries={entries} />
+    return <InboxMobile entries={entries} nextCheckTime={data?.next_check ?? null} />
   }
 
   return <InboxDesktop entries={entries} />
