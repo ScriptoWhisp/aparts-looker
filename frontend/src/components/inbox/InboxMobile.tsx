@@ -322,28 +322,74 @@ function SwipeCard({ entry: e, exitDirection, onDismiss }: SwipeCardProps) {
 }
 
 // ── Peek card (behind front card) ──────────────────────────────────────────
+//
+// Renders the SAME full-content shape as SwipeCard (photo + title + meta +
+// price + all-in + verdict) but is dimmed (opacity-40) and slightly scaled
+// down / offset so it reads as a "card behind". When the front card exits,
+// AnimatePresence unmounts it and the next SwipeCard mounts in its place —
+// the transition reads as "stack promotes cleanly" rather than showing a
+// dim placeholder with no text.
 
 interface PeekCardProps {
   entry: Entry
 }
 
 function PeekCard({ entry: e }: PeekCardProps) {
+  const scoreCol = scoreColor(e.score)
+
   return (
     <motion.div
-      initial={{ scale: 0.95, y: 8 }}
-      animate={{ scale: 1, y: 0 }}
+      initial={{ scale: 0.94, opacity: 0.3, y: 6 }}
+      animate={{ scale: 0.95, opacity: 0.4, y: 0 }}
+      exit={{ scale: 0.92, opacity: 0, y: 10 }}
       transition={{ type: 'spring', stiffness: 300, damping: 28 }}
-      className="absolute top-1.5 left-0 right-0 bottom-[-6px] bg-sunken rounded-xl z-10 overflow-hidden opacity-50"
+      className="absolute top-1.5 left-0 right-0 bottom-[-6px] bg-sunken rounded-xl z-10 overflow-hidden flex flex-col pointer-events-none select-none"
     >
-      {e.image_url && (
-        <img
-          src={e.image_url}
-          alt=""
-          className="w-full h-full object-cover"
-          draggable={false}
-          style={{ height: '55%' }}
-        />
-      )}
+      {/* Photo */}
+      <div className="relative flex-shrink-0 bg-bg overflow-hidden" style={{ height: '55%' }}>
+        {e.image_url ? (
+          <img
+            src={e.image_url}
+            alt=""
+            className="w-full h-full object-cover"
+            draggable={false}
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <span className="text-faint text-[12px] font-mono">no photo</span>
+          </div>
+        )}
+        {/* Score badge */}
+        <div className="absolute top-2 right-2 z-20">
+          <ScoreBadge score={e.score} size="lg" />
+        </div>
+      </div>
+
+      {/* Content — mirrors SwipeCard body */}
+      <div className="flex flex-col flex-1 p-4 gap-2 overflow-hidden">
+        <p className="font-sans font-medium text-[17px] text-text leading-snug line-clamp-2">
+          {e.title || e.address || 'Untitled listing'}
+        </p>
+        <p className="font-mono text-[12px] text-text-3">
+          {metaLine(e) || '—'}
+        </p>
+        <div className="flex items-baseline gap-2">
+          <span className="font-mono text-[22px] font-semibold text-text leading-none">
+            {fmtEur(e.price_eur)}
+          </span>
+          {pricePerSqm(e) && (
+            <span className="font-mono text-[11px] text-muted">{pricePerSqm(e)}</span>
+          )}
+        </div>
+        {e.verdict && (
+          <p
+            className="text-[13px] text-text-2 leading-snug line-clamp-2 pl-2 border-l-2 mt-1"
+            style={{ borderColor: scoreCol }}
+          >
+            {e.verdict}
+          </p>
+        )}
+      </div>
     </motion.div>
   )
 }
