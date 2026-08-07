@@ -453,3 +453,81 @@ POST endpoints (approve, reject, viewing-decision, settings) are intercepted per
 | `5a87511` | `test(e2e): settings — form save + persistence` |
 | `9f022c4` | `test(e2e): compare — multi-select + differing-rows overlay` |
 | `d986bab` | `docs(frontend): testing pyramid + post-commit QA workflow` |
+
+---
+
+## Wave 8A — Mobile Inbox Tinder-flow rework (COMPLETE)
+
+**Date:** 2026-08-07
+**Status:** Complete. 121 Vitest tests passing. Playwright tests updated.
+
+### What shipped
+
+| Area | Detail |
+|------|--------|
+| Tinder flow — stay on inbox | After Look closer / swipe right: POST /approve fire-and-forget, card slides off right, next card promotes from peek. Hash stays `#inbox`. Previously jumped to `#shortlist`. |
+| Skip flow — explicit Next | After Skip / swipe left: card slides off left first, skip sheet opens, next card visible behind. No auto-close countdown. Explicit `Next` button commits reject. `Undo` returns card to front of queue. |
+| Swipe overlays — big tinted | Full-card color tint overlay (green right / red left) with large centered text "Look closer" / "Skip" scaling with drag distance. Replaced tiny corner pills. |
+| Swipe animations | `exit: { type: 'tween', duration: 0.22 }` for fast fling. PeekCard: `initial={{ scale: 0.95, y: 8 }} animate={{ scale: 1, y: 0 }}` promote. |
+| All-in cost line | `AllInLine` component below price row: `all-in ≈ Nk · incl. reno est.` in mono `text-accent-lt`. Shows `all-in unknown` when no renovation_items. Uses `computeAllIn` from `lib/cost.ts`. |
+| Cleared state redesign | `ClearedState` shows decision list rows: score (color-coded) + title (strikethrough if skipped) + outcome tag (`shortlisted` green / `<reason>` muted). Summary sub-line with count, elapsed minutes, next scrape time. |
+| decisions[] state tracking | `useInboxSession` extended with `decisions: InboxDecision[]` (id, title, score, outcome, reason). `recordLookCloser` / `recordSkip` now accept title+score args. `resetSession` clears decisions. |
+| MobileBottomNav | New component: `fixed bottom h-14`, 4 items with icons + labels. Active: `text-accent-lt` + `border-t-2 border-t-accent`. Pending badge dot on Inbox. Mobile-only rendering. |
+| Header tab hiding | Tab nav hidden on mobile viewport (`!isMobile` gate + spacer). Bottom nav takes over navigation on mobile. |
+| Shell padding | `pb-14` on mobile main content to avoid bottom nav overlap. |
+| Inbox header | "Inbox" title (Inter 500 22px) left + "N of M" mono right-aligned. Progress bar below. |
+| Height | `h-[calc(100dvh-48px-56px)]` to account for header 48px + bottom nav 56px. |
+
+### Behavior contract (canonical)
+
+| Action | Old behavior | New behavior |
+|--------|-------------|-------------|
+| Tap "Look closer" | POST /approve → hash→`#shortlist` → detail opens | POST /approve (fire-and-forget) → card slides right → next card promotes → stays `#inbox` |
+| Swipe right past threshold | Same as Look closer (jumped to shortlist) | Approve + advance, stays inbox |
+| Tap "Skip" | Sheet opens → 8s countdown auto-closes | Card slides left → sheet opens → wait for explicit Next |
+| Swipe left past threshold | Same as Skip | Card slides left → sheet opens |
+| Tap "Next" in sheet | N/A (was auto-close) | POST /reject with selected reason → sheet closes |
+| Tap "Undo" in sheet | Sheet closed, entry decided | Card restored to front of queue, sheet closes |
+| All cards triaged | "You triaged N: X shortlisted · Y skipped" | Decision list with score/title/outcome, Open shortlist CTA |
+| Tab navigation (mobile) | Header tabs | Fixed bottom dock, 4 items |
+
+### Commits
+
+| Hash | Message |
+|------|---------|
+| `e8c935a` | `feat(mobile-nav): bottom nav dock with 4 items` (state.ts decisions[]) |
+| `e65756f` | `feat(mobile-nav): add MobileBottomNav component and wire into Shell/Header` |
+| `16f5bd3` | `feat(inbox-mobile): tinder-flow — stay on inbox after approve/skip, advance to next` |
+| `e1603ca` | `test(inbox-mobile): tinder-flow regression net (vitest + playwright)` |
+
+### Test coverage added (Wave 8A)
+
+**Vitest (15 new tests — 121 total):**
+
+| Test | Assertion |
+|------|-----------|
+| Look closer stays `#inbox` | `window.location.hash === '#inbox'` after button click |
+| Look closer fires POST /approve | `approveCallCount === 1` |
+| Look closer records `shortlisted` decision | `session.decisions[0].outcome === 'shortlisted'` |
+| Skip button triggers dismissal | body contains "Skipped" text |
+| Skip sheet has Next button | `screen.getByRole('button', { name: /Next/ })` present |
+| Skip sheet has no countdown | body does not match `/auto-closes/i` |
+| Next button fires POST /reject | `rejectCallCount === 1` |
+| Skip sheet shows 6 chips | all 6 reason chip labels present |
+| Cleared state renders | `screen.getByText(/Inbox clear/)` present |
+| Open shortlist button visible | `screen.getByRole('button', { name: /Open shortlist/ })` present |
+| recordLookCloser adds decision | decisions array length/content |
+| recordSkip with reason | decisions array outcome/reason |
+| resetSession clears decisions | `decisions.length === 0` |
+| Mobile layout renders Inbox header | "Inbox" title + "1 of 3" progress counter |
+| Mobile action buttons visible | Look closer / Skip / Later buttons |
+
+**Playwright E2E (5 new mobile tests):**
+
+| Test | What it covers |
+|------|---------------|
+| Look closer on card 1 → hash `#inbox` + card 2 visible | Core Tinder flow regression |
+| Skip → sheet with Next button (no countdown) | Explicit-Next skip flow |
+| Skip → chip → Next → POST /reject with reason | Reason routing |
+| Cleared state: 2 approvals → decision list + Open shortlist | Cleared state rendering |
+| Bottom nav dock renders with 4 items | Mobile navigation |
