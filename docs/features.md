@@ -37,12 +37,16 @@
 
 ## 3. Pending Queue & Approval
 
-**What it does:** Every evaluated listing enters `status='pending'`. Daniel reviews via Telegram (inline `/approve` `/reject` buttons on a photo card) or the web Pending tab. Approval flips status to `approved` and triggers the KÜ lookup + email draft; rejection captures a reason (price / location / condition / other).
+**What it does:** Every evaluated listing enters `status='pending'`. Daniel reviews via the web Inbox (swipe/tap Tinder-flow) or the Shortlist tab. Approval flips status to `approved` and triggers the KÜ lookup + email draft; rejection captures a reason (price / location / condition / other). Telegram is a notifier-only surface — all triage happens in the web app.
 
 **Nuances:**
 - Rejection reasons are surfaced back to the AI on future scores (rejected-because-price context lets the AI down-weight similar listings).
-- Telegram card format is score-tiered: high scores get a full photo card, medium scores get compact text, sub-threshold get nothing.
-- Silence-for-N-hours is a first-class feature (`/api/telegram/silence`) — used during viewings so notifications don't distract.
+- **Telegram two-message flow (Wave 8B):** Per scrape run, Daniel gets at most two messages:
+  1. **Full photo card(s)** for the top-scoring listings at or above `TELEGRAM_MIN_SCORE_PHOTO` (default 80). Capped at `TELEGRAM_PHOTO_CARDS_PER_RUN` (default 3) per run. Caption format: `{score} · {title} / {price} € · {area} m² · {district} / {verdict} / Open in Aparts Looker ↗`. No inline keyboard — the deeplink is in the caption body.
+  2. **Digest follow-up** for everything else at or above `TELEGRAM_MIN_SCORE_TEXT` (default 65) that didn't get a photo card: `"N more above X today. Open inbox ↗"`. One message for the whole remainder.
+  3. If nothing qualifies: silence. No messages sent.
+  4. Telegram AI-flagged high-severity risks suppress that individual photo card; the listing still appears in the web Inbox.
+- Silence-for-N-hours is a first-class feature (`/api/telegram/silence`) — suppresses both photo cards and digest. Used during viewings.
 
 ---
 

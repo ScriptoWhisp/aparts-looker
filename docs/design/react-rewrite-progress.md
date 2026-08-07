@@ -531,3 +531,43 @@ POST endpoints (approve, reject, viewing-decision, settings) are intercepted per
 | Skip → chip → Next → POST /reject with reason | Reason routing |
 | Cleared state: 2 approvals → decision list + Open shortlist | Cleared state rendering |
 | Bottom nav dock renders with 4 items | Mobile navigation |
+
+---
+
+## Wave 8B — Telegram digest flow (COMPLETE)
+
+**Date:** 2026-08-07
+**Status:** Complete. Backend-only wave — no frontend changes.
+
+### What shipped
+
+| Area | Detail |
+|------|--------|
+| `send_pending_card()` reshaped | Photo-tier only. Text-tier branch removed. No inline_keyboard. Caption format: `{score} · {title} / {price} € · {area} m² · {district} / {verdict} / Open in Aparts Looker ↗` (deeplink omitted when WEB_BASE_URL unset). |
+| `send_digest()` added | New function: `"N more above X today. [Open inbox](url)"` — sent once per scrape run for text-tier overflow. No-op when count <= 0 or silenced. |
+| `_build_inbox_url()` helper | Extracted from send_pending_card; reads `config.WEB_BASE_URL` at call time so /api/settings hot-edits take effect without restart. |
+| Two-pass in `process_ingest_batch()` | First pass: evaluate all listings, collect candidates >= TEXT threshold. Second pass: top-N photo cards then one digest. Per-listing Telegram send inside the loop removed. |
+| `TELEGRAM_PHOTO_CARDS_PER_RUN` | New config constant (env var, default 3). Overflow above the cap rolls into digest. Exposed in /api/settings under `telegram` group (range 1–20). |
+
+### Logic (per scrape run)
+
+1. Sort new listings by score descending.
+2. For `score >= TELEGRAM_MIN_SCORE_PHOTO`: send full photo card (cap at `TELEGRAM_PHOTO_CARDS_PER_RUN`).
+3. After photo cards: if any `score >= TELEGRAM_MIN_SCORE_TEXT` listings were not sent as photo cards (text-only tier + overflow), send ONE digest: `"N more above X today. Open inbox ↗"`.
+4. Below both thresholds: silence (dashboard only).
+5. Silence toggle (`/api/telegram/silence`) suppresses both photo cards AND digest.
+6. High-severity AI risk suppresses that individual photo card only (listing still in web Inbox).
+
+### "today" semantics (MVP option a — per-scrape)
+
+Digest count = overflow from *this scrape run only*. Two separate runs may both say "N more above X today" but each is self-contained and accurate to that run.
+`# TODO: switch to Inbox-cumulative counting when we track sent-digest state per day.`
+
+### Commits
+
+| Hash | Message |
+|------|---------|
+| `b97913b` | `refactor(telegram): strip text-tier per-listing sends + add send_digest` |
+| `787e3be` | `feat(ingest): two-pass telegram — top-N photo cards + digest for the rest` |
+| `b2f2ecc` | `feat(settings): add TELEGRAM_PHOTO_CARDS_PER_RUN with default 3` |
+| `d4d1e6d` | `test(telegram): coverage for digest logic + cap + silenced suppression` |
