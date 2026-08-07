@@ -386,3 +386,70 @@ The key pattern:
 | `0e5607a` | `test(overview): route smoke + ScatterSVG + calibration gating` |
 | `39d6d0e` | `test(inbox): desktop grid + skip flow + keyboard approve` |
 | `522f3c5` | `docs(frontend): README with test workflow + exclude test/ from tsc build` |
+
+---
+
+## Testing — Playwright E2E Setup
+
+**Date:** 2026-08-07
+**Status:** Complete. Test suite written; runs against Docker stack.
+
+### What was added
+
+| File | Purpose |
+|------|---------|
+| `frontend/playwright.config.ts` | Config: 2 projects (chromium-desktop 1440×900, webkit-mobile iPhone 13), baseURL from `E2E_BASE_URL` env |
+| `frontend/e2e/fixtures/seed.ts` | Route mock helpers (`mockAppData`, `mockSettings`, `mockGeoEndpoints`) + realistic fixture data |
+| `frontend/e2e/smoke.spec.ts` | 4 tabs × 2 projects — no console errors, active tab styling, no ErrorBoundary crash |
+| `frontend/e2e/inbox.spec.ts` | Look closer (POST /approve), Skip flow (modal+reason+POST), keyboard L, empty state, mobile layout |
+| `frontend/e2e/shortlist.spec.ts` | Sidebar groups, hero pane click, verdict band, after-viewing decision bar, dropped row, empty state |
+| `frontend/e2e/settings.spec.ts` | All category tabs render, slider enables Save, POST /api/settings fires, toast "Saved" |
+| `frontend/e2e/compare.spec.ts` | Ctrl-click multi-select, Compare button, dialog opens, Esc closes, backdrop closes |
+
+### Testing pyramid (complete picture)
+
+| Layer | Command | Speed | Scope |
+|-------|---------|-------|-------|
+| Vitest unit | `npm test` | ~2s | Logic, API shapes, routing, empty states, component render |
+| Playwright E2E | `npm run e2e` | ~40–90s | Real browser flows, user interactions, keyboard, POST verification, screenshots |
+| Both | `npm run qa` | ~100s | Full pre-push gate |
+
+### Bug class ownership
+
+| Bug class | Vitest | Playwright |
+|-----------|:------:|:----------:|
+| Runtime crash on undefined | Yes | Yes |
+| Wrong API shape regression | Yes | No (mocked) |
+| Visual layout / CSS | No | Yes (screenshot) |
+| Keyboard shortcut (L, S, C, Esc) | No | Yes |
+| POST request fired on click | No | Yes (route intercept) |
+| Mobile viewport sizing | No | Yes (webkit-mobile) |
+| Toast / notification appears | No | Yes |
+| Framer Motion swipe | No | Partial |
+
+### Data strategy
+
+All E2E tests use **Playwright route interception** — no live DB writes:
+
+```ts
+await mockAppData(page, fullAppData)    // intercepts GET /api/data
+await mockSettings(page, fullSettings)  // intercepts GET /api/settings
+await mockGeoEndpoints(page)            // intercepts /api/isochrone, /api/districts, .geojson
+await page.goto('/#inbox')
+```
+
+POST endpoints (approve, reject, viewing-decision, settings) are intercepted per-test and return `{ ok: true }` — verifying requests fire without mutating any real data.
+
+### Commits
+
+| Hash | Message |
+|------|---------|
+| `03b91c3` | `chore(frontend): install @playwright/test + browsers` |
+| `06996f3` | `feat(e2e): playwright config with desktop + mobile projects` |
+| `a5e32b8` | `feat(e2e): seed + mock fixtures for API routes` |
+| `17e93eb` | `test(e2e): smoke — 4 tabs load without console errors` |
+| `6cda23c` | `test(e2e): inbox — approve/skip/keyboard flows` |
+| `fd6bb6e` | `test(e2e): shortlist — sidebar navigation + after-viewing decisions + all-in cost` |
+| `5a87511` | `test(e2e): settings — form save + persistence` |
+| `9f022c4` | `test(e2e): compare — multi-select + differing-rows overlay` |
+| `d986bab` | `docs(frontend): testing pyramid + post-commit QA workflow` |
