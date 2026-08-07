@@ -12,20 +12,26 @@
 /**
  * Format a euro price: 185000 → "185 000 €"
  * Uses narrow non-breaking space as thousands separator to match the design brief.
+ *
+ * The et-EE locale for EUR may place € at the start ("€ 185 000") OR at the
+ * end ("185 000 €") depending on the runtime's ICU data version. We normalise
+ * both: strip any leading/trailing € symbol + surrounding whitespace, then
+ * re-append a single " €" suffix. This prevents the "185 000 € €" double-symbol
+ * regression seen when the locale already appends the symbol.
  */
 export function fmtEur(value: number | null | undefined): string {
   if (value == null) return '—'
-  return (
-    new Intl.NumberFormat('et-EE', {
-      style: 'currency',
-      currency: 'EUR',
-      maximumFractionDigits: 0,
-    })
-      .format(value)
-      // Estonian locale uses "€ 185 000" — reformat to "185 000 €"
-      .replace(/^€\s*/, '')
-      .trim() + ' €'
-  )
+  const formatted = new Intl.NumberFormat('et-EE', {
+    style: 'currency',
+    currency: 'EUR',
+    maximumFractionDigits: 0,
+  }).format(value)
+  // Strip any € (with surrounding whitespace) from start or end, then add one.
+  const digits = formatted
+    .replace(/^\s*€\s*/, '')   // leading € (some ICU versions)
+    .replace(/\s*€\s*$/, '')   // trailing € (other ICU versions)
+    .trim()
+  return `${digits} €`
 }
 
 /**
