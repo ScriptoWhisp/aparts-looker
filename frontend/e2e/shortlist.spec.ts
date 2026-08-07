@@ -59,7 +59,9 @@ test('sidebar shows 3 groups with correct entry counts', async ({ page }) => {
   })
 })
 
-test('clicking sidebar row renders hero pane', async ({ page }) => {
+test('clicking sidebar row renders hero pane', async ({ page, isMobile }) => {
+  // Sidebar is hidden on mobile (md:block); this test targets desktop only
+  if (isMobile) { test.skip(); return }
   await mockAppData(page, appDataWithShortlisted)
   await mockSettings(page, fullSettings)
   await mockGeoEndpoints(page)
@@ -217,7 +219,7 @@ test('empty shortlist shows "Nothing shortlisted yet"', async ({ page }) => {
 
   await page.goto('/#shortlist')
 
-  await expect(page.locator('text=Nothing shortlisted yet')).toBeVisible({ timeout: 10_000 })
+  await expect(page.locator('text=Nothing shortlisted yet').first()).toBeVisible({ timeout: 10_000 })
 
   await test.step('screenshot', async () => {
     await page.screenshot({

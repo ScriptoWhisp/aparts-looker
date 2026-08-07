@@ -26,7 +26,9 @@ import {
 
 // ── Desktop: Look closer flow ──────────────────────────────────────────────
 
-test('desktop — Look closer moves to shortlist', async ({ page }) => {
+test('desktop — Look closer moves to shortlist', async ({ page, isMobile }) => {
+  // InboxDesktop uses [role="article"] cards. On mobile, InboxMobile renders a different layout.
+  if (isMobile) { test.skip(); return }
   await mockAppData(page, appDataWithPending)
   await mockSettings(page, fullSettings)
   await mockGeoEndpoints(page)
@@ -65,7 +67,8 @@ test('desktop — Look closer moves to shortlist', async ({ page }) => {
 
 // ── Desktop: Skip flow ─────────────────────────────────────────────────────
 
-test('desktop — Skip opens reason modal and fires POST /reject', async ({ page }) => {
+test('desktop — Skip opens reason modal and fires POST /reject', async ({ page, isMobile }) => {
+  if (isMobile) { test.skip(); return }
   await mockAppData(page, appDataWithPending)
   await mockSettings(page, fullSettings)
   await mockGeoEndpoints(page)
@@ -119,7 +122,8 @@ test('desktop — Skip opens reason modal and fires POST /reject', async ({ page
 
 // ── Desktop: Keyboard L shortcut ──────────────────────────────────────────
 
-test('desktop — keyboard L fires approve on first card', async ({ page }) => {
+test('desktop — keyboard L fires approve on first card', async ({ page, isMobile }) => {
+  if (isMobile) { test.skip(); return }
   await mockAppData(page, appDataWithPending)
   await mockSettings(page, fullSettings)
   await mockGeoEndpoints(page)

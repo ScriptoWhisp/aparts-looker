@@ -125,22 +125,30 @@ test('multi-select two rows shows Compare button', async ({ page, isMobile }) =>
   await page.goto('/#shortlist')
   await page.waitForSelector('text=TO VIEW', { timeout: 10_000 })
 
-  await test.step('ctrl-click first entry row', async () => {
-    const firstRow = page.locator('text=Entry A').first()
-    await expect(firstRow).toBeVisible({ timeout: 5_000 })
-    await firstRow.click({ modifiers: ['Meta'] })
+  await test.step('ctrl-click sidebar rows for both entries', async () => {
+    // Sidebar rows are button elements inside <aside> (the 284px sidebar)
+    // We target the sidebar rows by their button role and partial name matching score + title
+    const sidebarRows = page.locator('aside button').filter({ hasText: 'Entry A' })
+    const firstSidebarRow = sidebarRows.first()
+    await expect(firstSidebarRow).toBeVisible({ timeout: 5_000 })
+    await firstSidebarRow.click({ modifiers: ['Meta'] })
+
+    // Wait for compare bar to appear — sidebar funnel header shows when compareIds > 0
+    // The bar shows "{count}/2 selected"
+    await page.waitForSelector('text=/\\d\\/2 selected/', { timeout: 5_000 })
+
+    const sidebarRowsB = page.locator('aside button').filter({ hasText: 'Entry B' })
+    const secondSidebarRow = sidebarRowsB.first()
+    await expect(secondSidebarRow).toBeVisible()
+    await secondSidebarRow.click({ modifiers: ['Meta'] })
   })
 
-  await test.step('ctrl-click second entry row', async () => {
-    const secondRow = page.locator('text=Entry B').first()
-    await expect(secondRow).toBeVisible()
-    await secondRow.click({ modifiers: ['Meta'] })
-  })
-
-  await test.step('Compare button appears', async () => {
-    // Compare button in sidebar funnel header
-    const compareBtn = page.locator('button:has-text("Compare")')
-    await expect(compareBtn).toBeVisible({ timeout: 5_000 })
+  await test.step('Compare button is enabled and visible', async () => {
+    // When 2 entries selected, Compare button becomes enabled.
+    // The bar header Compare button has text exactly "Compare"
+    await page.waitForSelector('text=/\\d\\/2 selected/', { timeout: 5_000 })
+    const compareBtn = page.getByRole('button', { name: /^Compare$/ })
+    await expect(compareBtn).toBeEnabled({ timeout: 5_000 })
   })
 
   await test.step('screenshot with selection ring', async () => {
@@ -166,18 +174,22 @@ test('Compare button opens dialog with heading', async ({ page, isMobile }) => {
   await page.goto('/#shortlist')
   await page.waitForSelector('text=TO VIEW', { timeout: 10_000 })
 
-  // Select two rows
-  const firstRow = page.locator('text=Entry A').first()
-  await expect(firstRow).toBeVisible({ timeout: 5_000 })
-  await firstRow.click({ modifiers: ['Meta'] })
+  // Select two sidebar rows via ctrl-click
+  const sidebarA = page.locator('aside button').filter({ hasText: 'Entry A' }).first()
+  await expect(sidebarA).toBeVisible({ timeout: 5_000 })
+  await sidebarA.click({ modifiers: ['Meta'] })
+  await page.waitForSelector('text=/\\d\\/2 selected/', { timeout: 5_000 })
 
-  const secondRow = page.locator('text=Entry B').first()
-  await expect(secondRow).toBeVisible()
-  await secondRow.click({ modifiers: ['Meta'] })
+  const sidebarB = page.locator('aside button').filter({ hasText: 'Entry B' }).first()
+  await expect(sidebarB).toBeVisible()
+  await sidebarB.click({ modifiers: ['Meta'] })
+  await page.waitForSelector('text=2/2 selected', { timeout: 5_000 })
 
   await test.step('click Compare button', async () => {
-    const compareBtn = page.locator('button:has-text("Compare")').first()
-    await expect(compareBtn).toBeVisible({ timeout: 5_000 })
+    // Target the Compare button in the sidebar bar header (short text, not the entry titles)
+    // The bar header button has text exactly "Compare" (the entry titles have longer text)
+    const compareBtn = page.getByRole('button', { name: /^Compare$/ })
+    await expect(compareBtn).toBeEnabled({ timeout: 5_000 })
     await compareBtn.click()
   })
 
@@ -214,13 +226,18 @@ test('Esc closes compare dialog', async ({ page, isMobile }) => {
   await page.goto('/#shortlist')
   await page.waitForSelector('text=TO VIEW', { timeout: 10_000 })
 
-  // Select two + open compare
-  const firstRow = page.locator('text=Entry A').first()
-  await expect(firstRow).toBeVisible({ timeout: 5_000 })
-  await firstRow.click({ modifiers: ['Meta'] })
-  await page.locator('text=Entry B').first().click({ modifiers: ['Meta'] })
+  // Select two sidebar rows + open compare
+  const escSidebarA = page.locator('aside button').filter({ hasText: 'Entry A' }).first()
+  await expect(escSidebarA).toBeVisible({ timeout: 5_000 })
+  await escSidebarA.click({ modifiers: ['Meta'] })
+  await page.waitForSelector('text=/\\d\\/2 selected/', { timeout: 5_000 })
 
-  const compareBtn = page.locator('button:has-text("Compare")').first()
+  const escSidebarB = page.locator('aside button').filter({ hasText: 'Entry B' }).first()
+  await escSidebarB.click({ modifiers: ['Meta'] })
+  await page.waitForSelector('text=2/2 selected', { timeout: 5_000 })
+
+  const compareBtn = page.getByRole('button', { name: /^Compare$/ })
+  await expect(compareBtn).toBeEnabled({ timeout: 5_000 })
   await compareBtn.click()
 
   await expect(page.locator('h2:has-text("Compare")')).toBeVisible({ timeout: 5_000 })
@@ -249,20 +266,27 @@ test('backdrop click closes compare dialog', async ({ page, isMobile }) => {
   await page.goto('/#shortlist')
   await page.waitForSelector('text=TO VIEW', { timeout: 10_000 })
 
-  // Select two + open compare
-  const firstRow = page.locator('text=Entry A').first()
-  await expect(firstRow).toBeVisible({ timeout: 5_000 })
-  await firstRow.click({ modifiers: ['Meta'] })
-  await page.locator('text=Entry B').first().click({ modifiers: ['Meta'] })
+  // Select two sidebar rows + open compare
+  const bdSidebarA = page.locator('aside button').filter({ hasText: 'Entry A' }).first()
+  await expect(bdSidebarA).toBeVisible({ timeout: 5_000 })
+  await bdSidebarA.click({ modifiers: ['Meta'] })
+  await page.waitForSelector('text=/\\d\\/2 selected/', { timeout: 5_000 })
 
-  const compareBtn = page.locator('button:has-text("Compare")').first()
+  const bdSidebarB = page.locator('aside button').filter({ hasText: 'Entry B' }).first()
+  await bdSidebarB.click({ modifiers: ['Meta'] })
+  await page.waitForSelector('text=2/2 selected', { timeout: 5_000 })
+
+  const compareBtn = page.getByRole('button', { name: /^Compare$/ })
+  await expect(compareBtn).toBeEnabled({ timeout: 5_000 })
   await compareBtn.click()
 
   await expect(page.locator('h2:has-text("Compare")')).toBeVisible({ timeout: 5_000 })
 
-  await test.step('click backdrop', async () => {
-    // Click the fixed inset-0 backdrop (outside the dialog)
-    await page.mouse.click(10, 10)
+  await test.step('click backdrop (outside dialog bounds)', async () => {
+    // The backdrop is fixed inset-0 z-50. The dialog is 1000px wide centered on 1440px,
+    // so left edge is at ~220px. Click at (5, 450) — left of dialog, on backdrop.
+    // The backdrop div has onClick={onClose}, so clicking outside the dialog's stopPropagation zone fires onClose.
+    await page.mouse.click(5, 450)
   })
 
   await test.step('dialog is gone', async () => {

@@ -68,19 +68,25 @@ test('settings — changing a slider enables Save button', async ({ page }) => {
   })
 
   await test.step('move a range slider', async () => {
-    // Find a range input and change it
+    // Find a range input and change it via Playwright native fill (triggers React synthetic event)
     const slider = page.locator('input[type="range"]').first()
     await expect(slider).toBeVisible()
 
-    // Move slider by dispatching input event with a new value
-    await slider.evaluate((el: HTMLInputElement) => {
-      const min = Number(el.min)
-      const max = Number(el.max)
-      const mid = Math.round((min + max) / 2)
-      el.value = String(mid)
+    // Use Playwright's fill or click + keyboard to trigger React's synthetic onChange
+    const min = await slider.evaluate((el: HTMLInputElement) => el.min)
+    const max = await slider.evaluate((el: HTMLInputElement) => el.max)
+    const mid = Math.round((Number(min) + Number(max)) / 2)
+
+    await slider.focus()
+    await slider.evaluate((el: HTMLInputElement, value) => {
+      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        'value',
+      )?.set
+      nativeInputValueSetter?.call(el, String(value))
       el.dispatchEvent(new Event('input', { bubbles: true }))
       el.dispatchEvent(new Event('change', { bubbles: true }))
-    })
+    }, mid)
   })
 
   await test.step('Save button becomes enabled', async () => {
@@ -125,15 +131,21 @@ test('settings — Save fires POST and shows Saved toast', async ({ page }) => {
   await page.locator('button:has-text("Cost model")').first().click()
   await expect(page.locator('h2:has-text("Cost model")')).toBeVisible()
 
-  // Modify a slider
+  // Modify a slider using the native value setter trick to trigger React's synthetic event
   const slider = page.locator('input[type="range"]').first()
-  await slider.evaluate((el: HTMLInputElement) => {
-    const min = Number(el.min)
-    const max = Number(el.max)
-    el.value = String(Math.round((min + max) / 2))
+  await slider.focus()
+  const sliderMin = await slider.evaluate((el: HTMLInputElement) => el.min)
+  const sliderMax = await slider.evaluate((el: HTMLInputElement) => el.max)
+  const sliderMid = Math.round((Number(sliderMin) + Number(sliderMax)) / 2)
+  await slider.evaluate((el: HTMLInputElement, value) => {
+    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      'value',
+    )?.set
+    nativeInputValueSetter?.call(el, String(value))
     el.dispatchEvent(new Event('input', { bubbles: true }))
     el.dispatchEvent(new Event('change', { bubbles: true }))
-  })
+  }, sliderMid)
 
   // Click Save
   await page.locator('button:has-text("Save")').click()
