@@ -7,9 +7,10 @@ Phase 7 Wave 2 port notes:
 - `with data_store._lock:` blocks still parse and execute (no-op nullcontext).
 - `_seed_pending` now uses data_store.save_app_data via the DB shim instead of
   writing JSON directly, so the DB fixture intercepts the writes correctly.
-- test_send_pending_card_buttons: Wave 6B — asserts notifier-only layout
-  (Open Inbox + kv.ee; no Approve/Reject callback_data buttons).
+- test_send_pending_card_buttons: Wave 8B — asserts new caption format (no inline
+  keyboard; deeplink in caption body).
 - test_callback_query_* tests removed (Wave 6B — no callback processing).
+- Wave 8B: digest logic tests added (overflow cap, text-tier count, silence).
 """
 
 import pytest
@@ -82,14 +83,16 @@ def test_data_model_keys(db_session):
     assert "settings" in data
 
 
-def test_send_pending_card_buttons(monkeypatch):
-    """QUEUE-02 (Wave 6B): send_pending_card is notifier-only — no Approve/Reject buttons.
+def test_send_pending_card_caption_format(monkeypatch):
+    """QUEUE-02 (Wave 8B): send_pending_card uses new caption format — no inline keyboard.
 
-    Photo tier must send sendPhoto with:
-    - row[0]: {"text": "Open Inbox", "url": <inbox_url>}   — tap-through to web triage
-    - row[1]: {"text": "kv.ee", "url": <listing_url>}      — direct listing link
-
-    No callback_data keys anywhere in the keyboard (triage happens in the web app).
+    Photo-tier card must:
+    - Call sendPhoto (listing has image_url)
+    - Caption line 1: "{score} · {title}"
+    - Caption line 2: "{price} € · {area} m² · {district}" (district omitted if blank)
+    - Caption body: blank line + verdict
+    - Caption footer: deeplink when WEB_BASE_URL is set
+    - NO reply_markup / inline_keyboard anywhere in the payload
     """
     from unittest.mock import MagicMock  # noqa: PLC0415
 
@@ -97,58 +100,57 @@ def test_send_pending_card_buttons(monkeypatch):
     import telegram_client  # noqa: PLC0415
     from kv_listing_parser import Listing  # noqa: PLC0415
 
-    # Mock requests.post to capture the Telegram API call
     mock_response = MagicMock()
     mock_response.status_code = 200
     mock_response.json.return_value = {"result": {"message_id": 42, "chat": {"id": -100}}}
     mock_post = MagicMock(return_value=mock_response)
     monkeypatch.setattr(telegram_client.requests, "post", mock_post)
 
-    # Patch token/chat-id guards so the send path is exercised
     monkeypatch.setattr(telegram_client, "TELEGRAM_BOT_TOKEN", "test-bot-token")
     monkeypatch.setattr(telegram_client, "TELEGRAM_CHAT_ID", "-100")
-
-    # Provide a WEB_BASE_URL so the Inbox deep-link is included
     monkeypatch.setattr(cfg, "WEB_BASE_URL", "https://aparts.example.com")
 
     listing = Listing(
         id="1234567",
         url="https://kv.ee/1234567.html",
-        title="Test Apartment",
+        title="Telliskivi 60a",
         image_url="https://img/x.jpg",
+        price_eur=183000,
+        area_sqm=48.6,
     )
-    result = telegram_client.send_pending_card(listing, {"score": 82, "verdict": "Good"})
+    result = telegram_client.send_pending_card(
+        listing,
+        {"score": 79, "verdict": "Дом кирпичный, район растёт."},
+    )
 
-    # Call was to sendPhoto (listing has image_url, score >= photo threshold)
     assert mock_post.called
     call_url = mock_post.call_args[0][0]
-    assert call_url.endswith("/sendPhoto")
+    assert call_url.endswith("/sendPhoto"), f"Expected sendPhoto, got: {call_url}"
 
-    # Keyboard: one row, exactly 2 buttons — "Open Inbox" + "kv.ee"
     call_json = mock_post.call_args[1]["json"]
-    keyboard = call_json["reply_markup"]["inline_keyboard"]
-    assert len(keyboard) == 1  # one row
-    row = keyboard[0]
-    assert len(row) == 2  # two buttons: Open Inbox + kv.ee
 
-    # First button: deep-link into Inbox
-    assert row[0]["text"] == "Open Inbox"
-    assert row[0]["url"].endswith("/#inbox")
-    assert "callback_data" not in row[0]  # no server-side action
+    # No inline_keyboard anywhere in the payload (Wave 8B).
+    assert "reply_markup" not in call_json, "reply_markup must not be present in Wave 8B photo cards"
 
-    # Second button: listing link
-    assert row[1]["text"] == "kv.ee"
-    assert "1234567" in row[1]["url"]
-    assert "callback_data" not in row[1]
+    caption = call_json["caption"]
+    # Line 1: score · title
+    assert "79 · Telliskivi 60a" in caption
+    # Line 2: price + area
+    assert "183,000 €" in caption
+    assert "48.6 m²" in caption
+    # Verdict in body
+    assert "Дом кирпичный" in caption
+    # Deep-link in caption footer
+    assert "aparts.example.com" in caption
+    assert "Open in Aparts Looker" in caption
 
-    # Return value unchanged
     assert result == (42, -100)
 
 
 def test_send_pending_card_no_web_base_url(monkeypatch):
-    """QUEUE-02b (Wave 6B): when WEB_BASE_URL is unset, card sends without Open Inbox button.
+    """QUEUE-02b (Wave 8B): when WEB_BASE_URL is unset, deep-link line is omitted.
 
-    The keyboard should still have the kv.ee link only.
+    No reply_markup and no raw IP URL in the caption body.
     """
     from unittest.mock import MagicMock  # noqa: PLC0415
 
@@ -174,10 +176,202 @@ def test_send_pending_card_no_web_base_url(monkeypatch):
     telegram_client.send_pending_card(listing, {"score": 82, "verdict": "OK"})
 
     call_json = mock_post.call_args[1]["json"]
-    row = call_json["reply_markup"]["inline_keyboard"][0]
-    # Only kv.ee button — no Open Inbox when URL not configured
-    assert len(row) == 1
-    assert row[0]["text"] == "kv.ee"
+    assert "reply_markup" not in call_json
+    caption = call_json.get("caption", call_json.get("text", ""))
+    assert "Open in Aparts Looker" not in caption
+
+
+def test_send_digest_message_sent_for_text_tier_overflow(monkeypatch):
+    """QUEUE-08 (Wave 8B): send_digest sends correct text with count and threshold."""
+    from unittest.mock import MagicMock  # noqa: PLC0415
+
+    import telegram_client  # noqa: PLC0415
+    import config as cfg  # noqa: PLC0415
+
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {}
+    mock_post = MagicMock(return_value=mock_response)
+    monkeypatch.setattr(telegram_client.requests, "post", mock_post)
+    monkeypatch.setattr(telegram_client, "TELEGRAM_BOT_TOKEN", "test-bot-token")
+    monkeypatch.setattr(telegram_client, "TELEGRAM_CHAT_ID", "-100")
+    monkeypatch.setattr(cfg, "WEB_BASE_URL", "https://aparts.example.com")
+
+    telegram_client.send_digest(4, 65)
+
+    assert mock_post.called
+    call_url = mock_post.call_args[0][0]
+    assert call_url.endswith("/sendMessage")
+
+    call_json = mock_post.call_args[1]["json"]
+    text = call_json["text"]
+    assert "4 more above 65 today" in text
+    assert "Open inbox" in text
+    assert "aparts.example.com" in text
+
+
+def test_send_digest_omitted_when_count_zero(monkeypatch):
+    """QUEUE-09 (Wave 8B): send_digest sends nothing when count <= 0."""
+    from unittest.mock import MagicMock  # noqa: PLC0415
+
+    import telegram_client  # noqa: PLC0415
+
+    mock_post = MagicMock()
+    monkeypatch.setattr(telegram_client.requests, "post", mock_post)
+    monkeypatch.setattr(telegram_client, "TELEGRAM_BOT_TOKEN", "test-bot-token")
+    monkeypatch.setattr(telegram_client, "TELEGRAM_CHAT_ID", "-100")
+
+    telegram_client.send_digest(0, 65)
+    assert not mock_post.called
+
+    telegram_client.send_digest(-1, 65)
+    assert not mock_post.called
+
+
+def test_photo_cards_capped_at_max(db_session, client, tmp_agent_state, monkeypatch):
+    """QUEUE-10 (Wave 8B): batch with 5 photo-tier listings → 3 photo cards + digest("2 more above X today").
+
+    Uses process_ingest_batch directly so we can inspect Telegram call counts
+    without going through the HTTP ingest endpoint.
+    """
+    from unittest.mock import MagicMock, call as mock_call  # noqa: PLC0415
+
+    import config as cfg  # noqa: PLC0415
+    import ingest_handler  # noqa: PLC0415
+    import telegram_client  # noqa: PLC0415
+
+    # Force thresholds so all 5 listings are photo-tier.
+    monkeypatch.setattr(cfg, "TELEGRAM_MIN_SCORE_PHOTO", 80)
+    monkeypatch.setattr(cfg, "TELEGRAM_MIN_SCORE_TEXT", 65)
+    monkeypatch.setattr(cfg, "TELEGRAM_PHOTO_CARDS_PER_RUN", 3)
+
+    mock_eval = lambda listing, context_prefix="", **_kwargs: {
+        "score": 85,
+        "verdict": "Good",
+        "strengths": [],
+        "concerns": [],
+        "risks": [],
+        "draft_subject": "Test",
+        "draft_body": "body",
+    }
+    monkeypatch.setattr(ingest_handler, "evaluate_listing", mock_eval)
+
+    # Track calls to send_pending_card and send_digest separately.
+    photo_calls: list = []
+    digest_calls: list = []
+
+    def fake_send_card(listing, evaluation):
+        photo_calls.append(listing.id)
+        return (1, -100)
+
+    def fake_send_digest(count, threshold):
+        digest_calls.append((count, threshold))
+
+    monkeypatch.setattr(telegram_client, "send_pending_card", fake_send_card)
+    monkeypatch.setattr(telegram_client, "send_digest", fake_send_digest)
+
+    batch = [
+        {
+            "id": f"100000{i}",
+            "url": f"https://kv.ee/100000{i}.html",
+            "title": f"Apt {i}",
+            "price_eur": 200000,
+            "rooms": 3,
+            "area_sqm": 60.0,
+            "image_url": "https://img/x.jpg",
+            "raw_ok": True,
+        }
+        for i in range(5)
+    ]
+
+    ingest_handler.process_ingest_batch(batch)
+
+    # Exactly 3 photo cards sent (cap enforced).
+    assert len(photo_calls) == 3, f"Expected 3 photo cards, got {len(photo_calls)}"
+
+    # Digest with overflow count = 5 - 3 = 2, threshold = 65.
+    assert len(digest_calls) == 1, f"Expected 1 digest call, got {len(digest_calls)}"
+    assert digest_calls[0][0] == 2, f"Expected digest count 2, got {digest_calls[0][0]}"
+    assert digest_calls[0][1] == 65
+
+
+def test_digest_not_sent_when_only_photo_tier_no_overflow(db_session, tmp_agent_state, monkeypatch):
+    """QUEUE-11 (Wave 8B): batch with 2 photo-tier (cap=3) → 2 photo cards, NO digest."""
+    from unittest.mock import MagicMock  # noqa: PLC0415
+
+    import config as cfg  # noqa: PLC0415
+    import ingest_handler  # noqa: PLC0415
+    import telegram_client  # noqa: PLC0415
+
+    monkeypatch.setattr(cfg, "TELEGRAM_MIN_SCORE_PHOTO", 80)
+    monkeypatch.setattr(cfg, "TELEGRAM_MIN_SCORE_TEXT", 65)
+    monkeypatch.setattr(cfg, "TELEGRAM_PHOTO_CARDS_PER_RUN", 3)
+
+    monkeypatch.setattr(
+        ingest_handler,
+        "evaluate_listing",
+        lambda listing, context_prefix="", **_kwargs: {
+            "score": 85,
+            "verdict": "Good",
+            "strengths": [],
+            "concerns": [],
+            "risks": [],
+            "draft_subject": "Test",
+            "draft_body": "body",
+        },
+    )
+
+    digest_calls: list = []
+    monkeypatch.setattr(telegram_client, "send_pending_card", lambda l, e: (1, -100))
+    monkeypatch.setattr(telegram_client, "send_digest", lambda c, t: digest_calls.append((c, t)))
+
+    batch = [
+        {
+            "id": f"200000{i}",
+            "url": f"https://kv.ee/200000{i}.html",
+            "title": f"Apt {i}",
+            "price_eur": 200000,
+            "rooms": 3,
+            "area_sqm": 60.0,
+            "raw_ok": True,
+        }
+        for i in range(2)
+    ]
+
+    ingest_handler.process_ingest_batch(batch)
+
+    # No overflow, no text-only listings → no digest.
+    assert len(digest_calls) == 0, f"Expected no digest, got {digest_calls}"
+
+
+def test_silenced_suppresses_both_photo_and_digest(monkeypatch):
+    """QUEUE-12 (Wave 8B): silence toggle suppresses send_pending_card AND send_digest."""
+    from unittest.mock import MagicMock  # noqa: PLC0415
+
+    import telegram_client  # noqa: PLC0415
+    from kv_listing_parser import Listing  # noqa: PLC0415
+
+    mock_post = MagicMock()
+    monkeypatch.setattr(telegram_client.requests, "post", mock_post)
+    monkeypatch.setattr(telegram_client, "TELEGRAM_BOT_TOKEN", "test-bot-token")
+    monkeypatch.setattr(telegram_client, "TELEGRAM_CHAT_ID", "-100")
+
+    # Simulate active silence window.
+    from datetime import datetime, timezone, timedelta  # noqa: PLC0415
+    future = (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat()
+    monkeypatch.setattr(
+        telegram_client,
+        "_telegram_is_silenced",
+        lambda: (True, future),
+    )
+
+    listing = Listing(id="5551234", url="https://kv.ee/5551234.html", title="Silent Apt")
+    result = telegram_client.send_pending_card(listing, {"score": 90, "verdict": "Great"})
+    assert result == (None, None)
+    assert not mock_post.called
+
+    telegram_client.send_digest(3, 65)
+    assert not mock_post.called  # digest also suppressed
 
 
 def test_stale_callback_answered(monkeypatch):

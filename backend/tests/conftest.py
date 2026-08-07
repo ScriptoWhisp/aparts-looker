@@ -127,23 +127,21 @@ def mock_telegram(monkeypatch):
 
 @pytest.fixture
 def mock_send_pending_card(monkeypatch):
-    """Monkeypatch send_pending_card to return (42, -100) without real Telegram API calls.
+    """Monkeypatch send_pending_card and send_digest to suppress real Telegram API calls.
 
     Patches:
-      telegram_client.send_pending_card
-      ingest_handler.send_pending_card   (in-module reference after Task 3 lands)
+      telegram_client.send_pending_card  — returns (42, -100)
+      telegram_client.send_digest        — no-op (Wave 8B: digest replaces text-tier sends)
 
-    Yields the MagicMock so tests can assert on call counts and arguments.
+    Yields the send_pending_card MagicMock so tests can assert on call counts/arguments.
     """
     mock = MagicMock(return_value=(42, -100))
+    mock_digest = MagicMock(return_value=None)
 
     import telegram_client  # noqa: PLC0415
-    import ingest_handler  # noqa: PLC0415
 
-    # Use raising=False so the fixture works before Plan 02-02 ships send_pending_card.
     monkeypatch.setattr(telegram_client, "send_pending_card", mock, raising=False)
-    if hasattr(ingest_handler, "send_pending_card"):
-        monkeypatch.setattr(ingest_handler, "send_pending_card", mock)
+    monkeypatch.setattr(telegram_client, "send_digest", mock_digest, raising=False)
 
     yield mock
 
