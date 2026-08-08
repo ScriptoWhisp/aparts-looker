@@ -13,6 +13,7 @@ Route modules:
   routes_geo          — /api/isochrone, /api/refresh-isochrone, /api/districts, /api/geocode-backfill
   routes_feedback     — /api/feedback (POST/GET), /api/feedback/{id} (GET/PATCH/DELETE),
                         /api/feedback/{id}/screenshot
+  routes_checklist    — /api/checklist-registry (GET)
 """
 
 from __future__ import annotations
@@ -33,6 +34,7 @@ import routes_admin
 import routes_ingest
 import routes_geo
 import routes_feedback
+import routes_checklist
 from routes_admin import backfill_costs, backfill_commutes  # re-exported for test introspection
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -76,6 +78,7 @@ app.include_router(routes_admin.router)
 app.include_router(routes_ingest.router)
 app.include_router(routes_geo.router)
 app.include_router(routes_feedback.router)
+app.include_router(routes_checklist.router)
 
 # Static frontend last, so it doesn't shadow the /api/* routes above.
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
