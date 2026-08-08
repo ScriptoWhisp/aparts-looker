@@ -12,8 +12,10 @@
  * (backend/ingest_handler.py::_whitelist_checklist_fills drops empty strings) —
  * so "known" = key present with non-empty text, "unknown" = key absent.
  *
- * ChecklistCard.tsx and AskAtViewing.tsx both need this key → group/label mapping
- * to render something meaningful from the flat shape, so it lives here once.
+ * ChecklistCard.tsx needs this key → group/label mapping to render something
+ * meaningful from the flat shape, so it lives here once. (AskAtViewing.tsx was
+ * retired in Wave 10 — its "unknowns" view is now redundant with the checklist
+ * itself, which always shows every key with its merged/interactive state.)
  */
 
 export type ChecklistGroupKey = 'building_fund' | 'risk' | 'finance' | 'quality' | 'location'
