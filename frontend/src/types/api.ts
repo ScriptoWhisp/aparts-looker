@@ -88,12 +88,21 @@ export interface ChecklistData {
 
 // ── Negotiation brief ─────────────────────────────────────────────────────
 export interface NegotiationBrief {
+  // Backend fields — see backend/brief_generator.py:generate_negotiation_brief.
+  // Backend uses suggested_offer_{low,high}_eur (aliased below for existing code).
+  suggested_offer_low_eur?: number
+  suggested_offer_high_eur?: number
+  brief_ru?: string
+  brief?: string
+  // Optional post-hoc validation flag (see brief_generator._validate_no_hallucinated_numbers)
+  needs_review?: boolean
+  error?: string
+  // Legacy aliases some UI code still reads — kept as optional to unblock any
+  // consumer still on the old names; new code should use suggested_offer_*.
   offer_low?: number
   offer_high?: number
   target?: number
   ask?: number
-  brief_ru?: string
-  brief?: string
 }
 
 // ── Core listing entry (from /api/data response) ──────────────────────────

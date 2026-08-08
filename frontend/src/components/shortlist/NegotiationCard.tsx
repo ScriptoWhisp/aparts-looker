@@ -19,8 +19,6 @@ interface NegotiationCardProps {
   entry: Entry
 }
 
-const GATED_STATUSES = new Set(['approved', 'viewing_scheduled'])
-
 function fmtK(n: number | undefined | null): string {
   if (n == null) return '?'
   return `${Math.round(n / 1000)}k`
@@ -30,8 +28,11 @@ export function NegotiationCard({ entry }: NegotiationCardProps) {
   const qc = useQueryClient()
   const [regenerating, setRegenerating] = useState(false)
 
-  const isGated = GATED_STATUSES.has(entry.status)
+  // Brief is useful BEFORE viewing too — knowing the negotiation angle helps
+  // decide whether to book a viewing at all. Show whatever brief exists at any
+  // status; if none exists, offer regenerate at any status.
   const brief = entry.negotiation_brief
+  const isPreViewing = entry.status === 'approved' || entry.status === 'viewing_scheduled'
 
   async function handleRegenerate() {
     setRegenerating(true)
@@ -47,43 +48,46 @@ export function NegotiationCard({ entry }: NegotiationCardProps) {
     }
   }
 
+  // Backend uses suggested_offer_{low,high}_eur; older fixtures may still carry
+  // offer_low/offer_high — accept either shape so real production data (which
+  // uses the eur-suffixed names) renders.
+  const offerLow  = brief?.suggested_offer_low_eur  ?? brief?.offer_low
+  const offerHigh = brief?.suggested_offer_high_eur ?? brief?.offer_high
+  const askPrice  = brief?.ask ?? entry.price_eur ?? null
   const offerText =
-    brief?.offer_low != null && brief?.offer_high != null
-      ? `${fmtEur(brief.offer_low)} – ${fmtEur(brief.offer_high)}`
+    offerLow != null && offerHigh != null
+      ? `${fmtEur(offerLow)} – ${fmtEur(offerHigh)}`
       : null
 
   return (
-    <div
-      className={[
-        'bg-sunken rounded-lg overflow-hidden flex flex-col flex-1 min-h-0',
-        isGated ? 'opacity-45 pointer-events-none' : '',
-      ].join(' ')}
-    >
+    <div className="bg-sunken rounded-lg overflow-hidden flex flex-col flex-1 min-h-0">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2.5 border-b border-border flex-none">
         <p className="text-[10px] font-mono uppercase text-muted tracking-widest">
           Negotiation
+          {isPreViewing && (
+            <span className="ml-2 text-faint normal-case tracking-normal">· pre-viewing draft</span>
+          )}
         </p>
-        {isGated ? (
-          <span className="text-[11px] text-faint">unlocks after viewing</span>
-        ) : (
-          <button
-            type="button"
-            onClick={handleRegenerate}
-            disabled={regenerating}
-            className="text-[11px] text-accent hover:text-accent-lt disabled:opacity-50 transition-colors"
-          >
-            {regenerating ? 'generating…' : 'regenerate'}
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={handleRegenerate}
+          disabled={regenerating}
+          className="text-[11px] text-accent hover:text-accent-lt disabled:opacity-50 transition-colors"
+        >
+          {regenerating ? 'generating…' : brief ? 'regenerate' : 'generate'}
+        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto min-h-0 p-3">
         {!brief ? (
           <p className="text-[12px] text-faint italic">
-            {isGated
-              ? 'Complete the viewing to unlock the negotiation brief.'
-              : 'No brief yet — click regenerate to generate one.'}
+            No brief yet — click generate to have Claude draft one from the
+            listing text and comparable listings.
+          </p>
+        ) : brief.error ? (
+          <p className="text-[12px] text-status-skip">
+            Brief generation failed: {brief.error}. Try Regenerate.
           </p>
         ) : (
           <div className="flex flex-col gap-3">
@@ -93,20 +97,20 @@ export function NegotiationCard({ entry }: NegotiationCardProps) {
                 <p className="font-mono text-[22px] text-accent-lt leading-none">
                   {offerText}
                 </p>
-                {brief.target != null && brief.ask != null && (
+                {askPrice != null && (
                   <p className="text-[11px] text-muted mt-1 font-mono">
-                    target {fmtK(brief.target)} · ask {fmtK(brief.ask)}
+                    ask {fmtK(askPrice)}
                   </p>
                 )}
-                {/* Progress bar: offer range vs ask */}
-                {brief.ask != null && brief.offer_low != null && brief.offer_high != null && (
+                {/* Progress bar: offer range vs ask price */}
+                {askPrice != null && offerLow != null && offerHigh != null && askPrice > 0 && (
                   <div className="mt-2 h-[4px] bg-surface rounded-full overflow-hidden">
                     <div
                       className="h-full bg-accent/60 rounded-full"
                       style={{
                         width: `${Math.min(
                           100,
-                          ((brief.offer_high - brief.offer_low) / (brief.ask * 0.3)) * 100,
+                          ((offerHigh - offerLow) / (askPrice * 0.3)) * 100,
                         )}%`,
                       }}
                     />
