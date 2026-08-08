@@ -223,8 +223,13 @@ function SwipeCard({ entry: e, exitDirection, onDismiss }: SwipeCardProps) {
     }
   }
 
-  const isDismissed = exitDirection !== null
+  // Exit animation direction is captured in AnimatePresence's exit prop, NOT
+  // in `animate` — otherwise if the parent resets exitDirection=null while
+  // this card is still mid-exit, framer would re-target the exit back to
+  // {x:0, opacity:1}, causing the card to snap back to center instead of
+  // sliding off. exit prop is only read at unmount time, so it's stable.
   const exitX = exitDirection === 'right' ? W : exitDirection === 'left' ? -W : 0
+  const isDismissed = exitDirection !== null
 
   return (
     <motion.div
@@ -233,13 +238,15 @@ function SwipeCard({ entry: e, exitDirection, onDismiss }: SwipeCardProps) {
       dragElastic={0.6}
       onDragEnd={handleDragEnd}
       style={{ x, rotate }}
-      animate={isDismissed ? { x: exitX, opacity: 0, rotate: exitDirection === 'right' ? 15 : -15 } : { x: 0, opacity: 1 }}
-      initial={{ x: 0, opacity: 1 }}
-      transition={
-        isDismissed
-          ? { type: 'tween', duration: 0.22 }
-          : { type: 'spring', stiffness: 400, damping: 30 }
-      }
+      initial={{ x: 0, opacity: 1, scale: 1 }}
+      animate={{ x: 0, opacity: 1, scale: 1 }}
+      exit={{
+        x: exitX,
+        opacity: 0,
+        rotate: exitDirection === 'right' ? 15 : exitDirection === 'left' ? -15 : 0,
+        transition: { type: 'tween', duration: 0.22 },
+      }}
+      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
       className="absolute inset-0 bg-sunken rounded-xl overflow-hidden flex flex-col cursor-grab active:cursor-grabbing touch-none select-none z-20"
     >
       {/* Look-closer tint overlay (drag right) */}
@@ -577,10 +584,17 @@ export function InboxMobile({ entries, nextCheckTime = null }: InboxMobileProps)
   const [lastDismissedEntry, setLastDismissedEntry] = useState<Entry | null>(null)
 
   const advanceQueue = useCallback((dismissedId: string) => {
-    // Remove from front of active — decidedIds handles exclusion or we splice localQueue
+    // Remove from front of active — this triggers AnimatePresence to
+    // exit the old SwipeCard (its `exit` prop uses exitDirection which
+    // is still set at this point) and mount the next one with initial
+    // {x:0, opacity:1}.
     setLocalQueue((prev) => prev.filter((e) => e.id !== dismissedId))
-    setExitDirection(null)
     setIsTransitioning(false)
+    // Clear exitDirection AFTER the exit animation would finish. The exit
+    // prop's transition is 220ms; give it 300ms slack. If we clear it
+    // synchronously with the queue mutation, framer sees animate=exit but
+    // exit direction=null and the new card can inherit weird state.
+    setTimeout(() => setExitDirection(null), 300)
   }, [])
 
   const handleLookCloser = useCallback(async () => {
@@ -617,12 +631,14 @@ export function InboxMobile({ entries, nextCheckTime = null }: InboxMobileProps)
       // Remove from local queue but don't record in session yet (Undo can revert)
       setTimeout(() => {
         setLocalQueue((prev) => prev.filter((e) => e.id !== entry.id))
-        setExitDirection(null)
         setIsTransitioning(false)
         // Open sheet after card is gone
         setPendingSkipId(entry.id)
         setPendingSkipTitle(entry.title || entry.address || 'Untitled')
         setPendingSkipScore(entry.score)
+        // Clear exit direction AFTER exit animation completes so the next
+        // SwipeCard (mounted behind the sheet) doesn't inherit weird state.
+        setTimeout(() => setExitDirection(null), 300)
         setShowSkipSheet(true)
       }, 250)
     }
