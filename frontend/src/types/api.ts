@@ -71,10 +71,18 @@ export interface ChecklistGroup {
   items: ChecklistItem[]
 }
 
+// ── Checklist user mark (Wave 10 — interactive checklist) ─────────────────
+export interface ChecklistUserMark {
+  state?: 'ok' | 'flag' | 'unknown' | 'skip' | null
+  note?: string | null
+  marked_at?: string
+}
+
 // ── Checklist data ────────────────────────────────────────────────────────
 export interface ChecklistData {
   renovation_items?: RenovationItem[]
   groups?: ChecklistGroup[]
+  user_marks?: Record<string, ChecklistUserMark>
   [key: string]: unknown
 }
 

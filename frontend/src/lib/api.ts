@@ -96,6 +96,24 @@ export function saveOwnScore(id: string, ownScore: number): Promise<{ ok: boolea
   })
 }
 
+// ── Checklist item marks ──────────────────────────────────────────────────
+
+export interface ChecklistItemPatch {
+  key: string
+  state?: 'ok' | 'flag' | 'unknown' | 'skip' | null
+  note?: string | null
+}
+
+export function patchChecklistItem(
+  id: string,
+  payload: ChecklistItemPatch,
+): Promise<{ ok: boolean; user_marks: Record<string, { state?: string; note?: string; marked_at?: string }> }> {
+  return apiFetch(`/api/entry/${id}/checklist-item`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+}
+
 // ── Settings save ─────────────────────────────────────────────────────────
 
 export function saveSettings(values: Record<string, unknown>): Promise<{ applied: Record<string, unknown>; errors: string[] }> {
