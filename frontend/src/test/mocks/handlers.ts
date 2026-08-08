@@ -11,6 +11,8 @@ import {
   mockChecklistRegistry,
   mockSettingsFull,
   mockFeedbackList,
+  mockUserFinanceSettingsConfigured,
+  mockFinanceCalculationGreen,
 } from './fixtures'
 
 export const handlers = [
@@ -116,5 +118,30 @@ export const handlers = [
 
   http.delete('/api/feedback/:id', () => {
     return HttpResponse.json({ ok: true })
+  }),
+
+  // ── Finance calculator (Wave B) ─────────────────────────────────────────
+  http.get('/api/user-finance-settings', () => {
+    return HttpResponse.json(mockUserFinanceSettingsConfigured)
+  }),
+
+  http.put('/api/user-finance-settings', async ({ request }) => {
+    const body = (await request.json()) as Record<string, unknown>
+    return HttpResponse.json({ ...mockUserFinanceSettingsConfigured, ...body, is_persisted: true })
+  }),
+
+  http.get('/api/entry/:id/finance-calculation', () => {
+    return HttpResponse.json(mockFinanceCalculationGreen)
+  }),
+
+  http.patch('/api/entry/:id/finance-inputs', async ({ request }) => {
+    const body = (await request.json()) as Record<string, number | null>
+    return HttpResponse.json({
+      utilities_eur_monthly: null,
+      remondifond_eur_monthly: null,
+      first_purchases_eur: null,
+      override_ask_eur: null,
+      ...body,
+    })
   }),
 ]

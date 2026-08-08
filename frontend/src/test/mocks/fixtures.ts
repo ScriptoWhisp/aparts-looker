@@ -10,8 +10,10 @@ import type {
   ChecklistRegistryResponse,
   Entry,
   Feedback,
+  FinanceCalculation,
   SettingsData,
   SettingsField,
+  UserFinanceSettings,
 } from '../../types/api'
 
 // ── Entry factories ────────────────────────────────────────────────────────
@@ -401,3 +403,94 @@ export const feedbackFixed1 = makeFeedback({
 })
 
 export const mockFeedbackList: Feedback[] = [feedbackBug1, feedbackFeature1, feedbackFixed1]
+
+// ── Finance calculator fixtures (Wave B) ────────────────────────────────────
+
+export const mockUserFinanceSettingsUnconfigured: UserFinanceSettings = {
+  monthly_income_eur: null,
+  total_savings_eur: null,
+  down_payment_pct: 15,
+  loan_term_years: 30,
+  current_euribor_pct: 3.5,
+  euribor_stress_pct: 0.3,
+  rate_scenarios_pct: [1.6, 1.7, 1.8],
+  food_eur_monthly: 250,
+  basic_eur_monthly: 300,
+  hindamisakt_eur: 350,
+  notary_eur: 275,
+  keys_eur: 500,
+  internet_eur_monthly: 20,
+  electricity_eur_monthly: 30,
+  is_persisted: false,
+}
+
+export const mockUserFinanceSettingsConfigured: UserFinanceSettings = {
+  ...mockUserFinanceSettingsUnconfigured,
+  monthly_income_eur: 3500,
+  total_savings_eur: 40000,
+  is_persisted: true,
+}
+
+export const mockFinanceCalculationGreen: FinanceCalculation = {
+  status: 'complete',
+  missing: [],
+  one_time: {
+    down_payment: { amount: 33000, pct: 15 },
+    hindamisakt: 350,
+    notary: 275,
+    keys: 500,
+    first_purchases: 2000,
+    total: 36125,
+  },
+  buffer_after_down: { amount: 3875, verdict: 'good' },
+  loan_amount: 187000,
+  loan_term_years: 30,
+  scenarios: [
+    { base_rate_pct: 1.6, euribor_pct: 3.5, total_rate_pct: 5.1, monthly_payment: 1015, is_stress: false },
+    { base_rate_pct: 1.6, euribor_pct: 3.8, total_rate_pct: 5.4, monthly_payment: 1051, is_stress: true },
+    { base_rate_pct: 1.7, euribor_pct: 3.5, total_rate_pct: 5.2, monthly_payment: 1025, is_stress: false },
+    { base_rate_pct: 1.7, euribor_pct: 3.8, total_rate_pct: 5.5, monthly_payment: 1061, is_stress: true },
+    { base_rate_pct: 1.8, euribor_pct: 3.5, total_rate_pct: 5.3, monthly_payment: 1035, is_stress: false },
+    { base_rate_pct: 1.8, euribor_pct: 3.8, total_rate_pct: 5.6, monthly_payment: 1071, is_stress: true },
+  ],
+  monthly_worst_case: {
+    mortgage_max: 1071,
+    utilities: 150,
+    remondifond: 60,
+    internet: 20,
+    electricity: 30,
+    food: 250,
+    basic: 300,
+    total: 1881,
+  },
+  affordability: {
+    monthly_income: 3500,
+    monthly_total: 1881,
+    monthly_free: 1619,
+    verdict: 'green',
+    message_ru: 'Проходит с буфером 1619 €/мес',
+  },
+}
+
+export const mockFinanceCalculationIncompleteSettings: FinanceCalculation = {
+  status: 'incomplete',
+  missing: ['income', 'savings'],
+  one_time: null,
+  buffer_after_down: null,
+  loan_amount: null,
+  loan_term_years: 30,
+  scenarios: [],
+  monthly_worst_case: null,
+  affordability: null,
+}
+
+export const mockFinanceCalculationMissingInputs: FinanceCalculation = {
+  ...mockFinanceCalculationGreen,
+  status: 'incomplete',
+  missing: ['utilities', 'remondifond'],
+  monthly_worst_case: {
+    ...mockFinanceCalculationGreen.monthly_worst_case!,
+    utilities: null,
+    remondifond: null,
+  },
+}

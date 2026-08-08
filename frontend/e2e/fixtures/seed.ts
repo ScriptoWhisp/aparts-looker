@@ -12,7 +12,16 @@
  */
 
 import type { Page } from '@playwright/test'
-import type { AppData, Entry, Feedback, FeedbackListResponse, SettingsData, SettingsField } from '../../src/types/api'
+import type {
+  AppData,
+  Entry,
+  Feedback,
+  FeedbackListResponse,
+  FinanceCalculation,
+  SettingsData,
+  SettingsField,
+  UserFinanceSettings,
+} from '../../src/types/api'
 
 // ── Entry factory ──────────────────────────────────────────────────────────
 
@@ -289,6 +298,135 @@ export async function mockFeedback(page: Page, data: FeedbackListResponse): Prom
   await page.route('**/api/feedback', (route) => {
     if (route.request().method() !== 'GET') return route.continue()
     route.fulfill({ contentType: 'application/json', body: JSON.stringify(data) })
+  })
+}
+
+// ── Finance calculator fixtures (Wave B) ────────────────────────────────────
+
+export const unconfiguredFinanceSettings: UserFinanceSettings = {
+  monthly_income_eur: null,
+  total_savings_eur: null,
+  down_payment_pct: 15,
+  loan_term_years: 30,
+  current_euribor_pct: 3.5,
+  euribor_stress_pct: 0.3,
+  rate_scenarios_pct: [1.6, 1.7, 1.8],
+  food_eur_monthly: 250,
+  basic_eur_monthly: 300,
+  hindamisakt_eur: 350,
+  notary_eur: 275,
+  keys_eur: 500,
+  internet_eur_monthly: 20,
+  electricity_eur_monthly: 30,
+  is_persisted: false,
+}
+
+export const configuredFinanceSettings: UserFinanceSettings = {
+  ...unconfiguredFinanceSettings,
+  monthly_income_eur: 3500,
+  total_savings_eur: 40000,
+  is_persisted: true,
+}
+
+export const greenFinanceCalculation: FinanceCalculation = {
+  status: 'complete',
+  missing: [],
+  one_time: {
+    down_payment: { amount: 33000, pct: 15 },
+    hindamisakt: 350,
+    notary: 275,
+    keys: 500,
+    first_purchases: 2000,
+    total: 36125,
+  },
+  buffer_after_down: { amount: 3875, verdict: 'good' },
+  loan_amount: 187000,
+  loan_term_years: 30,
+  scenarios: [
+    { base_rate_pct: 1.6, euribor_pct: 3.5, total_rate_pct: 5.1, monthly_payment: 1015, is_stress: false },
+    { base_rate_pct: 1.6, euribor_pct: 3.8, total_rate_pct: 5.4, monthly_payment: 1051, is_stress: true },
+    { base_rate_pct: 1.7, euribor_pct: 3.5, total_rate_pct: 5.2, monthly_payment: 1025, is_stress: false },
+    { base_rate_pct: 1.7, euribor_pct: 3.8, total_rate_pct: 5.5, monthly_payment: 1061, is_stress: true },
+    { base_rate_pct: 1.8, euribor_pct: 3.5, total_rate_pct: 5.3, monthly_payment: 1035, is_stress: false },
+    { base_rate_pct: 1.8, euribor_pct: 3.8, total_rate_pct: 5.6, monthly_payment: 1071, is_stress: true },
+  ],
+  monthly_worst_case: {
+    mortgage_max: 1071,
+    utilities: 150,
+    remondifond: 60,
+    internet: 20,
+    electricity: 30,
+    food: 250,
+    basic: 300,
+    total: 1881,
+  },
+  affordability: {
+    monthly_income: 3500,
+    monthly_total: 1881,
+    monthly_free: 1619,
+    verdict: 'green',
+    message_ru: 'Проходит с буфером 1619 €/мес',
+  },
+}
+
+export const incompleteFinanceCalculation: FinanceCalculation = {
+  status: 'incomplete',
+  missing: ['income', 'savings'],
+  one_time: null,
+  buffer_after_down: null,
+  loan_amount: null,
+  loan_term_years: 30,
+  scenarios: [],
+  monthly_worst_case: null,
+  affordability: null,
+}
+
+export const missingInputsFinanceCalculation: FinanceCalculation = {
+  ...greenFinanceCalculation,
+  status: 'incomplete',
+  missing: ['utilities', 'remondifond'],
+  monthly_worst_case: {
+    ...greenFinanceCalculation.monthly_worst_case!,
+    utilities: null,
+    remondifond: null,
+  },
+}
+
+/** Intercept GET/PUT /api/user-finance-settings with canned data. */
+export async function mockUserFinanceSettings(page: Page, settings: UserFinanceSettings): Promise<void> {
+  let current = { ...settings }
+  await page.route('**/api/user-finance-settings', async (route, request) => {
+    if (request.method() === 'PUT') {
+      const body = JSON.parse(request.postData() ?? '{}') as Partial<UserFinanceSettings>
+      current = { ...current, ...body, is_persisted: true }
+      return route.fulfill({ contentType: 'application/json', body: JSON.stringify(current) })
+    }
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify(current) })
+  })
+}
+
+/** Intercept GET /api/entry/:id/finance-calculation with canned data for every listing. */
+export async function mockFinanceCalculation(page: Page, calc: FinanceCalculation): Promise<void> {
+  await page.route('**/api/entry/*/finance-calculation', (route) =>
+    route.fulfill({ contentType: 'application/json', body: JSON.stringify(calc) }),
+  )
+}
+
+/** Intercept PATCH /api/entry/:id/finance-inputs — echoes the patch back. */
+export async function mockFinanceInputsPatch(page: Page): Promise<void> {
+  await page.route('**/api/entry/*/finance-inputs', async (route, request) => {
+    if (request.method() !== 'PATCH') return route.continue()
+    const body = JSON.parse(request.postData() ?? '{}') as Record<string, number | null>
+    return route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        utilities_eur_monthly: null,
+        remondifond_eur_monthly: null,
+        first_purchases_eur: null,
+        override_ask_eur: null,
+        ...body,
+      }),
+    })
   })
 }
 
