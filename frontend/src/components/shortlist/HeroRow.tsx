@@ -241,7 +241,7 @@ export function HeroRow({ entry, settings }: HeroRowProps) {
       : null
 
   return (
-    <div className="grid grid-cols-[300px_1fr] gap-3 p-4 pb-0">
+    <div className="grid grid-cols-1 md:grid-cols-[300px_1fr] gap-3 p-4 pb-0">
       {/* Left: Photo */}
       <div
         className="rounded-lg overflow-hidden flex-none relative"
@@ -345,9 +345,11 @@ export function HeroRow({ entry, settings }: HeroRowProps) {
           {metaParts.join(' · ') || '—'}
         </p>
 
-        {/* Metric strip — mt-auto pushes to bottom of the header block */}
+        {/* Metric strip — mt-auto pushes to bottom of the header block.
+            flex-wrap prevents horizontal overflow on narrow (mobile) viewports,
+            where 4 fixed-width 34px-mono columns don't fit in ~360px content width. */}
         <div
-          className="mt-auto pt-3 flex items-end divide-x divide-border/50"
+          className="mt-auto pt-3 flex flex-wrap items-end gap-y-2 divide-x divide-border/50"
         >
           {/* 1. All-in cost */}
           <div className="flex flex-col gap-0.5 pr-4">

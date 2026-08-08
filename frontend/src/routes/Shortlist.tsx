@@ -80,8 +80,14 @@ function MainPane({ entry, settings, onBack }: MainPaneProps) {
       {/* After-viewing bar */}
       <AfterViewingBar entry={entry} />
 
-      {/* Main content: checklist (left) + ask/negotiation (right) */}
-      <div className="grid grid-cols-[1fr_340px] gap-3 p-4 pt-3 flex-1 min-h-0">
+      {/* Main content: checklist (left) + ask/negotiation (right).
+          Mobile: plain flex-col (natural content-height stacking) — the grid's
+          `flex-1 min-h-0` sizing (meant to fill the remaining fixed desktop
+          viewport height) has no defined height to resolve against once the
+          page itself scrolls on mobile, which collapsed the row to ~0px and
+          made its content effectively unclickable despite being "visible".
+          Desktop (md+): original grid-cols-[1fr_340px] fixed-viewport layout. */}
+      <div className="flex flex-col md:grid md:grid-cols-[1fr_340px] gap-3 p-4 pt-3 md:flex-1 md:min-h-0">
         {/* Left: Checklist accordion */}
         <ChecklistCard entry={entry} />
 

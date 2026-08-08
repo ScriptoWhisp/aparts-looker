@@ -326,7 +326,14 @@ export function ChecklistCard({ entry }: ChecklistCardProps) {
   const okCount      = groups.reduce((s, g) => s + g.items.filter((i) => i.state === 'ok').length, 0)
 
   return (
-    <div className="bg-sunken rounded-lg overflow-hidden flex flex-col h-full">
+    // h-full only at md+: on mobile the Shortlist main content grid stacks to a
+    // single auto-height row (Shortlist.tsx grid-cols-1 md:grid-cols-[1fr_340px]),
+    // and height:100% against that indeterminate auto-sized grid row collapses
+    // the card (and its internal overflow-y-auto scroller) to ~0px, making its
+    // content unclickable/invisible even though the DOM node is technically
+    // "visible". max-h-[70vh] gives the card its own bounded scroll on mobile
+    // instead of relying on a percentage height it can't resolve.
+    <div className="bg-sunken rounded-lg overflow-hidden flex flex-col max-h-[70vh] md:h-full md:max-h-none">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2.5 border-b border-border flex-none">
         <span className="text-[13px] font-medium text-text">Checklist</span>
