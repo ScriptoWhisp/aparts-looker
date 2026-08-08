@@ -637,15 +637,19 @@ export function InboxMobile({ entries, nextCheckTime = null }: InboxMobileProps)
     const id = pendingSkipId
     const title = pendingSkipTitle
     const score = pendingSkipScore
-    if (!id) return
-    setShowSkipSheet(false)
+    if (!id) return  // guard against double-fire from vaul onOpenChange
+    // Clear FIRST so any secondary onOpenChange trigger sees pendingSkipId=null
+    // and short-circuits without a second confirmSkip call.
     setPendingSkipId(null)
     setPendingSkipTitle(null)
     setPendingSkipScore(null)
     setLastDismissedEntry(null)
+    // Record in session immediately (optimistic) so the next card is unblocked
+    // even if the network call is slow.
+    session.recordSkip(id, title ?? 'Untitled', score, reason ?? undefined)
+    setShowSkipSheet(false)
     try {
       await rejectEntry(id, reason ?? undefined)
-      session.recordSkip(id, title ?? 'Untitled', score, reason ?? undefined)
       void client.invalidateQueries({ queryKey: QUERY_KEYS.appData })
     } catch (err) {
       console.error('reject failed', err)
@@ -653,15 +657,18 @@ export function InboxMobile({ entries, nextCheckTime = null }: InboxMobileProps)
   }, [pendingSkipId, pendingSkipTitle, pendingSkipScore, session, client])
 
   const handleUndo = useCallback(() => {
+    // Clear pendingSkipId FIRST — this is the signal to onOpenChange that
+    // the drawer's imminent close is a controlled Undo, not a swipe-down
+    // dismiss. Without this, confirmSkip(null) also fires and races.
+    setPendingSkipId(null)
+    setPendingSkipTitle(null)
+    setPendingSkipScore(null)
     // Restore the just-skipped card to the front of the queue
     if (lastDismissedEntry) {
       setLocalQueue((prev) => [lastDismissedEntry, ...prev.filter((e) => e.id !== lastDismissedEntry.id)])
     }
-    setShowSkipSheet(false)
-    setPendingSkipId(null)
-    setPendingSkipTitle(null)
-    setPendingSkipScore(null)
     setLastDismissedEntry(null)
+    setShowSkipSheet(false)
   }, [lastDismissedEntry])
 
   const handleLater = useCallback(() => {
@@ -756,15 +763,23 @@ export function InboxMobile({ entries, nextCheckTime = null }: InboxMobileProps)
         </button>
       </div>
 
-      {/* Skip reason drawer */}
+      {/* Skip reason drawer. onOpenChange only closes the sheet visually —
+         the commit paths are explicit: onConfirm (Next tap) or onUndo (Undo
+         tap OR swipe-down dismiss). We treat swipe-down as Next-with-no-reason
+         via onConfirm, but ONLY when we still have a pendingSkipId — the
+         confirmSkip guard prevents double-fire when Undo already cleared
+         state a moment ago. */}
       <SkipDrawer
         open={showSkipSheet}
         onOpenChange={(open) => {
-          // Drawer dismissed via swipe-down: treat as Next with no reason
-          if (!open && showSkipSheet) {
+          if (open) return  // opening is driven by handleSwipeDismiss; ignore
+          // Closing: if pendingSkipId is still set, this is a swipe-down
+          // dismissal (not a Next/Undo tap) — commit as skip-no-reason.
+          if (pendingSkipId) {
             void confirmSkip(null)
+          } else {
+            setShowSkipSheet(false)
           }
-          setShowSkipSheet(open)
         }}
         skippedTitle={pendingSkipTitle}
         onConfirm={(reason) => void confirmSkip(reason)}
