@@ -24,7 +24,6 @@ import { HeroRow } from '../components/shortlist/HeroRow'
 import { VerdictBand } from '../components/shortlist/VerdictBand'
 import { AfterViewingBar } from '../components/shortlist/AfterViewingBar'
 import { ChecklistCard } from '../components/shortlist/ChecklistCard'
-import { AskAtViewing } from '../components/shortlist/AskAtViewing'
 import { NegotiationCard } from '../components/shortlist/NegotiationCard'
 import { CompareOverlay } from '../components/shortlist/CompareOverlay'
 
@@ -80,20 +79,26 @@ function MainPane({ entry, settings, onBack }: MainPaneProps) {
       {/* After-viewing bar */}
       <AfterViewingBar entry={entry} />
 
-      {/* Main content: checklist (left) + ask/negotiation (right).
+      {/* Main content: checklist (left, now the single interactive surface — full
+          13-item registry, click-to-mark, per-item notes) + negotiation (right).
+          Wave 10: AskAtViewing removed — every item (including every 'unknown')
+          is already visible and taggable in the checklist itself, so a separate
+          "unknowns" view added nothing. Right column narrows from 340px to 280px
+          now that it holds a single card.
           Mobile: plain flex-col (natural content-height stacking) — the grid's
           `flex-1 min-h-0` sizing (meant to fill the remaining fixed desktop
           viewport height) has no defined height to resolve against once the
           page itself scrolls on mobile, which collapsed the row to ~0px and
           made its content effectively unclickable despite being "visible".
-          Desktop (md+): original grid-cols-[1fr_340px] fixed-viewport layout. */}
-      <div className="flex flex-col md:grid md:grid-cols-[1fr_340px] gap-3 p-4 pt-3 md:flex-1 md:min-h-0">
-        {/* Left: Checklist accordion */}
-        <ChecklistCard entry={entry} />
+          Desktop (md+): original grid-cols fixed-viewport layout. */}
+      <div className="flex flex-col md:grid md:grid-cols-[1fr_280px] gap-3 p-4 pt-3 md:flex-1 md:min-h-0">
+        {/* Left: Checklist — keyed by entry.id so per-listing open/override/note
+            state doesn't leak across listing switches (MainPane/ChecklistCard
+            itself isn't otherwise remounted when selectedEntry changes). */}
+        <ChecklistCard key={entry.id} entry={entry} />
 
-        {/* Right: Ask at viewing + Negotiation */}
+        {/* Right: Negotiation */}
         <div className="flex flex-col gap-3 min-h-0">
-          <AskAtViewing entry={entry} />
           <NegotiationCard entry={entry} />
         </div>
       </div>
