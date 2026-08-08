@@ -46,10 +46,17 @@ async function goSelectEntry(page: Page, entry: Entry) {
   await page.locator('button').filter({ hasText: entry.title }).first().click()
 }
 
-// ── Checklist — Wave 10 interactive rewrite ─────────────────────────────────
+// ── Checklist — Wave A full-registry rewrite (4 sections, ~96 items) ───────
+//
+// The registry itself is served by the real backend at GET /api/checklist-registry
+// (backend/checklist_registry.py) — these tests run against the live docker
+// stack (playwright.config.ts baseURL), so they exercise the actual ~96-item
+// registry rather than a mock slice.
 
-test.describe('checklist — always-full registry + data shape resilience', () => {
-  test('checklist=null, ai_checklist_fills=null → all 13 items render as unknown, no crash', async ({ page }) => {
+const TOTAL_CHECKLIST_ITEMS = 96 // keep in sync with backend/checklist_registry.py
+
+test.describe('checklist — full registry + data shape resilience', () => {
+  test(`checklist=null, ai_checklist_fills=null → all ${TOTAL_CHECKLIST_ITEMS} items render as unknown, no crash`, async ({ page }) => {
     const getErrors = attachConsoleWatcher(page)
     const entry = makeEntry({
       id: 'qa-checklist-null',
@@ -60,12 +67,12 @@ test.describe('checklist — always-full registry + data shape resilience', () =
     })
     await goSelectEntry(page, entry)
 
-    await expect(page.locator('text=13 items')).toBeVisible({ timeout: 5_000 })
+    await expect(page.locator(`text=${TOTAL_CHECKLIST_ITEMS} items · 0 marked`)).toBeVisible({ timeout: 5_000 })
     await assertNoErrorBoundary(page)
     expect(getErrors().filter((e) => !e.includes('leaflet'))).toHaveLength(0)
   })
 
-  test('checklist={} (empty object, no .user_marks) → all 13 items render, no crash', async ({ page }) => {
+  test(`checklist={} (empty object, no .user_marks) → all ${TOTAL_CHECKLIST_ITEMS} items render, no crash`, async ({ page }) => {
     const entry = makeEntry({
       id: 'qa-checklist-empty-obj',
       status: 'viewed',
@@ -75,16 +82,16 @@ test.describe('checklist — always-full registry + data shape resilience', () =
     })
     await goSelectEntry(page, entry)
 
-    await expect(page.locator('text=13 items')).toBeVisible({ timeout: 5_000 })
+    await expect(page.locator(`text=${TOTAL_CHECKLIST_ITEMS} items · 0 marked`)).toBeVisible({ timeout: 5_000 })
     await assertNoErrorBoundary(page)
   })
 
   test('real production shape — flat ai_checklist_fills strings render correctly, all items visible once expanded', async ({ page }) => {
-    // This mirrors the ACTUAL shape backend/ai_evaluator.py produces and
-    // backend/ingest_handler.py stores: key -> filled-in Russian text.
-    // Pre-Wave-10, this rendered raw key codes ("s14_01") as labels and a gray
-    // "?" glyph for every item, AND only showed the 2-3 keys the AI happened to
-    // fill — everything else was simply absent from the DOM.
+    // Mirrors the ACTUAL shape backend/ai_evaluator.py produces and
+    // backend/ingest_handler.py stores: key -> filled-in Russian text, using
+    // pre-Wave-A legacy keys (s14_01/s14_02/s16_03) to also exercise the
+    // frontend legacy-key fallback (lib/checklistMeta.ts) against the real
+    // backend's legacy_key_map.
     const entry = makeEntry({
       id: 'qa-checklist-real-fills',
       status: 'viewed',
@@ -98,28 +105,25 @@ test.describe('checklist — always-full registry + data shape resilience', () =
     })
     await goSelectEntry(page, entry)
 
-    await test.step('header summary counts the filled items as "ok", not "unknown"; the rest are unknown', async () => {
-      // 2 fills -> ok, 11 remaining registry keys -> unknown.
-      await expect(page.locator('text=/2 ok/')).toBeVisible({ timeout: 5_000 })
-      await expect(page.locator('text=/11 unknown/')).toBeVisible()
+    await test.step('header summary counts the filled items as marked (2), the rest unmarked', async () => {
+      await expect(page.locator(`text=2/${TOTAL_CHECKLIST_ITEMS} marked`)).toBeVisible({ timeout: 5_000 })
     })
 
-    const financeGroupHeader = page.locator('button').filter({ hasText: 'Rahandus' })
-    const locationGroupHeader = page.locator('button').filter({ hasText: 'Asukoht' })
+    const evaluationHeader = page.getByTestId('checklist-section-header-evaluation')
+    const onsiteHeader = page.getByTestId('checklist-section-header-onsite')
 
-    await test.step('groups render keyed by the shared registry (Finance, Location) — not dumped into one bucket', async () => {
-      await expect(financeGroupHeader).toBeVisible()
-      await expect(locationGroupHeader).toBeVisible()
+    await test.step('sections render keyed by the shared registry (Оценка по критериям, На месте)', async () => {
+      await expect(evaluationHeader).toBeVisible()
+      await expect(onsiteHeader).toBeVisible()
     })
 
-    await test.step('groups without a flag/mark start collapsed by design — expand to see item content', async () => {
-      // Neither group has a flag or a user mark (both fills resolve to
-      // state=ok), so both start collapsed. Expand Location to verify every
-      // item in it renders now — not just the one the AI filled.
-      await locationGroupHeader.click()
-      await expect(page.locator('text=Location convenience')).toBeVisible({ timeout: 3_000 })
-      await expect(page.locator('text=Distance to public transit')).toBeVisible()
-      await expect(page.locator('text=Road / tram noise')).toBeVisible()
+    await test.step('a section without a flag/mark starts collapsed by design — expand to see item content', async () => {
+      // s14_01/s14_02 both resolve to state=ok (no flag), so evaluation starts
+      // collapsed. Expand it to verify every item renders — not just the two
+      // the AI filled in.
+      await evaluationHeader.click()
+      await expect(page.locator('text=Адрес — насколько удобное расположение (универ, работа, друзья, центр)')).toBeVisible({ timeout: 3_000 })
+      await expect(page.locator('text=Тип отопления (центральное / газ / электричество / индивидуальное)')).toBeVisible()
     })
 
     await test.step('label is human-readable, not the raw key code', async () => {
@@ -130,9 +134,11 @@ test.describe('checklist — always-full registry + data shape resilience', () =
       await expect(page.locator('text=Kesklinn, 15 минут до Bolt HQ')).toBeVisible()
     })
 
-    await test.step('empty-string fill (s16_03) renders as a normal unknown item, not a blank "ok"', async () => {
-      const chip = page.getByTestId('checklist-chip-s16_03')
-      await expect(chip).toBeVisible()
+    await test.step('empty-string legacy fill (s16_03 -> onsite/neighborhood) renders unknown, not a blank "ok"', async () => {
+      await onsiteHeader.click()
+      await page.getByTestId('checklist-group-header-neighborhood').click()
+      const chip = page.getByTestId('checklist-chip-sec5_5_traffic_noise')
+      await expect(chip).toBeVisible({ timeout: 3_000 })
       await expect(chip).toHaveAttribute('data-state', 'unknown')
     })
 
@@ -144,34 +150,31 @@ test.describe('checklist — always-full registry + data shape resilience', () =
     })
   })
 
-  test('user_marks shape — flag-first group ordering + open-by-default', async ({ page }) => {
+  test('user_marks shape — flagged section open-by-default + sub-group expand', async ({ page }) => {
     await goSelectEntry(page, approvedEntry)
-    // approvedEntry: s14_01/s14_02 AI-filled (-> ok), s09_01 (risk group) user-flagged.
+    // approvedEntry: s14_01/s14_02 AI-filled (-> ok), s09_01 (legacy ->
+    // ask_seller/sec3_renovation_history) user-flagged.
 
-    await test.step('Risk (has the flag) sorts before Location/Finance (ok-only, no mark)', async () => {
-      const risk = page.locator('button').filter({ hasText: 'Risk' })
-      await expect(risk).toBeVisible({ timeout: 5_000 })
+    await test.step('flagged section (Вопросы продавцу) is open by default (item text visible without clicking)', async () => {
+      await expect(page.locator('text=Что ремонтировалось и когда? Когда последний раз меняли сантех/электрику?')).toBeVisible({ timeout: 5_000 })
     })
 
-    await test.step('flagged group is open by default (item text visible without clicking)', async () => {
-      await expect(page.locator('text=Plumbing / electrical replacement year')).toBeVisible()
+    await test.step('bottom meta shows total item count', async () => {
+      await expect(page.locator(`text=${TOTAL_CHECKLIST_ITEMS} items`)).toBeVisible()
     })
 
-    await test.step('bottom meta shows item count', async () => {
-      await expect(page.locator('text=13 items')).toBeVisible()
-    })
-
-    await test.step('chevron click toggles a collapsed (no flag/mark) group open', async () => {
-      const locationHeader = page.locator('button').filter({ hasText: 'Asukoht' })
-      const transitItem = page.locator('text=Distance to public transit')
-      await expect(transitItem).not.toBeVisible()
-      await locationHeader.click()
-      await expect(transitItem).toBeVisible({ timeout: 3_000 })
+    await test.step('chevron click expands a collapsed (no flag/mark) section, then an onsite sub-group', async () => {
+      const onsiteHeader = page.getByTestId('checklist-section-header-onsite')
+      await expect(page.locator('text=Углы у внешних стен')).not.toBeVisible()
+      await onsiteHeader.click()
+      const structureGroup = page.getByTestId('checklist-group-header-structure')
+      await structureGroup.click()
+      await expect(page.locator('text=Углы у внешних стен')).toBeVisible({ timeout: 3_000 })
     })
   })
 })
 
-// ── Checklist — interactive state chip + note persistence (Wave 10) ────────
+// ── Checklist — interactive state chip + note persistence + filters ────────
 
 test('state chip click cycles + fires PATCH /api/entry/:id/checklist-item', async ({ page }) => {
   let patchCount = 0
@@ -194,16 +197,17 @@ test('state chip click cycles + fires PATCH /api/entry/:id/checklist-item', asyn
   })
   await goSelectEntry(page, entry)
 
-  // s09_01 (risk group) has no flag/mark on this bare entry — expand its group first.
-  await page.locator('button').filter({ hasText: 'Risk' }).click()
-  const chip = page.getByTestId('checklist-chip-s09_01')
+  // sec3_reason_for_sale (ask_seller section) has no flag/mark on this bare
+  // entry — expand its section first.
+  await page.getByTestId('checklist-section-header-ask_seller').click()
+  const chip = page.getByTestId('checklist-chip-sec3_reason_for_sale')
   await expect(chip).toHaveAttribute('data-state', 'unknown')
 
   await chip.click()
   await expect(chip).toHaveAttribute('data-state', 'ok', { timeout: 3_000 })
   await page.waitForFunction(() => true)
   expect(patchCount).toBeGreaterThanOrEqual(1)
-  expect(lastBody).toContain('"key":"s09_01"')
+  expect(lastBody).toContain('"key":"sec3_reason_for_sale"')
   expect(lastBody).toContain('"state":"ok"')
 
   await chip.click()
@@ -229,15 +233,35 @@ test('note textarea debounces and PATCHes with the note text', async ({ page }) 
   })
   await goSelectEntry(page, entry)
 
-  await page.locator('button').filter({ hasText: 'Risk' }).click()
-  await page.getByTestId('checklist-note-toggle-s09_01').click()
-  const textarea = page.getByTestId('checklist-note-textarea-s09_01')
+  await page.getByTestId('checklist-section-header-ask_seller').click()
+  await page.getByTestId('checklist-note-toggle-sec3_reason_for_sale').click()
+  const textarea = page.getByTestId('checklist-note-textarea-sec3_reason_for_sale')
   await textarea.fill('Asked agent, waiting on reply')
 
   // Debounce is 800ms.
   await expect(async () => {
     expect(lastBody).toContain('Asked agent, waiting on reply')
   }).toPass({ timeout: 3_000 })
+})
+
+test('filter chips narrow visible items and force-expand only matching sections', async ({ page }) => {
+  await goSelectEntry(page, approvedEntry)
+  // approvedEntry: sec3_renovation_history flagged (via legacy s09_01).
+
+  await page.getByTestId('checklist-filter-flagged').click()
+
+  await test.step('the flagged item is visible', async () => {
+    await expect(page.getByTestId('checklist-chip-sec3_renovation_history')).toBeVisible({ timeout: 5_000 })
+  })
+
+  await test.step('a section with no flagged items does not render at all under the Flagged filter', async () => {
+    await expect(page.getByTestId('checklist-section-header-request_docs')).toHaveCount(0)
+  })
+
+  await test.step('switching back to All restores every section', async () => {
+    await page.getByTestId('checklist-filter-all').click()
+    await expect(page.getByTestId('checklist-section-header-request_docs')).toBeVisible({ timeout: 3_000 })
+  })
 })
 
 // ── Negotiation card gating ─────────────────────────────────────────────────

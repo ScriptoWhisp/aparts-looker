@@ -8,6 +8,7 @@
 import { http, HttpResponse } from 'msw'
 import {
   mockAppDataFull,
+  mockChecklistRegistry,
   mockSettingsFull,
   mockFeedbackList,
 } from './fixtures'
@@ -20,6 +21,10 @@ export const handlers = [
 
   http.get('/api/settings', () => {
     return HttpResponse.json(mockSettingsFull)
+  }),
+
+  http.get('/api/checklist-registry', () => {
+    return HttpResponse.json(mockChecklistRegistry)
   }),
 
   // ── Geo endpoints ────────────────────────────────────────────────────────

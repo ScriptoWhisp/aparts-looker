@@ -5,7 +5,14 @@
  * Used by MSW handlers as defaults and directly in unit tests.
  */
 
-import type { AppData, Entry, Feedback, SettingsData, SettingsField } from '../../types/api'
+import type {
+  AppData,
+  ChecklistRegistryResponse,
+  Entry,
+  Feedback,
+  SettingsData,
+  SettingsField,
+} from '../../types/api'
 
 // ── Entry factories ────────────────────────────────────────────────────────
 
@@ -182,6 +189,134 @@ export const mockAppDataFull: AppData = {
   pending: [pendingEntry1, pendingEntry2, pendingEntry3],
   last_check: '2026-08-01T10:00:00Z',
   next_check: '2026-08-01T16:00:00Z',
+}
+
+// ── Checklist registry (Wave A) ─────────────────────────────────────────────
+// A compact but representative slice of backend/checklist_registry.py's real
+// ~96-item registry — 13 items across the same 4 sections/shapes (onsite
+// subgrouped, others flat), covering every legacy key the entry fixtures
+// above use (s14_01/02/04/09/10, s09_01, s16_01) so the frontend legacy-key
+// fallback (lib/checklistMeta.ts) is exercised by real fixture data.
+
+export const mockChecklistRegistry: ChecklistRegistryResponse = {
+  sections: [
+    {
+      id: 'evaluation',
+      label_ru: 'Оценка по критериям',
+      subgrouped: false,
+      groups: [
+        {
+          id: 'location',
+          label_ru: 'Расположение',
+          items: [
+            { key: 'sec2_address', section: 'evaluation', group: 'location', label_ru: 'Адрес — удобство расположения', label_et: null, ai_fillable: true, hint: null, order: 0 },
+            { key: 'sec2_noise', section: 'evaluation', group: 'location', label_ru: 'Шум с улицы', label_et: null, ai_fillable: true, hint: null, order: 1 },
+          ],
+        },
+        {
+          id: 'price',
+          label_ru: 'Цена',
+          items: [
+            { key: 'sec2_price', section: 'evaluation', group: 'price', label_ru: 'Цена и цена за м²', label_et: null, ai_fillable: true, hint: null, order: 2 },
+          ],
+        },
+        {
+          id: 'systems',
+          label_ru: 'Отопление и системы',
+          items: [
+            { key: 'sec2_heating', section: 'evaluation', group: 'systems', label_ru: 'Тип отопления', label_et: null, ai_fillable: true, hint: null, order: 3 },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'ask_seller',
+      label_ru: 'Вопросы продавцу',
+      subgrouped: false,
+      groups: [
+        {
+          id: 'motivation',
+          label_ru: 'Мотивация продажи',
+          items: [
+            { key: 'sec3_reason_for_sale', section: 'ask_seller', group: 'motivation', label_ru: 'Почему продают квартиру?', label_et: null, ai_fillable: false, hint: null, order: 4 },
+          ],
+        },
+        {
+          id: 'condition',
+          label_ru: 'Состояние',
+          items: [
+            { key: 'sec3_renovation_history', section: 'ask_seller', group: 'condition', label_ru: 'Что ремонтировалось и когда?', label_et: null, ai_fillable: true, hint: null, order: 5 },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'request_docs',
+      label_ru: 'Документы к запросу',
+      subgrouped: false,
+      groups: [
+        {
+          id: 'docs_request',
+          label_ru: 'Документы для запроса у продавца',
+          items: [
+            { key: 'sec4_extract_kinnistusraamat', section: 'request_docs', group: 'docs_request', label_ru: 'Свежий kinnistusraamatu väljavõte', label_et: null, ai_fillable: false, hint: null, order: 6 },
+          ],
+        },
+        {
+          id: 'kinnistusraamat',
+          label_ru: 'Проверить в e-kinnistusraamat',
+          items: [
+            { key: 'sec4_kr_owner', section: 'request_docs', group: 'kinnistusraamat', label_ru: 'Кто является собственником', label_et: null, ai_fillable: false, hint: null, order: 7 },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'onsite',
+      label_ru: 'На месте',
+      subgrouped: true,
+      groups: [
+        {
+          id: 'first_impression',
+          label_ru: 'Первое впечатление и запахи',
+          items: [
+            { key: 'sec5_1_damp_smell', section: 'onsite', group: 'first_impression', label_ru: 'Нет ли запаха сырости', label_et: null, ai_fillable: false, hint: null, order: 8 },
+          ],
+        },
+        {
+          id: 'structure',
+          label_ru: 'Стены / потолок / углы / окна',
+          items: [
+            { key: 'sec5_2_corners', section: 'onsite', group: 'structure', label_ru: 'Углы у внешних стен', label_et: null, ai_fillable: false, hint: null, order: 9 },
+            { key: 'sec5_2_windows_open', section: 'onsite', group: 'structure', label_ru: 'Открываются ли окна', label_et: null, ai_fillable: false, hint: null, order: 10 },
+          ],
+        },
+        {
+          id: 'neighborhood',
+          label_ru: 'Район / окрестности',
+          items: [
+            { key: 'sec5_5_transit', section: 'onsite', group: 'neighborhood', label_ru: 'Сколько идти до остановки', label_et: null, ai_fillable: true, hint: null, order: 11 },
+            { key: 'sec5_5_sun', section: 'onsite', group: 'neighborhood', label_ru: 'Как светит солнце', label_et: null, ai_fillable: true, hint: null, order: 12 },
+          ],
+        },
+      ],
+    },
+  ],
+  legacy_key_map: {
+    s09_01: 'sec3_renovation_history',
+    s09_02: 'sec2_building',
+    s14_01: 'sec2_address',
+    s14_02: 'sec2_price',
+    s14_03: 'sec2_building',
+    s14_04: 'sec2_heating',
+    s14_05: 'sec2_additions',
+    s14_09: 'sec2_noise',
+    s14_10: 'sec5_5_sun',
+    s16_01: 'sec5_5_transit',
+    s16_02: 'sec5_5_amenities',
+    s16_03: 'sec5_5_traffic_noise',
+    s16_04: 'sec5_5_construction',
+  },
 }
 
 // ── Settings shapes ────────────────────────────────────────────────────────
