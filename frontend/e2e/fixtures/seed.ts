@@ -16,7 +16,7 @@ import type { AppData, Entry, SettingsData, SettingsField } from '../../src/type
 
 // ── Entry factory ──────────────────────────────────────────────────────────
 
-function makeEntry(overrides: Partial<Entry> & { id: string }): Entry {
+export function makeEntry(overrides: Partial<Entry> & { id: string }): Entry {
   return {
     id: overrides.id,
     url: `https://kv.ee/en/object/${overrides.id}`,
