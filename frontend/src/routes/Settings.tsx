@@ -24,14 +24,14 @@
  *   Special: threshold fields → score ramp slider
  */
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useSettings } from '../lib/queries'
+import { useSettings, useUserFinanceSettings, usePutUserFinanceSettings } from '../lib/queries'
 import { saveSettings } from '../lib/api'
 import { QUERY_KEYS } from '../lib/queries'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { useAppStore } from '../lib/state'
-import type { SettingsField } from '../types/api'
+import type { SettingsField, UserFinanceSettings } from '../types/api'
 
 // ── Category definitions ───────────────────────────────────────────────────
 
@@ -72,6 +72,12 @@ const CATEGORIES: CategoryDef[] = [
     label: 'Scraper',
     subtitle: 'Scraping intervals and filter criteria',
     groups: ['scraper'],
+  },
+  {
+    id: 'finance',
+    label: 'Финансы',
+    subtitle: 'Доход, накопления, ставки — для калькулятора аффордабилити',
+    groups: [],  // rendered by FinanceSettingsForm, not the generic SettingsField schema
   },
 ]
 
@@ -309,6 +315,240 @@ function CategoryForm({ category, allFields, values, onChange }: CategoryFormPro
   )
 }
 
+// ── Finance settings form (Wave B) ──────────────────────────────────────────
+//
+// Separate from the generic CategoryForm above because user_finance_settings
+// lives in its own dedicated table + PUT /api/user-finance-settings endpoint
+// (not the SettingsField schema / settings.json overlay pattern the other
+// categories use) — see backend/routes_finance.py.
+
+interface NumberFieldProps {
+  label: string
+  value: number | null
+  onChange: (v: number | null) => void
+  min?: number
+  max?: number
+  step?: number
+  allowNull?: boolean
+}
+
+function NumberField({ label, value, onChange, min, max, step, allowNull }: NumberFieldProps) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className="font-sans text-[13px] text-text-2">{label}</label>
+      <input
+        type="number"
+        inputMode="decimal"
+        value={value ?? ''}
+        min={min}
+        max={max}
+        step={step ?? 1}
+        placeholder={allowNull ? 'не указано' : undefined}
+        onChange={(e) => {
+          const raw = e.target.value
+          if (raw === '') { onChange(allowNull ? null : 0); return }
+          const parsed = Number(raw)
+          onChange(Number.isFinite(parsed) ? parsed : (allowNull ? null : 0))
+        }}
+        className={[
+          'bg-sunken text-text text-[13px] px-3 py-2 rounded-md',
+          'border border-border focus:outline-none focus:border-accent/60 transition-colors duration-fast',
+        ].join(' ')}
+      />
+    </div>
+  )
+}
+
+function FinanceSettingsForm() {
+  const { data: financeData, isLoading } = useUserFinanceSettings()
+  const putMutation = usePutUserFinanceSettings()
+  const [local, setLocal] = useState<Partial<UserFinanceSettings>>({})
+  const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'error' } | null>(null)
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Reset local overrides whenever fresh server data lands (e.g. first load,
+  // or after a save round-trip invalidates the cache).
+  useEffect(() => {
+    setLocal({})
+  }, [financeData?.is_persisted])
+
+  function showToast(msg: string, type: 'ok' | 'error') {
+    setToast({ msg, type })
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    toastTimerRef.current = setTimeout(() => setToast(null), 2500)
+  }
+
+  if (isLoading || !financeData) {
+    return (
+      <div className="flex items-center justify-center h-40">
+        <p className="text-[13px] text-faint">Загрузка…</p>
+      </div>
+    )
+  }
+
+  const effective: UserFinanceSettings = { ...financeData, ...local }
+  const hasChanges = Object.keys(local).length > 0
+
+  function set<K extends keyof UserFinanceSettings>(key: K, value: UserFinanceSettings[K]) {
+    setLocal((prev) => ({ ...prev, [key]: value }))
+  }
+
+  function setRate(index: 0 | 1 | 2, value: number) {
+    const current = [...effective.rate_scenarios_pct] as [number, number, number]
+    current[index] = value
+    set('rate_scenarios_pct', current)
+  }
+
+  async function handleSave() {
+    try {
+      await putMutation.mutateAsync(local)
+      setLocal({})
+      showToast('Сохранено', 'ok')
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Ошибка сохранения', 'error')
+    }
+  }
+
+  return (
+    <div className="max-w-5xl">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6">
+        <NumberField
+          label="Ежемесячный доход (€)"
+          value={effective.monthly_income_eur}
+          onChange={(v) => set('monthly_income_eur', v)}
+          min={0}
+          allowNull
+        />
+        <NumberField
+          label="Накопления (€)"
+          value={effective.total_savings_eur}
+          onChange={(v) => set('total_savings_eur', v)}
+          min={0}
+          allowNull
+        />
+        <NumberField
+          label="Первый взнос (%)"
+          value={effective.down_payment_pct}
+          onChange={(v) => set('down_payment_pct', v ?? 15)}
+          min={0}
+          max={100}
+          step={0.5}
+        />
+        <NumberField
+          label="Срок кредита (лет)"
+          value={effective.loan_term_years}
+          onChange={(v) => set('loan_term_years', Math.round(v ?? 30))}
+          min={1}
+          max={40}
+          step={1}
+        />
+        <NumberField
+          label="Текущий euribor (%)"
+          value={effective.current_euribor_pct}
+          onChange={(v) => set('current_euribor_pct', v ?? 3.5)}
+          min={0}
+          max={20}
+          step={0.05}
+        />
+        <NumberField
+          label="Стресс-буфер euribor (%)"
+          value={effective.euribor_stress_pct}
+          onChange={(v) => set('euribor_stress_pct', v ?? 0.3)}
+          min={0}
+          max={20}
+          step={0.05}
+        />
+
+        {/* Rate scenarios — 3 side-by-side inputs */}
+        <div className="flex flex-col gap-1.5 md:col-span-2">
+          <label className="font-sans text-[13px] text-text-2">
+            Сценарии ставки (маржа банка, %) — 3 значения
+          </label>
+          <div className="flex gap-2 max-w-xs">
+            {effective.rate_scenarios_pct.map((r, i) => (
+              <input
+                key={i}
+                type="number"
+                inputMode="decimal"
+                step={0.05}
+                min={0}
+                max={20}
+                value={r}
+                onChange={(e) => setRate(i as 0 | 1 | 2, Number(e.target.value))}
+                className="w-full bg-sunken text-text text-[13px] px-3 py-2 rounded-md border border-border focus:outline-none focus:border-accent/60 transition-colors duration-fast"
+              />
+            ))}
+          </div>
+        </div>
+
+        <NumberField
+          label="Еда, €/мес"
+          value={effective.food_eur_monthly}
+          onChange={(v) => set('food_eur_monthly', v ?? 250)}
+          min={0}
+        />
+        <NumberField
+          label="Базовые потребности, €/мес"
+          value={effective.basic_eur_monthly}
+          onChange={(v) => set('basic_eur_monthly', v ?? 300)}
+          min={0}
+        />
+        <NumberField
+          label="Hindamisakt, €"
+          value={effective.hindamisakt_eur}
+          onChange={(v) => set('hindamisakt_eur', v ?? 350)}
+          min={0}
+        />
+        <NumberField
+          label="Нотариус, €"
+          value={effective.notary_eur}
+          onChange={(v) => set('notary_eur', v ?? 275)}
+          min={0}
+        />
+        <NumberField
+          label="Ключи, €"
+          value={effective.keys_eur}
+          onChange={(v) => set('keys_eur', v ?? 500)}
+          min={0}
+        />
+        <NumberField
+          label="Интернет, €/мес"
+          value={effective.internet_eur_monthly}
+          onChange={(v) => set('internet_eur_monthly', v ?? 20)}
+          min={0}
+        />
+        <NumberField
+          label="Электричество, €/мес"
+          value={effective.electricity_eur_monthly}
+          onChange={(v) => set('electricity_eur_monthly', v ?? 30)}
+          min={0}
+        />
+      </div>
+
+      <div className="flex items-center gap-3 mt-6">
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={!hasChanges || putMutation.isPending}
+          className={[
+            'px-4 py-2 rounded-md font-sans font-medium text-[13px] transition-colors duration-fast',
+            hasChanges && !putMutation.isPending
+              ? 'bg-accent text-bg cursor-pointer hover:bg-accent/80'
+              : 'bg-border text-muted cursor-not-allowed opacity-50',
+          ].join(' ')}
+        >
+          {putMutation.isPending ? 'Сохранение…' : 'Сохранить'}
+        </button>
+        {hasChanges && (
+          <span className="text-[12px] text-status-new font-sans">Есть несохранённые изменения</span>
+        )}
+      </div>
+
+      {toast && <Toast message={toast.msg} type={toast.type} />}
+    </div>
+  )
+}
+
 // ── Toast ──────────────────────────────────────────────────────────────────
 
 function Toast({ message, type }: { message: string; type: 'ok' | 'error' }) {
@@ -451,15 +691,19 @@ export function Settings() {
               </p>
               <div className="mt-1.5">{feedbackLink}</div>
             </div>
-            {saveButton}
+            {activeCategory.id !== 'finance' && saveButton}
           </div>
 
-          <CategoryForm
-            category={activeCategory}
-            allFields={settingsData?.fields ?? []}
-            values={effectiveValues}
-            onChange={handleChange}
-          />
+          {activeCategory.id === 'finance' ? (
+            <FinanceSettingsForm />
+          ) : (
+            <CategoryForm
+              category={activeCategory}
+              allFields={settingsData?.fields ?? []}
+              values={effectiveValues}
+              onChange={handleChange}
+            />
+          )}
         </div>
 
         {/* Toast */}
@@ -506,16 +750,20 @@ export function Settings() {
             </p>
             <div className="mt-1.5">{feedbackLink}</div>
           </div>
-          {saveButton}
+          {activeCategory.id !== 'finance' && saveButton}
         </div>
 
         {/* Form */}
-        <CategoryForm
-          category={activeCategory}
-          allFields={settingsData?.fields ?? []}
-          values={effectiveValues}
-          onChange={handleChange}
-        />
+        {activeCategory.id === 'finance' ? (
+          <FinanceSettingsForm />
+        ) : (
+          <CategoryForm
+            category={activeCategory}
+            allFields={settingsData?.fields ?? []}
+            values={effectiveValues}
+            onChange={handleChange}
+          />
+        )}
       </div>
 
       {/* Toast */}
