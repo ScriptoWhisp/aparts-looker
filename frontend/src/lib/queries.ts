@@ -9,8 +9,8 @@
  */
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { fetchAppData, fetchSettings } from './api'
-import type { AppData, Entry, SettingsData } from '../types/api'
+import { fetchAppData, fetchSettings, fetchFeedback, fetchFeedbackOne, type FeedbackFilters } from './api'
+import type { AppData, Entry, Feedback, FeedbackListResponse, SettingsData } from '../types/api'
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url)
@@ -24,6 +24,8 @@ export const QUERY_KEYS = {
   settings:  ['settings']  as const,
   isochrone: ['isochrone'] as const,
   districts: ['districts'] as const,
+  feedback:  (filters?: FeedbackFilters) => ['feedback', filters ?? {}] as const,
+  feedbackOne: (id: string) => ['feedback', 'one', id] as const,
 }
 
 // ── App data hook ──────────────────────────────────────────────────────────
@@ -73,6 +75,33 @@ export function useRefreshAll() {
   return () => {
     void client.invalidateQueries({ queryKey: QUERY_KEYS.appData })
     void client.invalidateQueries({ queryKey: QUERY_KEYS.settings })
+  }
+}
+
+// ── Feedback hooks ──────────────────────────────────────────────────────────
+
+export function useFeedback(filters?: FeedbackFilters) {
+  return useQuery<FeedbackListResponse>({
+    queryKey: QUERY_KEYS.feedback(filters),
+    queryFn:  () => fetchFeedback(filters),
+    staleTime: 10_000,
+  })
+}
+
+export function useFeedbackOne(id: string | null) {
+  return useQuery<Feedback>({
+    queryKey: QUERY_KEYS.feedbackOne(id ?? ''),
+    queryFn:  () => fetchFeedbackOne(id as string),
+    enabled: !!id,
+    staleTime: 10_000,
+  })
+}
+
+/** Invalidate every cached feedback query (list + detail) — call after POST/PATCH/DELETE. */
+export function useInvalidateFeedback() {
+  const client = useQueryClient()
+  return () => {
+    void client.invalidateQueries({ queryKey: ['feedback'] })
   }
 }
 
