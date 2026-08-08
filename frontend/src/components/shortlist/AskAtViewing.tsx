@@ -8,6 +8,7 @@
 
 import { useState, useMemo } from 'react'
 import type { Entry } from '../../types/api'
+import { CHECKLIST_ALL_KEYS, CHECKLIST_KEY_META, isKnownStateShorthand } from '../../lib/checklistMeta'
 
 interface AskAtViewingProps {
   entry: Entry
@@ -27,21 +28,32 @@ function extractQuestions(entry: Entry): Question[] {
         .map((i) => ({ key: i.key, label: i.label })),
     )
   }
-  // Fallback: ai_checklist_fills with unknown state
+
+  // Fallback: derive unknowns from ai_checklist_fills. Real production shape is
+  // key → "filled text" (only present when the AI found an explicit answer) —
+  // a key that never made it into fills, or was filled with an empty/whitespace
+  // string, means "still unknown, ask at the viewing". Legacy object-shaped
+  // fills (key → {state}) are also honored for backward compat.
   const fills = entry.ai_checklist_fills ?? {}
-  return Object.entries(fills)
-    .filter(([, v]) => {
-      const state = typeof v === 'object' && v !== null
-        ? (v as { state?: string }).state
-        : String(v)
-      return state === 'unknown'
-    })
-    .map(([k, v]) => ({
-      key: k,
-      label: (typeof v === 'object' && v !== null
-        ? (v as { label?: string }).label ?? k
-        : k) as string,
-    }))
+  const questions: Question[] = []
+  for (const key of CHECKLIST_ALL_KEYS) {
+    const v = fills[key]
+    const label = CHECKLIST_KEY_META[key]?.label ?? key
+    if (v == null) {
+      questions.push({ key, label })
+      continue
+    }
+    if (typeof v === 'object') {
+      const state = (v as { state?: string }).state
+      if (state === 'unknown' || state == null) questions.push({ key, label })
+      continue
+    }
+    const text = String(v).trim()
+    if (text === '' || (isKnownStateShorthand(text) && text === 'unknown')) {
+      questions.push({ key, label })
+    }
+  }
+  return questions
 }
 
 export function AskAtViewing({ entry }: AskAtViewingProps) {

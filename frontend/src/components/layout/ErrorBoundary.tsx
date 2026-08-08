@@ -38,7 +38,7 @@ export class ErrorBoundary extends Component<Props, State> {
     const { error, info } = this.state
     if (!error) return this.props.children
     return (
-      <div className="p-6 max-w-3xl mx-auto text-text font-sans">
+      <div data-testid="error-boundary" className="p-6 max-w-3xl mx-auto text-text font-sans">
         <div className="bg-sunken border border-status-skip/40 rounded-lg p-4">
           <div className="flex items-baseline gap-3 mb-2">
             <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-status-skip/20 text-status-skip uppercase tracking-wider">
