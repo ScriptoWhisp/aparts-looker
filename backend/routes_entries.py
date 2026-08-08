@@ -1,13 +1,12 @@
 """Per-listing action routes: schedule-viewing, mark-viewed, regenerate-brief,
-refresh-ku, cost-override (POST + DELETE), and checklist PATCH.
+refresh-ku, cost-override (POST + DELETE), viewing-decision, and checklist-item PATCH.
 
-All paths are under /api/entry/{listing_id}/... or /api/listings/{listing_id}/checklist.
+All paths are under /api/entry/{listing_id}/...
 """
 
 from __future__ import annotations
 
 import logging
-import re
 import threading
 from datetime import datetime
 from typing import Optional
@@ -26,15 +25,6 @@ from models import Listing, SHORTLIST_VIEWED, SHORTLIST_DROPPED
 log = logging.getLogger("app")
 
 router = APIRouter()
-
-
-def _find_entry_any(app_data: dict, listing_id: str) -> Optional[dict]:
-    """Like _find_entry but also searches rejected — used by per-listing edits."""
-    for list_name in ("properties", "pending", "rejected"):
-        for e in app_data.get(list_name, []):
-            if e.get("id") == listing_id:
-                return e
-    return None
 
 
 @router.post("/api/entry/{listing_id}/schedule-viewing")
@@ -347,36 +337,87 @@ async def viewing_decision(listing_id: str, request: Request) -> dict:
     return {"ok": True, "new_status": new_status}
 
 
-@router.patch("/api/listings/{listing_id}/checklist")
-async def patch_checklist(listing_id: str, request: Request) -> dict:
-    """Save a single manual checklist item for any listing (approved, pending, or rejected).
+_VALID_CHECKLIST_STATES = {"ok", "flag", "unknown", "skip"}
 
-    Body: {"key": "<criterion>", "value": "pass" | "fail" | "unknown"}
-    Stored under checklists[listing_id].manual_checklist — separate from ai_checklist so AI
-    data is never overwritten by user clicks.
+
+@router.patch("/api/entry/{listing_id}/checklist-item")
+async def patch_checklist_item(listing_id: str, request: Request) -> dict:
+    """Persist a user's per-item checklist mark — state override and/or note.
+
+    Body: {"key": "s14_01", "state": "ok"|"flag"|"unknown"|"skip"|null, "note": "..."|null}
+
+    Semantics:
+      - `state=null` clears the user's state override for this key — the frontend
+        falls back to the AI-derived state for that item.
+      - `note=null` (or `""`) clears the user's note.
+      - Fields omitted from the body entirely are left untouched (partial update):
+        a PATCH with only "state" keeps the existing note, and vice versa.
+
+    Storage: entry.checklist.user_marks = {key: {state?, note?, marked_at}}. Replaces
+    the Wave 6-era `PATCH /api/listings/{id}/checklist` endpoint, which wrote to
+    app_data["checklists"] — a key that save_app_data() never persisted back to
+    Postgres, silently dropping every mark (the exact bug this endpoint fixes).
+
+    Returns:
+      200 {"ok": true, "user_marks": {...}} on success
+      404 if listing not found
+      422 if key is missing/empty, or state is provided and not one of the 4 allowed
+          values (null is always allowed as an explicit clear)
+      500 {"ok": false, "error": "..."} on unexpected DB error (never-raise)
     """
     try:
         body = await request.json()
-        key = str(body.get("key", "")).strip()
-        value = str(body.get("value", "")).strip()
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=400, detail="Body must be a JSON object")
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON body")
 
-    _ai_keys = {"price_per_sqm", "rooms_area", "parking", "renovation_potential",
-                "floor", "year_material", "mandatory_extras"}
-    if re.match(r"^s\d{2}_\d{2}_note$", key):
-        # Free-text note attached to a ✗ item — only length-bound
-        if len(value) > 500:
-            raise HTTPException(status_code=422, detail="Note too long (max 500 chars)")
-    else:
-        allowed_values = {"pass", "fail", "unknown", "ok", "issue"}
-        key_valid = key in _ai_keys or bool(re.match(r"^s\d{2}_\d{2}$", key))
-        if not key_valid or value not in allowed_values:
-            raise HTTPException(status_code=422, detail="Invalid key or value")
+    key = body.get("key")
+    if not isinstance(key, str) or not key.strip():
+        raise HTTPException(status_code=422, detail="key must be a non-empty string")
+    key = key.strip()
 
-    app_data = data_store.load_app_data()
-    cl = app_data.setdefault("checklists", {}).setdefault(listing_id, {})
-    cl.setdefault("manual_checklist", {})[key] = value
-    data_store.save_app_data(app_data)
+    state_provided = "state" in body
+    note_provided = "note" in body
+    state = body.get("state") if state_provided else data_store.UNSET
+    note = body.get("note") if note_provided else data_store.UNSET
 
-    return {"ok": True}
+    if state_provided and state is not None and state not in _VALID_CHECKLIST_STATES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"state must be one of {sorted(_VALID_CHECKLIST_STATES)} or null",
+        )
+
+    try:
+        with db.SessionLocal() as db_:
+            row = db_.get(Listing, listing_id)
+            if row is None:
+                raise HTTPException(status_code=404, detail="Listing not found")
+    except HTTPException:
+        raise
+    except SQLAlchemyError:
+        log.exception("checklist_item existence check failed for %s", listing_id)
+        return {"ok": False, "error": "DB error"}
+
+    ok = data_store.set_checklist_user_mark(listing_id, key, state, note)
+    if not ok:
+        # Existence was already verified above — this covers unexpected races
+        # (e.g. concurrent delete) rather than the common not-found case.
+        log.error(
+            "checklist_item: set_checklist_user_mark returned False unexpectedly for %s (key=%s)",
+            listing_id,
+            key,
+        )
+        return {"ok": False, "error": "Could not persist checklist mark"}
+
+    try:
+        with db.SessionLocal() as db_:
+            row = db_.get(Listing, listing_id)
+            user_marks = (row.checklist or {}).get("user_marks", {}) if row else {}
+    except SQLAlchemyError:
+        log.exception("checklist_item re-read failed for %s", listing_id)
+        user_marks = {}
+
+    return {"ok": True, "user_marks": user_marks}
