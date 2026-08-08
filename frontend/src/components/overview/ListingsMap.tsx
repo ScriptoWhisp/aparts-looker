@@ -77,19 +77,20 @@ function makePinIcon(score: number | null, status: string): L.DivIcon {
   })
 }
 
-// Price per sqm → color for district polygons (cheap = green, expensive = red)
+// Price per sqm → color for district polygons (cheap = green, expensive = red).
+// Alpha ~0.55 so the fill is clearly visible over OSM tiles without hiding
+// street/POI labels underneath; districts must read at a glance, not shimmer.
 function districtColor(avgPrice: number | null, allPrices: number[]): string {
-  if (avgPrice == null || allPrices.length === 0) return 'rgba(145,132,217,0.15)'
+  if (avgPrice == null || allPrices.length === 0) return 'rgba(145,132,217,0.35)'
   const min = Math.min(...allPrices)
   const max = Math.max(...allPrices)
-  if (max === min) return 'rgba(79,185,141,0.2)'
+  if (max === min) return 'rgba(79,185,141,0.55)'
   const t = (avgPrice - min) / (max - min) // 0=cheap, 1=expensive
   // cheap → green (#4fb98d), expensive → red (#c4635f)
-  // Interpolate in RGB
   const r = Math.round(79 + (196 - 79) * t)
   const g = Math.round(185 + (99 - 185) * t)
   const b = Math.round(141 + (95 - 141) * t)
-  return `rgba(${r},${g},${b},0.22)`
+  return `rgba(${r},${g},${b},0.55)`
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -238,6 +239,42 @@ function PinsLayer({ entries, filterMode, onPinClick }: PinsLayerProps) {
   return null
 }
 
+// ── District €/m² legend ─────────────────────────────────────────────────────
+
+interface DistrictLegendProps {
+  districtStats: DistrictStat[]
+}
+
+function DistrictLegend({ districtStats }: DistrictLegendProps) {
+  const prices = districtStats
+    .map((d) => d.avg_price_per_sqm)
+    .filter((p): p is number => p != null)
+  if (prices.length === 0) {
+    // Districts toggled on but backend returned no priced districts — say so
+    // clearly instead of showing an empty gradient the user can't decode.
+    return (
+      <div className="bg-surface/85 backdrop-blur-sm rounded-md px-2 py-1.5 text-[10px] text-muted whitespace-nowrap shadow-md">
+        no district price data
+      </div>
+    )
+  }
+  const min = Math.round(Math.min(...prices))
+  const max = Math.round(Math.max(...prices))
+  return (
+    <div className="bg-surface/85 backdrop-blur-sm rounded-md px-2 py-1.5 shadow-md flex items-center gap-2 text-[10px] font-mono text-text-3 whitespace-nowrap">
+      <span>{min.toLocaleString()} €/m²</span>
+      <span
+        className="inline-block w-14 h-2 rounded-sm"
+        style={{
+          background:
+            'linear-gradient(to right, rgba(79,185,141,0.85), rgba(196,99,95,0.85))',
+        }}
+      />
+      <span>{max.toLocaleString()}</span>
+    </div>
+  )
+}
+
 // ── District polygons layer ──────────────────────────────────────────────────
 
 interface DistrictLayerProps {
@@ -266,8 +303,8 @@ function DistrictLayer({ geojson, districtStats, visible }: DistrictLayerProps) 
         return {
           fillColor: color,
           fillOpacity: 1,
-          color: 'rgba(255,255,255,0.12)',
-          weight: 1,
+          color: 'rgba(255,255,255,0.55)',
+          weight: 1.5,
         }
       }}
       onEachFeature={(feature, layer) => {
@@ -399,13 +436,16 @@ export function ListingsMap({ entries, pendingEntries }: ListingsMapProps) {
       </div>
 
       {/* Layer toggles — top-right */}
-      <div className="absolute top-2 right-2 z-[1000]">
+      <div className="absolute top-2 right-2 z-[1000] flex flex-col gap-1 items-end">
         <LayerToggles
           showDistricts={showDistricts}
           setShowDistricts={setShowDistricts}
           showIsochrone={showIsochrone}
           setShowIsochrone={setShowIsochrone}
         />
+        {showDistricts && (
+          <DistrictLegend districtStats={districtStatsData?.districts ?? []} />
+        )}
       </div>
 
       {/* Legend — bottom-left */}
