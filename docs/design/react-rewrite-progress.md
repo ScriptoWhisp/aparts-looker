@@ -614,3 +614,120 @@ New permanent file: `frontend/e2e/mobile-snapshots.spec.ts`
 | `a640021` | `feat(shortlist-mobile): sidebar OR main pane, back button on selection` |
 | `0a5fc19` | `feat(settings-mobile): horizontal category strip + full-width form` |
 | `c9be12d` | `test(e2e): mobile snapshot regression net across 4 tabs` |
+
+---
+
+## Wave 10 — Interactive Checklist (COMPLETE)
+
+**Date:** 2026-08-08
+**Status:** Complete. Backend 181 passed/3 skipped, frontend 120 Vitest passed,
+8/8 new/updated Playwright checklist tests pass on both projects.
+
+### The bug
+
+Daniel: *"чеклист опять сломан, я не могу отметить и написать коммент, в
+общем все как было, почему не работет? и я могу видеть пункты которые стоят
+как 'true', все остальные не видно"* — the checklist only ever showed the
+handful of keys the AI happened to fill from the listing text (2-5 of 13), and
+clicking/commenting appeared to do nothing because it never persisted anywhere.
+
+Root cause turned out to be **two separate breaks stacked on top of each
+other**:
+
+1. **Read side:** `ChecklistCard.tsx` only ever rendered
+   `entry.ai_checklist_fills` keys (or a synthetic `entry.checklist.groups`
+   shape the backend has never actually written — grepped every `backend/*.py`
+   to confirm). Every unfilled key was simply absent from the DOM, not hidden.
+2. **Write side:** the existing `PATCH /api/listings/{id}/checklist` endpoint
+   wrote into `app_data["checklists"][id]["manual_checklist"]`, but
+   `data_store.save_app_data()` (the Phase 7 Postgres compatibility shim) only
+   ever persists `properties` / `pending` / `rejected` / `price_history` —
+   `checklists` was silently dropped on every save. The endpoint had zero
+   callers anywhere in the frontend; it and its only helper (`_find_entry_any`)
+   were dead code that looked functional but never worked post-DB-migration.
+
+### What shipped
+
+| Area | Detail |
+|------|--------|
+| `PATCH /api/entry/{id}/checklist-item` | New endpoint (`backend/routes_entries.py`), replaces the broken `/api/listings/{id}/checklist`. Body `{key, state?, note?}`; `state=null`/`note=null` explicitly clears that field, an omitted field is left untouched (partial update). 404 missing listing, 422 bad key/state, never-raise 500. |
+| `data_store.set_checklist_user_mark()` | Writes `Listing.checklist.user_marks = {key: {state?, note?, marked_at}}` via full JSONB reassignment (Pitfall 1). `UNSET` sentinel distinguishes "field omitted" from "field explicitly nulled" for the partial-update semantics. |
+| `ChecklistCard.tsx` full rewrite | Always renders all `CHECKLIST_ALL_KEYS` (13, grouped via `CHECKLIST_KEY_META`), merging `final_state = user_marks[key]?.state ?? ai_state_for(key)`. State chip (≥28px hit target) cycles ok→flag→unknown→skip→AI default on click, optimistic update + revert-on-error. Per-item note textarea, 800ms debounce, independent PATCH. Trailing-ok collapsing removed — hiding items was the bug. |
+| `AskAtViewing.tsx` removed | Every unknown item is now visible and taggable directly in the checklist; the separate read-only "unknowns as questions" card added nothing once the checklist itself is complete. Right column narrows 340px → 280px (Negotiation card only). |
+| `ChecklistCard` keyed by `entry.id` | `Shortlist.tsx`'s `MainPane` wasn't otherwise remounted on listing switch, so per-listing open/override/note UI state would have leaked across listings (pre-existing latent bug, exposed by adding persistent per-item local state) — fixed via the standard React key-remount idiom. |
+
+### Registry size discrepancy (documented, not invented)
+
+The task spec assumed "40+" checklist items. The actual registry —
+`backend/ai_evaluator.py::AI_FILLABLE_CHECKLIST_KEYS`, mirrored exactly in
+`frontend/src/lib/checklistMeta.ts::CHECKLIST_KEY_META` — has **13** keys, and
+no other/larger checklist key source exists anywhere in the repo (grepped
+`backend/*.py` and all of `frontend/src`). Rather than invent additional keys
+with no backend grounding, this wave ships all 13 as always-visible and fully
+interactive — the reported bug (can't see most items, can't mark/comment) is
+fixed regardless of the exact count. `building_fund` is one of the 5 checklist
+groups but currently has zero registry keys mapped to it, so it never renders
+— flagged here in case a future AI-evaluator pass adds building-fund keys.
+
+### Merge precedence
+
+```
+final_state = user_marks[key]?.state ?? ai_state_for(key)
+
+ai_state_for(key):
+  key absent from ai_checklist_fills, or fill = ""        -> unknown
+  fill is a non-empty string (real production shape)       -> ok (fill text shown as AI context)
+  fill is a legacy {state, note} object                     -> that state
+```
+
+`state=flag` can only originate from a user override in the current system —
+the AI never writes a legacy-object fill in production, so before Wave 10 no
+listing could ever surface a flag through the checklist at all.
+
+### Key decisions
+
+1. **Optimistic updates, no clear-on-success.** Local overrides merge on top of
+   query-cache data and are only cleared on error (revert + inline toast). Not
+   clearing on success avoids a revert→reapply flicker while `invalidateQueries`
+   round-trips; a stale local override is harmless for a single-user app.
+2. **`entry.checklist.groups` support dropped**, not kept for back-compat. It
+   was dead weight — the backend has never written it — and its test fixture
+   (`bf_exists`, `risk_moisture`, ...) tested a shape that cannot occur outside
+   a test file. Both Vitest and e2e fixtures now use the real
+   `ai_checklist_fills` + `checklist.user_marks` shape.
+3. **No shared Toast component extracted.** `ChecklistCard` has its own small
+   inline error banner (mirrors `Settings.tsx`'s local `Toast` pattern) rather
+   than factoring out a shared component — kept in scope, matches the
+   codebase's existing per-component convention.
+
+### Commits
+
+| Hash | Message |
+|------|---------|
+| `b7efc3c` | `feat(data_store): set_checklist_user_mark helper with JSONB reassign discipline` |
+| `5245a01` | `feat(backend): PATCH /api/entry/{id}/checklist-item — persist user state + note per item` |
+| `9da1e3f` | `test(checklist-marks): backend coverage for persistence + validation` |
+| `d031163` | `feat(types): ChecklistUserMark type + patchChecklistItem API client` |
+| `c0e6029` | `feat(checklist): render all 13 registry items — click state chip to cycle mark + per-item note` |
+| `2494c03` | `refactor(shortlist): remove AskAtViewing card — checklist is the single interactive surface` |
+| `5bdcd46` | `test(checklist): vitest coverage for state cycling, note persistence, merge precedence` |
+| `45e90fb` | `test(e2e): Playwright coverage for full checklist registry + state chip/note persistence` |
+
+### Verified
+
+- Backend: `docker exec aparts-looker-app-1 pytest --tb=no -q` → 181 passed, 3 skipped.
+- Frontend: `npm test` → 120 Vitest tests passed (8 files), including 13 in `ChecklistCard.test.tsx`.
+- `npx tsc -b && vite build` clean.
+- Playwright, both `chromium-desktop` and `webkit-mobile` projects:
+  - All 6 checklist tests in `qa-shortlist.spec.ts` (data-shape resilience ×4,
+    state-chip-click PATCH, note-debounce PATCH).
+  - `mobile-snapshots.spec.ts` unaffected (8/8 pass on `webkit-mobile`, its
+    intended project — it isn't meant to run under `chromium-desktop`'s
+    1440px viewport, a pre-existing test/project pairing, not a regression).
+  - `shortlist.spec.ts`, `compare.spec.ts`, `smoke.spec.ts` all green.
+- **Not verified / explicitly out of scope:** the two `Negotiation card...
+  gating` tests further down `qa-shortlist.spec.ts` — a different agent had
+  `NegotiationCard.tsx` mid-rewrite in the same working tree concurrently with
+  this wave (removing the old "unlocks after viewing" gating copy this repo's
+  test still asserts). That file and its test were left untouched here.
+

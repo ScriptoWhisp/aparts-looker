@@ -81,6 +81,7 @@
 - **Negotiation brief** is auto-generated on scheduling: Claude Haiku produces a free-form Russian paragraph with suggested offer range grounded in comparable properties + district average, plus post-hoc number validation.
 - **KÜ lookup** hits `ariregister.rik.ee/est/api/autocomplete` filtered by `legal_form=23` (korteriühistud) — best-effort. Preserves any manually-entered `ku.manual` notes across refreshes (Pitfall 7).
 - No Telegram post-viewing — deliberately scoped web-only. Daniel doesn't want notification interruptions after the fact.
+- **Interactive checklist (Wave 10):** every listing's checklist always shows all 13 registry keys (`backend/ai_evaluator.py::AI_FILLABLE_CHECKLIST_KEYS`, mirrored in `frontend/src/lib/checklistMeta.ts`), grouped into Building fund / Risk / Finance / Quality / Location — not just the ones the AI managed to fill from the listing text. Each item's state (ok/flag/unknown/skip) is `user_marks[key]?.state ?? ai-derived-state`, click-to-cycle on a state chip, PATCHed to `PATCH /api/entry/{id}/checklist-item` and stored on `Listing.checklist.user_marks` (JSONB). Each item also has an independent, 800ms-debounced free-text note field, PATCHed the same way. Groups start expanded only when they contain a flag or a user mark; everything else is one click away. The prior read-only "Ask at the viewing" card was retired — every unknown item is already visible and taggable here, so a separate unknowns view added nothing.
 
 ---
 
