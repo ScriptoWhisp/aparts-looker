@@ -143,11 +143,17 @@ test('mobile settings: horizontal category strip rendered', async ({ page }) => 
   if (!viewport) throw new Error('No viewport')
 
   // The fixed 200px sidebar should NOT be present (its nav items would be stacked vertically)
-  // On mobile layout, the aside element should NOT have a fixed 200px width style
-  const asideBox = await page.locator('aside').boundingBox().catch(() => null)
-  if (asideBox) {
+  // On mobile layout, the aside element should NOT have a fixed 200px width style.
+  // Settings.tsx's mobile branch never renders an <aside> at all (it's desktop-only),
+  // so check count() first — locator.boundingBox() on a locator that matches zero
+  // elements and never will (not a timing race, a genuinely absent element) hangs
+  // for the full test timeout instead of resolving, since it internally waits for
+  // the element to become attached/actionable.
+  const asideCount = await page.locator('aside').count()
+  if (asideCount > 0) {
+    const asideBox = await page.locator('aside').boundingBox()
     // If aside exists, it should not be a full-height vertical sidebar (it would be 0 height or part of a strip)
-    expect(asideBox.width, 'Aside (sidebar) must not be a fixed 200px vertical sidebar on mobile').not.toBeCloseTo(200, 5)
+    expect(asideBox?.width, 'Aside (sidebar) must not be a fixed 200px vertical sidebar on mobile').not.toBeCloseTo(200, 5)
   }
 })
 
