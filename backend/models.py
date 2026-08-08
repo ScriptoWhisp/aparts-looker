@@ -165,6 +165,11 @@ class Listing(Base):
     # dedicated column — nothing is lost on migration; prune in a follow-up.
     extras: Mapped[dict] = mapped_column(JSONB, default_factory=dict)
 
+    # Per-listing finance calculator inputs (Wave B — finance calculator card):
+    # {utilities_eur_monthly, remondifond_eur_monthly, first_purchases_eur,
+    #  override_ask_eur}. Reassign the whole dict on write (Pitfall 1).
+    finance_inputs: Mapped[Optional[dict]] = mapped_column(JSONB, default=None)
+
     # ---- Timestamps ----
     # server_default / onupdate so Postgres writes the timestamp, not Python —
     # avoids TZ drift in test environments.
@@ -226,6 +231,55 @@ class Feedback(Base):
         default=None,
         index=True,
     )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        default=None,
+    )
+
+
+# ---------------------------------------------------------------------------
+# User finance settings — single-row (id=1) table for Daniel's global finance
+# parameters (income, savings, mortgage assumptions). Backs the per-listing
+# affordability calculator (finance_calc.compute_finance). See that module's
+# docstring for the calculation itself.
+#
+# The row is created lazily by the first PUT /api/user-finance-settings — a
+# fresh DB has no row at all, and GET returns these column defaults with
+# is_persisted=False so the frontend can show a "not configured yet" state.
+# ---------------------------------------------------------------------------
+
+def _default_rate_scenarios() -> list:
+    return [1.60, 1.70, 1.80]
+
+
+class UserFinanceSettings(Base):
+    """Single-user global finance parameters (id is always 1)."""
+
+    __tablename__ = "user_finance_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+
+    monthly_income_eur: Mapped[Optional[float]] = mapped_column(Float, default=None)
+    total_savings_eur: Mapped[Optional[float]] = mapped_column(Float, default=None)
+    # Estonia typical down payment 10-20%.
+    down_payment_pct: Mapped[float] = mapped_column(Float, default=15.00)
+    loan_term_years: Mapped[int] = mapped_column(Integer, default=30)
+    current_euribor_pct: Mapped[float] = mapped_column(Float, default=3.500)
+    euribor_stress_pct: Mapped[float] = mapped_column(Float, default=0.30)
+    # 3 base mortgage-margin rates the calculator combines with current +
+    # stressed euribor to produce 6 total scenarios.
+    rate_scenarios_pct: Mapped[list] = mapped_column(JSONB, default_factory=_default_rate_scenarios)
+    food_eur_monthly: Mapped[float] = mapped_column(Float, default=250.0)
+    basic_eur_monthly: Mapped[float] = mapped_column(Float, default=300.0)
+    # One-time closing costs.
+    hindamisakt_eur: Mapped[float] = mapped_column(Float, default=350.0)
+    notary_eur: Mapped[float] = mapped_column(Float, default=275.0)
+    keys_eur: Mapped[float] = mapped_column(Float, default=500.0)
+    internet_eur_monthly: Mapped[float] = mapped_column(Float, default=20.0)
+    electricity_eur_monthly: Mapped[float] = mapped_column(Float, default=30.0)
+
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
