@@ -46,10 +46,10 @@ async function goSelectEntry(page: Page, entry: Entry) {
   await page.locator('button').filter({ hasText: entry.title }).first().click()
 }
 
-// ── Checklist accordion — the reported-broken flow ─────────────────────────
+// ── Checklist — Wave 10 interactive rewrite ─────────────────────────────────
 
-test.describe('checklist accordion — data shape resilience', () => {
-  test('checklist=null, ai_checklist_fills=null → empty state, no crash', async ({ page }) => {
+test.describe('checklist — always-full registry + data shape resilience', () => {
+  test('checklist=null, ai_checklist_fills=null → all 13 items render as unknown, no crash', async ({ page }) => {
     const getErrors = attachConsoleWatcher(page)
     const entry = makeEntry({
       id: 'qa-checklist-null',
@@ -60,12 +60,12 @@ test.describe('checklist accordion — data shape resilience', () => {
     })
     await goSelectEntry(page, entry)
 
-    await expect(page.locator('text=No checklist data yet')).toBeVisible({ timeout: 5_000 })
+    await expect(page.locator('text=13 items')).toBeVisible({ timeout: 5_000 })
     await assertNoErrorBoundary(page)
     expect(getErrors().filter((e) => !e.includes('leaflet'))).toHaveLength(0)
   })
 
-  test('checklist={} (empty object, no .groups) → empty state, no crash', async ({ page }) => {
+  test('checklist={} (empty object, no .user_marks) → all 13 items render, no crash', async ({ page }) => {
     const entry = makeEntry({
       id: 'qa-checklist-empty-obj',
       status: 'viewed',
@@ -75,16 +75,16 @@ test.describe('checklist accordion — data shape resilience', () => {
     })
     await goSelectEntry(page, entry)
 
-    await expect(page.locator('text=No checklist data yet')).toBeVisible({ timeout: 5_000 })
+    await expect(page.locator('text=13 items')).toBeVisible({ timeout: 5_000 })
     await assertNoErrorBoundary(page)
   })
 
-  test('real production shape — flat ai_checklist_fills strings render correctly', async ({ page }) => {
+  test('real production shape — flat ai_checklist_fills strings render correctly, all items visible once expanded', async ({ page }) => {
     // This mirrors the ACTUAL shape backend/ai_evaluator.py produces and
     // backend/ingest_handler.py stores: key -> filled-in Russian text.
-    // Before the fix in this sweep, this rendered raw key codes ("s14_01") as
-    // labels and a gray "?" glyph for every item (the text was cast as the
-    // ChecklistItemState enum and never matched ok/flag/unknown/skip).
+    // Pre-Wave-10, this rendered raw key codes ("s14_01") as labels and a gray
+    // "?" glyph for every item, AND only showed the 2-3 keys the AI happened to
+    // fill — everything else was simply absent from the DOM.
     const entry = makeEntry({
       id: 'qa-checklist-real-fills',
       status: 'viewed',
@@ -93,16 +93,15 @@ test.describe('checklist accordion — data shape resilience', () => {
       ai_checklist_fills: {
         s14_01: 'Kesklinn, 15 минут до Bolt HQ',
         s14_02: '215 000 € · 3 468 €/м²',
-        s16_03: '', // empty — must be dropped, not rendered as an item
+        s16_03: '', // empty — must resolve to unknown, not a blank "ok" item
       },
     })
     await goSelectEntry(page, entry)
 
-    await test.step('header summary counts the filled items as "ok", not "unknown"', async () => {
-      // Header shows "{flag} flag {unknown} unknown {ok} ok" — 2 real fills both
-      // resolve to state=ok, so the header's ok-count text must be present.
+    await test.step('header summary counts the filled items as "ok", not "unknown"; the rest are unknown', async () => {
+      // 2 fills -> ok, 11 remaining registry keys -> unknown.
       await expect(page.locator('text=/2 ok/')).toBeVisible({ timeout: 5_000 })
-      await expect(page.locator('text=/2 unknown/')).toHaveCount(0)
+      await expect(page.locator('text=/11 unknown/')).toBeVisible()
     })
 
     const financeGroupHeader = page.locator('button').filter({ hasText: 'Rahandus' })
@@ -113,29 +112,28 @@ test.describe('checklist accordion — data shape resilience', () => {
       await expect(locationGroupHeader).toBeVisible()
     })
 
-    await test.step('groups without a flag start collapsed by design — expand to see item content', async () => {
-      // Neither group has a flag item (both fills resolve to state=ok), so both
-      // start collapsed per "open by default iff group contains a flag". Expand
-      // the Location group to verify the item content underneath.
+    await test.step('groups without a flag/mark start collapsed by design — expand to see item content', async () => {
+      // Neither group has a flag or a user mark (both fills resolve to
+      // state=ok), so both start collapsed. Expand Location to verify every
+      // item in it renders now — not just the one the AI filled.
       await locationGroupHeader.click()
       await expect(page.locator('text=Location convenience')).toBeVisible({ timeout: 3_000 })
+      await expect(page.locator('text=Distance to public transit')).toBeVisible()
+      await expect(page.locator('text=Road / tram noise')).toBeVisible()
     })
 
     await test.step('label is human-readable, not the raw key code', async () => {
       await expect(page.locator('text=s14_01')).toHaveCount(0)
     })
 
-    await test.step('filled text is shown as the item note, not discarded', async () => {
+    await test.step('filled text is shown as AI context under the label, not discarded', async () => {
       await expect(page.locator('text=Kesklinn, 15 минут до Bolt HQ')).toBeVisible()
     })
 
-    await test.step('empty string value is dropped from the checklist card, not rendered as a blank item', async () => {
-      // "Road / tram noise" (s16_03, the empty-string key) legitimately DOES
-      // appear in the separate "Ask at the viewing" card, since an empty fill
-      // correctly means "still unknown, ask at the viewing" — scope this
-      // assertion to just the Checklist card so it isn't confused with that.
-      const checklistCard = page.locator('text=Checklist').first().locator('../..')
-      await expect(checklistCard.locator('text=Road / tram noise')).toHaveCount(0)
+    await test.step('empty-string fill (s16_03) renders as a normal unknown item, not a blank "ok"', async () => {
+      const chip = page.getByTestId('checklist-chip-s16_03')
+      await expect(chip).toBeVisible()
+      await expect(chip).toHaveAttribute('data-state', 'unknown')
     })
 
     await test.step('screenshot', async () => {
@@ -146,79 +144,100 @@ test.describe('checklist accordion — data shape resilience', () => {
     })
   })
 
-  test('structured checklist.groups shape — flag-first ordering + signal strip', async ({ page }) => {
+  test('user_marks shape — flag-first group ordering + open-by-default', async ({ page }) => {
     await goSelectEntry(page, approvedEntry)
+    // approvedEntry: s14_01/s14_02 AI-filled (-> ok), s09_01 (risk group) user-flagged.
 
-    await test.step('groups render with flag-first ordering (Risk before Building fund)', async () => {
-      // approvedEntry fixture has building_fund (unknown) and risk (flag) groups.
-      // Flag group should sort first (worstState priority: flag=0, unknown=1, ok=2).
-      await expect(page.locator('text=Risk').first()).toBeVisible({ timeout: 5_000 })
-      await expect(page.locator('text=Building fund').first()).toBeVisible()
+    await test.step('Risk (has the flag) sorts before Location/Finance (ok-only, no mark)', async () => {
+      const risk = page.locator('button').filter({ hasText: 'Risk' })
+      await expect(risk).toBeVisible({ timeout: 5_000 })
     })
 
     await test.step('flagged group is open by default (item text visible without clicking)', async () => {
-      await expect(page.locator('text=No moisture damage')).toBeVisible()
+      await expect(page.locator('text=Plumbing / electrical replacement year')).toBeVisible()
     })
 
-    await test.step('bottom meta shows item + unknown count', async () => {
-      await expect(page.locator('text=/\\d+ items?/')).toBeVisible()
+    await test.step('bottom meta shows item count', async () => {
+      await expect(page.locator('text=13 items')).toBeVisible()
     })
 
-    await test.step('chevron click toggles a collapsed group open', async () => {
-      const buildingFundHeader = page.locator('button', { hasText: 'Building fund' }).first()
-      // building_fund has no flag item (only ok + unknown) — starts collapsed
-      const fundExists = page.locator('text=Fund exists')
-      await expect(fundExists).not.toBeVisible()
-      await buildingFundHeader.click()
-      await expect(fundExists).toBeVisible({ timeout: 3_000 })
+    await test.step('chevron click toggles a collapsed (no flag/mark) group open', async () => {
+      const locationHeader = page.locator('button').filter({ hasText: 'Asukoht' })
+      const transitItem = page.locator('text=Distance to public transit')
+      await expect(transitItem).not.toBeVisible()
+      await locationHeader.click()
+      await expect(transitItem).toBeVisible({ timeout: 3_000 })
     })
   })
 })
 
-// ── Ask at the viewing — unknown extraction ────────────────────────────────
+// ── Checklist — interactive state chip + note persistence (Wave 10) ────────
 
-test('Ask at the viewing lists unknown items as checkboxes, toggles state', async ({ page }) => {
+test('state chip click cycles + fires PATCH /api/entry/:id/checklist-item', async ({ page }) => {
+  let patchCount = 0
+  let lastBody = ''
+  await page.route('**/api/entry/*/checklist-item', async (route, request) => {
+    patchCount += 1
+    lastBody = request.postData() ?? ''
+    return route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, user_marks: {} }),
+    })
+  })
+
   const entry = makeEntry({
-    id: 'qa-ask-at-viewing',
+    id: 'qa-checklist-chip-click',
     status: 'viewed',
-    title: 'Ask at viewing entry',
+    title: 'Checklist chip click entry',
     checklist: null,
-    ai_checklist_fills: {
-      s14_01: 'Kesklinn, close to center',
-      s14_02: '200 000 € · 3 500 €/м²',
-    },
+    ai_checklist_fills: null,
   })
   await goSelectEntry(page, entry)
 
-  await test.step('unfilled keys render as open questions', async () => {
-    // 13 fillable keys total, 2 filled -> 11 questions expected.
-    const items = page.locator('ul li')
-    await expect(items).toHaveCount(11, { timeout: 5_000 })
-  })
+  // s09_01 (risk group) has no flag/mark on this bare entry — expand its group first.
+  await page.locator('button').filter({ hasText: 'Risk' }).click()
+  const chip = page.getByTestId('checklist-chip-s09_01')
+  await expect(chip).toHaveAttribute('data-state', 'unknown')
 
-  await test.step('checkbox toggles checked state', async () => {
-    const firstCheckbox = page.locator('[role="checkbox"]').first()
-    await expect(firstCheckbox).toHaveAttribute('aria-checked', 'false')
-    await firstCheckbox.click()
-    await expect(firstCheckbox).toHaveAttribute('aria-checked', 'true')
-  })
+  await chip.click()
+  await expect(chip).toHaveAttribute('data-state', 'ok', { timeout: 3_000 })
+  await page.waitForFunction(() => true)
+  expect(patchCount).toBeGreaterThanOrEqual(1)
+  expect(lastBody).toContain('"key":"s09_01"')
+  expect(lastBody).toContain('"state":"ok"')
+
+  await chip.click()
+  await expect(chip).toHaveAttribute('data-state', 'flag', { timeout: 3_000 })
 })
 
-test('Ask at the viewing — all keys filled shows "No open questions"', async ({ page }) => {
-  const allFilled = Object.fromEntries(
-    ['s09_01', 's09_02', 's14_01', 's14_02', 's14_03', 's14_04', 's14_05',
-      's14_09', 's14_10', 's16_01', 's16_02', 's16_03', 's16_04'].map((k) => [k, `filled ${k}`]),
-  )
+test('note textarea debounces and PATCHes with the note text', async ({ page }) => {
+  let lastBody = ''
+  await page.route('**/api/entry/*/checklist-item', async (route, request) => {
+    lastBody = request.postData() ?? ''
+    return route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, user_marks: {} }),
+    })
+  })
+
   const entry = makeEntry({
-    id: 'qa-ask-at-viewing-all-filled',
+    id: 'qa-checklist-note',
     status: 'viewed',
-    title: 'Ask at viewing all filled entry',
+    title: 'Checklist note entry',
     checklist: null,
-    ai_checklist_fills: allFilled,
+    ai_checklist_fills: null,
   })
   await goSelectEntry(page, entry)
 
-  await expect(page.locator('text=No open questions')).toBeVisible({ timeout: 5_000 })
+  await page.locator('button').filter({ hasText: 'Risk' }).click()
+  await page.getByTestId('checklist-note-toggle-s09_01').click()
+  const textarea = page.getByTestId('checklist-note-textarea-s09_01')
+  await textarea.fill('Asked agent, waiting on reply')
+
+  // Debounce is 800ms.
+  await expect(async () => {
+    expect(lastBody).toContain('Asked agent, waiting on reply')
+  }).toPass({ timeout: 3_000 })
 })
 
 // ── Negotiation card gating ─────────────────────────────────────────────────
