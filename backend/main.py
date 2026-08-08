@@ -14,6 +14,8 @@ Route modules:
   routes_feedback     — /api/feedback (POST/GET), /api/feedback/{id} (GET/PATCH/DELETE),
                         /api/feedback/{id}/screenshot
   routes_checklist    — /api/checklist-registry (GET)
+  routes_finance      — /api/user-finance-settings (GET/PUT), /api/entry/{id}/finance-inputs
+                        (PATCH), /api/entry/{id}/finance-calculation (GET)
 """
 
 from __future__ import annotations
@@ -35,6 +37,7 @@ import routes_ingest
 import routes_geo
 import routes_feedback
 import routes_checklist
+import routes_finance
 from routes_admin import backfill_costs, backfill_commutes  # re-exported for test introspection
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -79,6 +82,7 @@ app.include_router(routes_ingest.router)
 app.include_router(routes_geo.router)
 app.include_router(routes_feedback.router)
 app.include_router(routes_checklist.router)
+app.include_router(routes_finance.router)
 
 # Static frontend last, so it doesn't shadow the /api/* routes above.
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
