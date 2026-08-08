@@ -5,7 +5,7 @@
  * Used by MSW handlers as defaults and directly in unit tests.
  */
 
-import type { AppData, Entry, SettingsData, SettingsField } from '../../types/api'
+import type { AppData, Entry, Feedback, SettingsData, SettingsField } from '../../types/api'
 
 // ── Entry factories ────────────────────────────────────────────────────────
 
@@ -223,3 +223,46 @@ export const mockSettingsMalformed = {
   schema: FULL_FIELDS,  // OLD field name — should be 'fields'
   values: { max_price_eur: 265000 },
 } as unknown as SettingsData
+
+// ── Feedback fixtures ───────────────────────────────────────────────────────
+
+export function makeFeedback(overrides: Partial<Feedback> & { id: string }): Feedback {
+  return {
+    id: overrides.id,
+    type: 'bug',
+    comment: `Test feedback ${overrides.id}`,
+    url: 'http://127.0.0.1:8000/#shortlist',
+    viewport: '375x812',
+    user_agent: 'Mozilla/5.0 (test)',
+    console_logs: [{ ts: '2026-08-08T10:00:00Z', level: 'error', args: ['boom'] }],
+    has_screenshot: true,
+    status: 'open',
+    created_at: '2026-08-08T10:00:00Z',
+    updated_at: '2026-08-08T10:00:00Z',
+    ...overrides,
+  }
+}
+
+export const feedbackBug1 = makeFeedback({
+  id: 'fb-1',
+  type: 'bug',
+  comment: 'Shortlist card overflows on mobile',
+  status: 'open',
+})
+
+export const feedbackFeature1 = makeFeedback({
+  id: 'fb-2',
+  type: 'feature',
+  comment: 'Would like a dark/light toggle',
+  status: 'in_progress',
+  has_screenshot: false,
+})
+
+export const feedbackFixed1 = makeFeedback({
+  id: 'fb-3',
+  type: 'ux',
+  comment: 'Settings sliders are hard to tap on mobile',
+  status: 'fixed',
+})
+
+export const mockFeedbackList: Feedback[] = [feedbackBug1, feedbackFeature1, feedbackFixed1]

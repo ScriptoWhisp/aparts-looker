@@ -109,8 +109,10 @@ test('mobile shortlist: main pane visible after row tap', async ({ page }) => {
   await firstRow.click()
   await page.waitForTimeout(500)
 
-  // Main pane should now be visible — back button should appear
-  const backButton = page.getByText('Back')
+  // Main pane should now be visible — back button should appear.
+  // Exact match: the Header's "Feedback" button text contains "back" as a
+  // substring ("Feed-back"), which a loose getByText('Back') would also match.
+  const backButton = page.getByText('Back', { exact: true })
   await expect(backButton).toBeVisible()
 
   // Sidebar should be hidden

@@ -9,6 +9,7 @@ import { http, HttpResponse } from 'msw'
 import {
   mockAppDataFull,
   mockSettingsFull,
+  mockFeedbackList,
 } from './fixtures'
 
 export const handlers = [
@@ -83,6 +84,32 @@ export const handlers = [
 
   // ── Admin ────────────────────────────────────────────────────────────────
   http.post('/api/check-now', () => {
+    return HttpResponse.json({ ok: true })
+  }),
+
+  // ── Feedback ─────────────────────────────────────────────────────────────
+  http.get('/api/feedback', () => {
+    return HttpResponse.json({ feedback: mockFeedbackList, count: mockFeedbackList.length })
+  }),
+
+  http.get('/api/feedback/:id', ({ params }) => {
+    const found = mockFeedbackList.find((f) => f.id === params.id)
+    if (!found) return new HttpResponse(null, { status: 404 })
+    return HttpResponse.json(found)
+  }),
+
+  http.post('/api/feedback', () => {
+    return HttpResponse.json({ id: 'fb-new', created_at: '2026-08-08T12:00:00Z' })
+  }),
+
+  http.patch('/api/feedback/:id', async ({ params, request }) => {
+    const body = (await request.json()) as { status?: string; comment?: string }
+    const found = mockFeedbackList.find((f) => f.id === params.id)
+    if (!found) return new HttpResponse(null, { status: 404 })
+    return HttpResponse.json({ ...found, ...body })
+  }),
+
+  http.delete('/api/feedback/:id', () => {
     return HttpResponse.json({ ok: true })
   }),
 ]

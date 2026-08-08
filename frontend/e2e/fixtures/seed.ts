@@ -12,7 +12,7 @@
  */
 
 import type { Page } from '@playwright/test'
-import type { AppData, Entry, SettingsData, SettingsField } from '../../src/types/api'
+import type { AppData, Entry, Feedback, FeedbackListResponse, SettingsData, SettingsField } from '../../src/types/api'
 
 // ── Entry factory ──────────────────────────────────────────────────────────
 
@@ -249,6 +249,47 @@ export async function mockGeoEndpoints(page: Page): Promise<void> {
   await page.route('**/tallinn-districts.geojson', (route) =>
     route.fulfill({ contentType: 'application/json', body: JSON.stringify({ type: 'FeatureCollection', features: [] }) }),
   )
+}
+
+// ── Feedback fixtures ───────────────────────────────────────────────────────
+
+export function makeFeedback(overrides: Partial<Feedback> & { id: string }): Feedback {
+  return {
+    id: overrides.id,
+    type: 'bug',
+    comment: `Test feedback ${overrides.id}`,
+    url: 'http://127.0.0.1:8000/#shortlist',
+    viewport: '375x812',
+    user_agent: 'Mozilla/5.0 (test)',
+    console_logs: [{ ts: '2026-08-08T10:00:00Z', level: 'error', args: ['boom'] }],
+    has_screenshot: false,
+    status: 'open',
+    created_at: '2026-08-08T10:00:00Z',
+    updated_at: '2026-08-08T10:00:00Z',
+    ...overrides,
+  }
+}
+
+export const e2eFeedbackBug = makeFeedback({
+  id: 'e2e-fb-1',
+  type: 'bug',
+  comment: 'Shortlist card overflows on narrow viewports',
+  status: 'open',
+})
+
+export const emptyFeedbackList: FeedbackListResponse = { feedback: [], count: 0 }
+export const fullFeedbackList: FeedbackListResponse = { feedback: [e2eFeedbackBug], count: 1 }
+
+/**
+ * Intercept GET /api/feedback (list) with canned data. Call before page.goto().
+ * POST /api/feedback is intentionally left un-mocked in most specs so the
+ * submit flow exercises the real backend end-to-end (feedback.spec.ts).
+ */
+export async function mockFeedback(page: Page, data: FeedbackListResponse): Promise<void> {
+  await page.route('**/api/feedback', (route) => {
+    if (route.request().method() !== 'GET') return route.continue()
+    route.fulfill({ contentType: 'application/json', body: JSON.stringify(data) })
+  })
 }
 
 /**
