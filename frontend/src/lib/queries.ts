@@ -8,13 +8,17 @@
  * Stale time: 20 seconds — data is considered fresh for 20s after last fetch.
  */
 
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   fetchAppData,
   fetchChecklistRegistry,
+  fetchFinanceCalculation,
   fetchSettings,
   fetchFeedback,
   fetchFeedbackOne,
+  fetchUserFinanceSettings,
+  patchFinanceInputs,
+  putUserFinanceSettings,
   type FeedbackFilters,
 } from './api'
 import type {
@@ -23,7 +27,10 @@ import type {
   Entry,
   Feedback,
   FeedbackListResponse,
+  FinanceCalculation,
+  FinanceInputs,
   SettingsData,
+  UserFinanceSettings,
 } from '../types/api'
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -41,6 +48,8 @@ export const QUERY_KEYS = {
   checklistRegistry: ['checklist-registry'] as const,
   feedback:  (filters?: FeedbackFilters) => ['feedback', filters ?? {}] as const,
   feedbackOne: (id: string) => ['feedback', 'one', id] as const,
+  userFinanceSettings: ['user-finance-settings'] as const,
+  financeCalculation: (id: string) => ['finance-calculation', id] as const,
 }
 
 // ── App data hook ──────────────────────────────────────────────────────────
@@ -129,6 +138,47 @@ export function useInvalidateFeedback() {
   return () => {
     void client.invalidateQueries({ queryKey: ['feedback'] })
   }
+}
+
+// ── Finance calculator hooks (Wave B) ───────────────────────────────────────
+
+export function useUserFinanceSettings() {
+  return useQuery<UserFinanceSettings>({
+    queryKey: QUERY_KEYS.userFinanceSettings,
+    queryFn:  fetchUserFinanceSettings,
+    staleTime: 60_000,
+  })
+}
+
+export function useFinanceCalculation(id: string | null) {
+  return useQuery<FinanceCalculation>({
+    queryKey: QUERY_KEYS.financeCalculation(id ?? ''),
+    queryFn:  () => fetchFinanceCalculation(id as string),
+    enabled: !!id,
+    staleTime: 10_000,
+  })
+}
+
+export function usePutUserFinanceSettings() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (settings: Partial<UserFinanceSettings>) => putUserFinanceSettings(settings),
+    onSuccess: (data) => {
+      qc.setQueryData(QUERY_KEYS.userFinanceSettings, data)
+      void qc.invalidateQueries({ queryKey: ['finance-calculation'] })
+    },
+  })
+}
+
+export function usePatchFinanceInputs(id: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (inputs: Partial<FinanceInputs>) => patchFinanceInputs(id, inputs),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: QUERY_KEYS.financeCalculation(id) })
+      void qc.invalidateQueries({ queryKey: QUERY_KEYS.appData })
+    },
+  })
 }
 
 // ── Derived data selectors ─────────────────────────────────────────────────

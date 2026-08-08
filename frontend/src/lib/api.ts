@@ -13,7 +13,10 @@ import type {
   FeedbackListResponse,
   FeedbackStatus,
   FeedbackType,
+  FinanceCalculation,
+  FinanceInputs,
   SettingsData,
+  UserFinanceSettings,
 } from '../types/api'
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
@@ -147,6 +150,35 @@ export function saveSettings(values: Record<string, unknown>): Promise<{ applied
     method: 'POST',
     body: JSON.stringify(values),
   })
+}
+
+// ── Finance calculator (Wave B) ─────────────────────────────────────────────
+
+export function fetchUserFinanceSettings(): Promise<UserFinanceSettings> {
+  return apiFetch<UserFinanceSettings>('/api/user-finance-settings')
+}
+
+export function putUserFinanceSettings(
+  settings: Partial<UserFinanceSettings>,
+): Promise<UserFinanceSettings> {
+  return apiFetch<UserFinanceSettings>('/api/user-finance-settings', {
+    method: 'PUT',
+    body: JSON.stringify(settings),
+  })
+}
+
+export function patchFinanceInputs(
+  id: string,
+  inputs: Partial<FinanceInputs>,
+): Promise<FinanceInputs> {
+  return apiFetch<FinanceInputs>(`/api/entry/${id}/finance-inputs`, {
+    method: 'PATCH',
+    body: JSON.stringify(inputs),
+  })
+}
+
+export function fetchFinanceCalculation(id: string): Promise<FinanceCalculation> {
+  return apiFetch<FinanceCalculation>(`/api/entry/${id}/finance-calculation`)
 }
 
 // ── Admin ─────────────────────────────────────────────────────────────────

@@ -201,6 +201,86 @@ export interface SettingsData {
   groups: string[]
 }
 
+// ── Finance calculator (Wave B) ────────────────────────────────────────────
+
+export interface UserFinanceSettings {
+  monthly_income_eur: number | null
+  total_savings_eur: number | null
+  down_payment_pct: number
+  loan_term_years: number
+  current_euribor_pct: number
+  euribor_stress_pct: number
+  rate_scenarios_pct: [number, number, number]
+  food_eur_monthly: number
+  basic_eur_monthly: number
+  hindamisakt_eur: number
+  notary_eur: number
+  keys_eur: number
+  internet_eur_monthly: number
+  electricity_eur_monthly: number
+  is_persisted: boolean
+}
+
+export interface FinanceInputs {
+  utilities_eur_monthly: number | null
+  remondifond_eur_monthly: number | null
+  first_purchases_eur: number | null
+  override_ask_eur: number | null
+}
+
+export interface FinanceScenario {
+  base_rate_pct: number
+  euribor_pct: number
+  total_rate_pct: number
+  monthly_payment: number
+  is_stress: boolean
+}
+
+export interface FinanceOneTime {
+  down_payment: { amount: number; pct: number }
+  hindamisakt: number
+  notary: number
+  keys: number
+  first_purchases: number | null
+  total: number
+}
+
+export interface FinanceBufferAfterDown {
+  amount: number
+  verdict: 'good' | 'tight' | 'insufficient'
+}
+
+export interface FinanceMonthlyWorstCase {
+  mortgage_max: number
+  utilities: number | null
+  remondifond: number | null
+  internet: number
+  electricity: number
+  food: number
+  basic: number
+  total: number
+}
+
+export interface FinanceAffordability {
+  monthly_income: number
+  monthly_total: number
+  monthly_free: number
+  verdict: 'green' | 'yellow' | 'red'
+  message_ru: string
+}
+
+export interface FinanceCalculation {
+  status: 'complete' | 'incomplete'
+  missing: string[]
+  one_time: FinanceOneTime | null
+  buffer_after_down: FinanceBufferAfterDown | null
+  loan_amount: number | null
+  loan_term_years: number | null
+  scenarios: FinanceScenario[]
+  monthly_worst_case: FinanceMonthlyWorstCase | null
+  affordability: FinanceAffordability | null
+}
+
 // ── Feedback / bug reports ─────────────────────────────────────────────────
 
 export type FeedbackType = 'bug' | 'feature' | 'ux' | 'perf'
