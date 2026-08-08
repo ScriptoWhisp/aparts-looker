@@ -64,6 +64,20 @@ from sqlalchemy.orm import attributes as _sa_attributes
 
 log = logging.getLogger("data_store")
 
+
+class _Unset:
+    """Sentinel marking 'field not provided' in partial-update helpers.
+
+    Distinct from `None`, which callers use to mean "clear this field explicitly".
+    See set_checklist_user_mark() for the canonical usage.
+    """
+
+    def __repr__(self) -> str:
+        return "<UNSET>"
+
+
+UNSET = _Unset()
+
 # ---------------------------------------------------------------------------
 # _lock: no-op shim (Wave 2 transition artifact).
 # Postgres provides per-row atomicity; the RLock is no longer needed.
@@ -805,6 +819,78 @@ def set_viewing_decision(
         return True
     except SQLAlchemyError:
         log.exception("set_viewing_decision failed for %s", listing_id)
+        try:
+            db_.rollback()
+        except Exception:
+            pass
+        return False
+    finally:
+        db_.close()
+
+
+def set_checklist_user_mark(
+    listing_id: str,
+    key: str,
+    state: object = UNSET,
+    note: object = UNSET,
+) -> bool:
+    """Update or clear a single per-item user mark on entry.checklist.user_marks.
+
+    Storage shape: checklist.user_marks = {key: {state?, note?, marked_at}}.
+
+    Partial-update semantics (mirrors the PATCH /api/entry/{id}/checklist-item body):
+      - `state`/`note` left at the default `UNSET` sentinel are NOT touched — a caller
+        that only wants to update the note passes state=UNSET (the default) so any
+        existing state override survives.
+      - `state=None` (explicitly passed) clears the user's state override — the
+        frontend then falls back to the AI-derived state for that item.
+      - `note=None` or `note=""` (explicitly passed) clears the user's note.
+      - A non-empty string sets that field.
+
+    If both state and note end up absent after applying the update, the key is
+    dropped from user_marks entirely (nothing left to persist for that item).
+
+    Returns True if the listing exists, False otherwise. Never raises.
+
+    JSONB reassignment convention (Pitfall 1): the whole `checklist` dict — and the
+    nested `user_marks` dict inside it — is rebuilt and reassigned, never mutated
+    in place, so SQLAlchemy detects the change.
+    """
+    db_ = SessionLocal()
+    try:
+        row = db_.get(Listing, listing_id)
+        if row is None:
+            return False
+
+        checklist = dict(row.checklist or {})
+        user_marks = dict(checklist.get("user_marks") or {})
+        existing = dict(user_marks.get(key) or {})
+
+        if state is not UNSET:
+            if state:
+                existing["state"] = state
+            else:
+                existing.pop("state", None)
+
+        if note is not UNSET:
+            if note:
+                existing["note"] = note
+            else:
+                existing.pop("note", None)
+
+        if existing.get("state") or existing.get("note"):
+            existing["marked_at"] = datetime.now(timezone.utc).isoformat()
+            user_marks[key] = existing
+        else:
+            user_marks.pop(key, None)
+
+        checklist["user_marks"] = user_marks
+        row.checklist = checklist  # JSONB reassignment (Pitfall 1)
+
+        db_.commit()
+        return True
+    except SQLAlchemyError:
+        log.exception("set_checklist_user_mark failed for %s (key=%s)", listing_id, key)
         try:
             db_.rollback()
         except Exception:
