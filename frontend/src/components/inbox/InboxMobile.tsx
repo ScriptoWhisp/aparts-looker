@@ -759,8 +759,16 @@ export function InboxMobile({ entries, nextCheckTime = null }: InboxMobileProps)
           )}
         </AnimatePresence>
 
-        {/* Front card — keyed by id so state resets on card change */}
-        <AnimatePresence mode="wait">
+        {/* Front card — keyed by id so state resets on card change.
+            NO mode="wait": with mode="wait" AnimatePresence blocks the mount
+            of the incoming card until the outgoing exit completes; but the
+            useMotionValue(0) + style={{x}} pattern inside SwipeCard fights
+            AnimatePresence's exit-complete detection and unmount never
+            fires (verified via DOM inspection — card stayed at translateX
+            -675px opacity 0 indefinitely, next card never mounted). Parallel
+            mode: outgoing card animates out (position absolute inset-0 lets
+            it overlay), incoming card mounts immediately on top. */}
+        <AnimatePresence>
           {currentEntry && (
             <SwipeCard
               key={currentEntry.id}
