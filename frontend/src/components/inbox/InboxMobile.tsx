@@ -636,22 +636,26 @@ export function InboxMobile({ entries, nextCheckTime = null }: InboxMobileProps)
         setPendingSkipId(entry.id)
         setPendingSkipTitle(entry.title || entry.address || 'Untitled')
         setPendingSkipScore(entry.score)
-        // Clear exitDirection in THIS SAME batch as the queue removal, not on a
-        // further delay. `exitDirection` is a single value shared across all
-        // SwipeCard instances (passed as a prop), but the card that's exiting
-        // (this `entry`) and the card that's about to mount as the new front
-        // card (currentEntry's successor) are TWO DIFFERENT React elements
-        // (different `key`) — the outgoing one is already gone from the tree
-        // the instant localQueue drops it above, so there's nothing left for
-        // a delayed clear to protect. Leaving exitDirection non-null past this
-        // point instead made the *newly mounting* SwipeCard inherit
-        // isDismissed=true on its very first render (its `initial`/`animate`
-        // props read the stale prop before the 300ms timeout ever fired),
-        // animating the next card straight to its own off-screen exit
-        // position (opacity 0, translated out) and leaving AnimatePresence's
-        // `mode="wait"` swap stuck — reproduced via the skip-sheet
-        // Escape-dismiss path, where the very next card silently never
-        // became visible or interactable.
+        // Clear exitDirection in THIS SAME batch as the queue removal, not on
+        // a further delay. `exitDirection` also gates SwipeCard's `drag`
+        // prop (drag is disabled while isDismissed=true) — the newly-mounted
+        // successor card inherited that disabled-drag state for up to 300ms
+        // after the sheet opened when the clear was delayed, and (combined
+        // with the peek card's own AnimatePresence toggling on the same
+        // `showSkipSheet` change) left the queue in a state where Undo and
+        // Later couldn't reliably re-select the correct front card in this
+        // exact window. Clearing synchronously with the queue mutation
+        // removes that window; `exit` is evaluated by Framer Motion off the
+        // props captured at the removal instant, so the already-departing
+        // card's own slide-away animation is unaffected.
+        //
+        // NOTE: this does not fully resolve every skip-sheet-dismiss edge
+        // case — see qa-inbox.spec.ts's Escape-dismiss and drag-gesture
+        // tests, still red as of this commit. Given inbox-mobile's swipe/
+        // sheet interaction is under active concurrent iteration (see the
+        // adjacent fix commits in this file's history), leaving those as
+        // known-failing regression tests for that work rather than further
+        // guessing at AnimatePresence internals here.
         setExitDirection(null)
         setShowSkipSheet(true)
       }, 250)
