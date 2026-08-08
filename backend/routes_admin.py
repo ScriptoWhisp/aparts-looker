@@ -111,8 +111,22 @@ def _diagnose_listing(entry: dict, normalized: dict) -> dict:
 
 @router.get("/api/settings")
 def get_settings() -> dict:
-    """Return every editable setting with its current value + metadata (label/hint/bounds)."""
-    return {"schema": settings_store.get_schema(), "values": settings_store.get_all()}
+    """Return the settings schema (field list) + unique group names.
+
+    Response shape:
+      { "fields": [{key, type, group, label, hint, min, max, value}, ...],
+        "groups": ["cost", "telegram", "ai", "dashboard", "reno"] }
+
+    The frontend renders one form category per group, iterating fields
+    whose `group` matches. Values are embedded in each field entry.
+    """
+    fields = settings_store.get_schema()
+    groups: list[str] = []
+    for f in fields:
+        g = f.get("group", "")
+        if g and g not in groups:
+            groups.append(g)
+    return {"fields": fields, "groups": groups}
 
 
 @router.post("/api/settings")
@@ -126,11 +140,20 @@ async def post_settings(request: Request) -> dict:
     result = settings_store.save(body)
     if result["errors"]:
         return JSONResponse({"ok": False, "errors": result["errors"]}, status_code=422)
+    # Return the same shape as GET /api/settings so the client can drop-in
+    # replace its cached settings without a follow-up refetch.
+    fields = settings_store.get_schema()
+    groups: list[str] = []
+    for f in fields:
+        g = f.get("group", "")
+        if g and g not in groups:
+            groups.append(g)
     return {
         "ok": True,
         "applied": result["applied"],
         "costs_recomputed": result["costs_recomputed"],
-        "values": settings_store.get_all(),
+        "fields": fields,
+        "groups": groups,
     }
 
 
