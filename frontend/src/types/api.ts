@@ -86,6 +86,36 @@ export interface ChecklistData {
   [key: string]: unknown
 }
 
+// ── Checklist registry (Wave A — GET /api/checklist-registry) ─────────────
+export interface ChecklistRegistryItem {
+  key: string
+  section: string
+  group: string
+  label_ru: string
+  label_et: string | null
+  ai_fillable: boolean
+  hint: string | null
+  order: number
+}
+
+export interface ChecklistRegistryGroup {
+  id: string
+  label_ru: string
+  items: ChecklistRegistryItem[]
+}
+
+export interface ChecklistRegistrySection {
+  id: string
+  label_ru: string
+  subgrouped: boolean
+  groups: ChecklistRegistryGroup[]
+}
+
+export interface ChecklistRegistryResponse {
+  sections: ChecklistRegistrySection[]
+  legacy_key_map: Record<string, string>
+}
+
 // ── Negotiation brief ─────────────────────────────────────────────────────
 export interface NegotiationBrief {
   // Backend fields — see backend/brief_generator.py:generate_negotiation_brief.

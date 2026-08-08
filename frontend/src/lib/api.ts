@@ -7,6 +7,7 @@
 
 import type {
   AppData,
+  ChecklistRegistryResponse,
   Feedback,
   FeedbackCreateResponse,
   FeedbackListResponse,
@@ -46,6 +47,12 @@ export function fetchAppData(): Promise<AppData> {
 
 export function fetchSettings(): Promise<SettingsData> {
   return apiFetch<SettingsData>('/api/settings')
+}
+
+// ── Checklist registry (Wave A) ─────────────────────────────────────────────
+
+export function fetchChecklistRegistry(): Promise<ChecklistRegistryResponse> {
+  return apiFetch<ChecklistRegistryResponse>('/api/checklist-registry')
 }
 
 // ── Pending flow ──────────────────────────────────────────────────────────

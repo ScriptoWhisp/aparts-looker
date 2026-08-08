@@ -9,8 +9,22 @@
  */
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { fetchAppData, fetchSettings, fetchFeedback, fetchFeedbackOne, type FeedbackFilters } from './api'
-import type { AppData, Entry, Feedback, FeedbackListResponse, SettingsData } from '../types/api'
+import {
+  fetchAppData,
+  fetchChecklistRegistry,
+  fetchSettings,
+  fetchFeedback,
+  fetchFeedbackOne,
+  type FeedbackFilters,
+} from './api'
+import type {
+  AppData,
+  ChecklistRegistryResponse,
+  Entry,
+  Feedback,
+  FeedbackListResponse,
+  SettingsData,
+} from '../types/api'
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url)
@@ -24,6 +38,7 @@ export const QUERY_KEYS = {
   settings:  ['settings']  as const,
   isochrone: ['isochrone'] as const,
   districts: ['districts'] as const,
+  checklistRegistry: ['checklist-registry'] as const,
   feedback:  (filters?: FeedbackFilters) => ['feedback', filters ?? {}] as const,
   feedbackOne: (id: string) => ['feedback', 'one', id] as const,
 }
@@ -44,6 +59,17 @@ export function useSettings() {
     queryKey: QUERY_KEYS.settings,
     queryFn:  fetchSettings,
     staleTime: 60_000,
+  })
+}
+
+// ── Checklist registry hook (Wave A) ─────────────────────────────────────────
+// Registry rarely changes — 1h staleTime, fetched once per session, no
+// per-listing refetch.
+export function useChecklistRegistry() {
+  return useQuery<ChecklistRegistryResponse>({
+    queryKey: QUERY_KEYS.checklistRegistry,
+    queryFn:  fetchChecklistRegistry,
+    staleTime: 60 * 60 * 1000,
   })
 }
 
