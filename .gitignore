@@ -37,6 +37,9 @@ backend/data/*.sqlite*
 .claude/node_modules/
 .claude/scripts/
 .claude/hooks/
+.claude/agents/
+.claude/commands/
+.planning/research/.cache/
 frontend/node_modules/
 frontend/dist/
 frontend/tsconfig.*.tsbuildinfo
