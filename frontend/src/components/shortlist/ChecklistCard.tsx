@@ -254,8 +254,6 @@ function CollapsedOkRow({ items }: { items: ChecklistItem[] }) {
 // ── Checklist group body ──────────────────────────────────────────────────
 
 function GroupBody({ group }: { group: ChecklistGroup }) {
-  const ok = group.items.filter((i) => i.state === 'ok')
-
   // Find the last consecutive ok run at the end
   let tailStart = group.items.length
   for (let i = group.items.length - 1; i >= 0; i--) {
@@ -265,6 +263,14 @@ function GroupBody({ group }: { group: ChecklistGroup }) {
   const nonTail = group.items.slice(0, tailStart)
   const tail    = group.items.slice(tailStart)
 
+  // NOTE: when every item in the group is 'ok', the scan above walks all the
+  // way to tailStart=0, so `tail` already equals the full items array — there
+  // is no separate "nonTail is empty" case to additionally render. A prior
+  // version had a second `nonTail.length === 0 && ok.length > 0` branch here
+  // that duplicated every item in an all-ok group (rendered twice). Since
+  // `tail` already fully covers that scenario, the extra branch was always
+  // 100% redundant with it — removed rather than guarded, to avoid ever
+  // reintroducing the duplicate-render bug.
   return (
     <div className="pb-1">
       {nonTail.map((item) => (
@@ -272,10 +278,6 @@ function GroupBody({ group }: { group: ChecklistGroup }) {
       ))}
       {tail.length > 0 && (
         <CollapsedOkRow items={tail} />
-      )}
-      {/* If all items are ok, show collapsed */}
-      {nonTail.length === 0 && ok.length > 0 && (
-        <CollapsedOkRow items={ok} />
       )}
     </div>
   )
