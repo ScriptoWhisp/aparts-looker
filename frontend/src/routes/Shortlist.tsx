@@ -25,6 +25,7 @@ import { VerdictBand } from '../components/shortlist/VerdictBand'
 import { AfterViewingBar } from '../components/shortlist/AfterViewingBar'
 import { ChecklistCard } from '../components/shortlist/ChecklistCard'
 import { NegotiationCard } from '../components/shortlist/NegotiationCard'
+import { FinanceCard } from '../components/shortlist/FinanceCard'
 import { CompareOverlay } from '../components/shortlist/CompareOverlay'
 
 // ── Empty / no-selection states ────────────────────────────────────────────
@@ -97,8 +98,9 @@ function MainPane({ entry, settings, onBack }: MainPaneProps) {
             itself isn't otherwise remounted when selectedEntry changes). */}
         <ChecklistCard key={entry.id} entry={entry} />
 
-        {/* Right: Negotiation */}
-        <div className="flex flex-col gap-3 min-h-0">
+        {/* Right: Finance (affordability calculator, Wave B) + Negotiation */}
+        <div className="flex flex-col gap-3 min-h-0 overflow-y-auto">
+          <FinanceCard key={entry.id} entry={entry} />
           <NegotiationCard entry={entry} />
         </div>
       </div>
