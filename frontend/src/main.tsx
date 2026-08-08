@@ -11,6 +11,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import 'leaflet/dist/leaflet.css'
 import './index.css'
 import { App } from './App'
+import { init as initConsoleCapture } from './lib/consoleCapture'
+
+// Must run before React renders so early console activity (React warnings,
+// query errors during first load) is captured into the feedback ring buffer.
+initConsoleCapture()
 
 const queryClient = new QueryClient({
   defaultOptions: {
