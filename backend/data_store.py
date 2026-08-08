@@ -56,6 +56,7 @@ import os
 from datetime import datetime, timezone
 from typing import Optional
 
+import checklist_registry
 import config
 from db import SessionLocal
 from models import Listing, SHORTLIST_VIEWED, SHORTLIST_TO_VIEW, SHORTLIST_DROPPED
@@ -864,6 +865,29 @@ def set_checklist_user_mark(
 
         checklist = dict(row.checklist or {})
         user_marks = dict(checklist.get("user_marks") or {})
+
+        # Wave A lazy legacy-key migration: if `key` is a new-registry key that
+        # one or more pre-Wave-A keys (s09/s14/s16) map onto, and this listing
+        # still has data under those old keys, fold it forward into `key` now
+        # (never overwriting anything already present under the new key), then
+        # drop the old key entirely. Runs on every write to a new key so state
+        # migrates the first time a listing's checklist is touched post-Wave-A —
+        # no bulk migration script needed (Migration & backward compat, spec).
+        for old_key in checklist_registry.legacy_keys_for(key):
+            old_entry = user_marks.get(old_key)
+            if not old_entry:
+                continue
+            new_entry = dict(user_marks.get(key) or {})
+            if "state" not in new_entry and old_entry.get("state"):
+                new_entry["state"] = old_entry["state"]
+            if "note" not in new_entry and old_entry.get("note"):
+                new_entry["note"] = old_entry["note"]
+            if "marked_at" not in new_entry and old_entry.get("marked_at"):
+                new_entry["marked_at"] = old_entry["marked_at"]
+            if new_entry:
+                user_marks[key] = new_entry
+            user_marks.pop(old_key, None)
+
         existing = dict(user_marks.get(key) or {})
 
         if state is not UNSET:
