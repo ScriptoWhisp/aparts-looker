@@ -68,6 +68,14 @@ export const handlers = [
     return HttpResponse.json({ ok: true })
   }),
 
+  http.patch('/api/entry/:id/checklist-item', async ({ request }) => {
+    const body = (await request.json()) as { key: string; state?: string | null; note?: string | null }
+    return HttpResponse.json({
+      ok: true,
+      user_marks: { [body.key]: { state: body.state ?? undefined, note: body.note ?? undefined } },
+    })
+  }),
+
   // ── Settings save ────────────────────────────────────────────────────────
   http.post('/api/settings', () => {
     return HttpResponse.json({ applied: {}, errors: [] })

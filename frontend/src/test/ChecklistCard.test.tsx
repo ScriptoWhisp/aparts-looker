@@ -1,22 +1,32 @@
 /**
- * ChecklistCard.test.tsx
+ * ChecklistCard.test.tsx — Wave 10 interactive checklist rewrite.
  *
  * Tests:
- * - renders with entry.checklist.groups shape
- * - renders with ai_checklist_fills fallback shape (old entries)
- * - renders with empty checklist (0 items)
- * - flagged group open by default; non-flagged group closed
- * - toggle opens a closed group
- * - item counts show in header (flags / unknown / ok)
+ * - Renders ALL 13 registry items once their groups are expanded (not just the
+ *   ones ai_checklist_fills happened to fill in) — the reported bug.
+ * - user_marks in entry override the AI-derived state (merge precedence).
+ * - Clicking a state chip cycles ok -> flag -> unknown -> skip -> back to AI default.
+ * - PATCH fires with the expected body when a state chip is clicked.
+ * - Typing in a note textarea debounces and PATCHes.
+ * - Group counts + signal strip reflect the merged (not raw AI) state.
+ *
+ * Group open/closed defaults still apply (open iff a flag or any user_mark is
+ * present in that group) — tests that need a closed group's items expand it
+ * first via its header button, same as a real user would.
  */
 
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { http, HttpResponse } from 'msw'
+import { server } from './mocks/server'
+import { renderWithProviders } from './renderWithProviders'
 import { ChecklistCard } from '@/components/shortlist/ChecklistCard'
 import { approvedEntry } from './mocks/fixtures'
-import type { Entry, ChecklistData } from '@/types/api'
+import { CHECKLIST_ALL_KEYS } from '@/lib/checklistMeta'
+import type { Entry } from '@/types/api'
 
-// Mock framer-motion
+// Mock framer-motion (AnimatePresence + motion.div) — same pattern as other
+// shortlist component tests; jsdom cannot run the real height animation.
 vi.mock('framer-motion', () => ({
   AnimatePresence: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
   motion: {
@@ -26,133 +36,170 @@ vi.mock('framer-motion', () => ({
   },
 }))
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+function makeBareEntry(overrides: Partial<Entry> = {}): Entry {
+  return { ...approvedEntry, checklist: null, ai_checklist_fills: null, ...overrides }
+}
 
-function makeEntry(checklistOverride: ChecklistData | null, fillsOverride?: Record<string, unknown> | null): Entry {
-  return {
-    ...approvedEntry,
-    checklist: checklistOverride,
-    ai_checklist_fills: fillsOverride ?? null,
+const GROUP_KEYS = ['building_fund', 'risk', 'finance', 'quality', 'location']
+
+/** Expand every rendered, currently-closed group header (skips already-open
+ * groups so a flag/mark-driven open-by-default group isn't toggled shut). */
+function expandAllGroups() {
+  for (const key of GROUP_KEYS) {
+    const header = screen.queryByTestId(`checklist-group-header-${key}`)
+    if (header && header.getAttribute('aria-expanded') === 'false') fireEvent.click(header)
   }
 }
 
-describe('ChecklistCard — checklist.groups shape', () => {
-  it('renders checklist header "Checklist"', () => {
-    render(<ChecklistCard entry={approvedEntry} />)
-    expect(screen.getByText('Checklist')).toBeInTheDocument()
+describe('ChecklistCard — always renders the full registry', () => {
+  it('bottom summary counts all 13 registry items regardless of group open state', () => {
+    renderWithProviders(<ChecklistCard entry={makeBareEntry()} />)
+    const summary = screen.getByText((_, el) => el?.tagName === 'P' && el.textContent === '13 items · 13 unmarked')
+    expect(summary).toBeInTheDocument()
   })
 
-  it('renders group labels from checklist.groups', () => {
-    render(<ChecklistCard entry={approvedEntry} />)
-    // approvedEntry has groups: building_fund + risk
-    expect(screen.getByText('Building fund')).toBeInTheDocument()
-    expect(screen.getByText('Risk')).toBeInTheDocument()
-  })
-
-  it('flag group is open by default (risk has a flag item)', () => {
-    render(<ChecklistCard entry={approvedEntry} />)
-    // Risk group has 1 flag item — should be open, showing the item label
-    expect(screen.getByText('No moisture damage')).toBeInTheDocument()
-  })
-
-  it('non-flag group is closed by default (building_fund has no flags)', () => {
-    render(<ChecklistCard entry={approvedEntry} />)
-    // building_fund has ok + unknown items, no flags → closed
-    // "Fund exists" item should NOT be visible initially
-    expect(screen.queryByText('Fund exists')).toBeNull()
-  })
-
-  it('clicking closed group header opens it', () => {
-    render(<ChecklistCard entry={approvedEntry} />)
-    // building_fund is closed initially — find its header and click
-    const buildingFundHeader = screen.getByText('Building fund').closest('button')!
-    fireEvent.click(buildingFundHeader)
-    // Now the items should be visible
-    expect(screen.getByText('Fund exists')).toBeInTheDocument()
-  })
-
-  it('shows flag count in header when flags exist', () => {
-    render(<ChecklistCard entry={approvedEntry} />)
-    // The global header shows "1 flag" — may appear multiple places (header + group header)
-    // Use getAllByText to allow for multiple matches
-    const flagTexts = screen.getAllByText(/1 flag/i)
-    expect(flagTexts.length).toBeGreaterThanOrEqual(1)
-  })
-
-  it('shows item count at bottom when items exist', () => {
-    render(<ChecklistCard entry={approvedEntry} />)
-    // approvedEntry has 2+1 = 3 total items
-    expect(screen.getByText(/3 items/i)).toBeInTheDocument()
-  })
-})
-
-describe('ChecklistCard — empty checklist', () => {
-  it('shows "No checklist data yet" when groups is empty and no fills', () => {
-    const entry = makeEntry(null, null)
-    render(<ChecklistCard entry={entry} />)
-    expect(screen.getByText(/No checklist data yet/i)).toBeInTheDocument()
-  })
-
-  it('shows "No checklist data yet" when checklist.groups is empty array', () => {
-    const entry = makeEntry({ groups: [] }, null)
-    render(<ChecklistCard entry={entry} />)
-    expect(screen.getByText(/No checklist data yet/i)).toBeInTheDocument()
-  })
-})
-
-describe('ChecklistCard — ai_checklist_fills fallback', () => {
-  it('renders synthetic groups from ai_checklist_fills when checklist.groups absent', () => {
-    const fills: Record<string, unknown> = {
-      'risk_moisture':  { state: 'flag',    label: 'Moisture risk',  pts: -10, note: null },
-      'quality_finish': { state: 'ok',      label: 'Good finish',    pts: 0,   note: null },
-      'finance_loan':   { state: 'unknown', label: 'Loan status',    pts: 0,   note: null },
+  it('renders all 13 registry item chips once every group is expanded', () => {
+    renderWithProviders(<ChecklistCard entry={makeBareEntry()} />)
+    expandAllGroups()
+    for (const key of CHECKLIST_ALL_KEYS) {
+      expect(screen.getByTestId(`checklist-chip-${key}`)).toBeInTheDocument()
     }
-    const entry = makeEntry(null, fills)
-    render(<ChecklistCard entry={entry} />)
-    // Should NOT show "No checklist data" since fills exist
-    expect(screen.queryByText(/No checklist data yet/i)).toBeNull()
-    // The component builds groups from key prefixes; at least one group should render
-    const header = screen.getByText('Checklist')
-    expect(header).toBeInTheDocument()
+  })
+
+  it('every item defaults to state=unknown with no AI fill and no user mark', () => {
+    renderWithProviders(<ChecklistCard entry={makeBareEntry()} />)
+    expandAllGroups()
+    for (const key of CHECKLIST_ALL_KEYS) {
+      expect(screen.getByTestId(`checklist-chip-${key}`)).toHaveAttribute('data-state', 'unknown')
+    }
   })
 })
 
-describe('ChecklistCard — does not crash with edge cases', () => {
-  it('does not crash when entry.checklist is null', () => {
-    expect(() => render(<ChecklistCard entry={makeEntry(null)} />)).not.toThrow()
+describe('ChecklistCard — merge precedence (user_marks overrides AI state)', () => {
+  it('a user_marks state overrides the AI-derived state', () => {
+    // approvedEntry: s14_01/s14_02 AI-filled (-> ok), s09_01 user-flagged (risk auto-opens).
+    renderWithProviders(<ChecklistCard entry={approvedEntry} />)
+    expandAllGroups()
+    expect(screen.getByTestId('checklist-chip-s09_01')).toHaveAttribute('data-state', 'flag')
+    expect(screen.getByTestId('checklist-chip-s14_01')).toHaveAttribute('data-state', 'ok')
   })
 
-  it('does not crash when entry.checklist has no groups property', () => {
-    // checklist object exists but no groups key — only renovation_items
-    const entry = makeEntry(
-      { renovation_items: [{ key: 'kitchen_full', applies: true, confidence: 2, qty: null, note: null }] },
-      null,
+  it('flag group (Risk) is open by default; a group with no flag/mark starts collapsed', () => {
+    renderWithProviders(<ChecklistCard entry={approvedEntry} />)
+    // s09_01 (risk group, flagged) label should already be visible without a click.
+    expect(screen.getByText('Plumbing / electrical replacement year')).toBeInTheDocument()
+    // s16_01 (location group — no flag, no mark) should not be visible until expanded.
+    expect(screen.queryByText('Distance to public transit')).toBeNull()
+  })
+
+  it('header counts reflect the merged state, not the raw fill count', () => {
+    renderWithProviders(<ChecklistCard entry={approvedEntry} />)
+    // 2 ok (AI fills) + 1 flag (user mark) + 10 unknown = 13 total.
+    const cardHeader = screen.getByText('Checklist').closest('div')!
+    expect(within(cardHeader).getByText(/^1 flag/)).toBeInTheDocument()
+    expect(within(cardHeader).getByText(/^10 unknown/)).toBeInTheDocument()
+    expect(within(cardHeader).getByText(/^2 ok/)).toBeInTheDocument()
+  })
+})
+
+describe('ChecklistCard — state chip cycling + persistence', () => {
+  it('clicking a state chip cycles ok -> flag -> unknown -> skip -> AI default', async () => {
+    renderWithProviders(<ChecklistCard entry={makeBareEntry()} />)
+    expandAllGroups()
+    const chip = screen.getByTestId(`checklist-chip-${CHECKLIST_ALL_KEYS[0]}`)
+    expect(chip).toHaveAttribute('data-state', 'unknown') // AI default (no fill)
+
+    fireEvent.click(chip)
+    await waitFor(() => expect(chip).toHaveAttribute('data-state', 'ok'))
+
+    fireEvent.click(chip)
+    await waitFor(() => expect(chip).toHaveAttribute('data-state', 'flag'))
+
+    fireEvent.click(chip)
+    await waitFor(() => expect(chip).toHaveAttribute('data-state', 'unknown'))
+
+    fireEvent.click(chip)
+    await waitFor(() => expect(chip).toHaveAttribute('data-state', 'skip'))
+
+    // 5th click clears the override -> back to the AI default (unknown, since no fill).
+    fireEvent.click(chip)
+    await waitFor(() => expect(chip).toHaveAttribute('data-state', 'unknown'))
+  })
+
+  it('PATCH /api/entry/:id/checklist-item fires with the clicked key + state', async () => {
+    let patchBody: unknown = null
+    let patchUrl = ''
+    server.use(
+      http.patch('/api/entry/:id/checklist-item', async ({ request, params }) => {
+        patchBody = await request.json()
+        patchUrl = String(params.id)
+        return HttpResponse.json({ ok: true, user_marks: {} })
+      }),
     )
-    expect(() => render(<ChecklistCard entry={entry} />)).not.toThrow()
+
+    const key = CHECKLIST_ALL_KEYS[0]
+    renderWithProviders(<ChecklistCard entry={makeBareEntry({ id: 'chip-patch-test' })} />)
+    expandAllGroups()
+    fireEvent.click(screen.getByTestId(`checklist-chip-${key}`))
+
+    await waitFor(() => {
+      expect(patchUrl).toBe('chip-patch-test')
+      expect(patchBody).toEqual({ key, state: 'ok' })
+    })
+  })
+})
+
+describe('ChecklistCard — note field', () => {
+  it('typing in a note textarea debounces and PATCHes with the note text', async () => {
+    let patchBody: unknown = null
+    server.use(
+      http.patch('/api/entry/:id/checklist-item', async ({ request }) => {
+        patchBody = await request.json()
+        return HttpResponse.json({ ok: true, user_marks: {} })
+      }),
+    )
+
+    const key = CHECKLIST_ALL_KEYS[0]
+    renderWithProviders(<ChecklistCard entry={makeBareEntry({ id: 'note-patch-test' })} />)
+    expandAllGroups()
+
+    fireEvent.click(screen.getByTestId(`checklist-note-toggle-${key}`))
+    const textarea = screen.getByTestId(`checklist-note-textarea-${key}`)
+    fireEvent.change(textarea, { target: { value: 'Asked agent, waiting on reply' } })
+
+    // Debounce is 800ms — wait for the PATCH.
+    await waitFor(
+      () => {
+        expect(patchBody).toEqual({ key, note: 'Asked agent, waiting on reply' })
+      },
+      { timeout: 2000 },
+    )
   })
 
-  it('does not crash when a group has zero items', () => {
-    const entry = makeEntry({
-      groups: [
-        { key: 'building_fund', label: 'Building fund', label_et: 'Remondifond', items: [] },
-      ],
+  it('an existing user note renders the textarea open by default (group auto-opens too)', () => {
+    const entry = makeBareEntry({
+      id: 'existing-note-test',
+      checklist: { user_marks: { [CHECKLIST_ALL_KEYS[0]]: { note: 'Already checked' } } },
     })
-    expect(() => render(<ChecklistCard entry={entry} />)).not.toThrow()
+    renderWithProviders(<ChecklistCard entry={entry} />)
+    expect(screen.getByTestId(`checklist-note-textarea-${CHECKLIST_ALL_KEYS[0]}`)).toHaveValue('Already checked')
+  })
+})
+
+describe('ChecklistCard — does not crash on edge cases', () => {
+  it('does not crash when entry.checklist is null', () => {
+    expect(() => renderWithProviders(<ChecklistCard entry={makeBareEntry()} />)).not.toThrow()
   })
 
-  it('renders correctly with items that have null notes', () => {
-    const entry = makeEntry({
-      groups: [{
-        key: 'risk',
-        label: 'Risk',
-        label_et: 'Riskid',
-        items: [
-          { key: 'risk_a', label: 'Risk A', state: 'flag', pts: -5, note: null },
-          { key: 'risk_b', label: 'Risk B', state: 'ok',   pts: 0,  note: null },
-        ],
-      }],
-    })
-    expect(() => render(<ChecklistCard entry={entry} />)).not.toThrow()
-    expect(screen.getByText('Risk A')).toBeInTheDocument()
+  it('does not crash when checklist.user_marks is an empty object', () => {
+    const entry = makeBareEntry({ checklist: { user_marks: {} } })
+    expect(() => renderWithProviders(<ChecklistCard entry={entry} />)).not.toThrow()
+  })
+
+  it('drops empty-string ai_checklist_fills values back to unknown, not a blank ok item', () => {
+    const entry = makeBareEntry({ ai_checklist_fills: { [CHECKLIST_ALL_KEYS[0]]: '' } })
+    renderWithProviders(<ChecklistCard entry={entry} />)
+    expandAllGroups()
+    expect(screen.getByTestId(`checklist-chip-${CHECKLIST_ALL_KEYS[0]}`)).toHaveAttribute('data-state', 'unknown')
   })
 })

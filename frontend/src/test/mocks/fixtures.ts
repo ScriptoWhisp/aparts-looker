@@ -94,26 +94,19 @@ export const approvedEntry = makeEntry({
   district: 'Kadriorg',
   approved_at: '2026-07-30T09:00:00Z',
   shortlisted_at: '2026-07-30T09:00:00Z',
+  // Wave 10: real production shape. entry.checklist.groups is never written by
+  // the backend (grepped backend/*.py — only ai_checklist_fills + the new
+  // checklist.user_marks sub-key exist). 2 AI-filled keys (-> state=ok), 1
+  // user-flagged key (via checklist.user_marks — the only source of state=flag
+  // in the real system) exercises the flag-first group ordering + open-by-default.
+  ai_checklist_fills: {
+    s14_01: 'Kadriorg, 5 min to the sea, quiet street',
+    s14_02: '245 000 € · 3 403 €/m²',
+  },
   checklist: {
-    groups: [
-      {
-        key: 'building_fund',
-        label: 'Building fund',
-        label_et: 'Remondifond',
-        items: [
-          { key: 'bf_exists', label: 'Fund exists', state: 'ok', pts: 0, note: null },
-          { key: 'bf_adequate', label: 'Fund adequate', state: 'unknown', pts: 0, note: null },
-        ],
-      },
-      {
-        key: 'risk',
-        label: 'Risk',
-        label_et: 'Riskid',
-        items: [
-          { key: 'risk_moisture', label: 'No moisture damage', state: 'flag', pts: -10, note: 'Basement issue mentioned' },
-        ],
-      },
-    ],
+    user_marks: {
+      s09_01: { state: 'flag', note: 'Plumbing not replaced since 1998', marked_at: '2026-07-30T10:00:00Z' },
+    },
     renovation_items: [
       { key: 'kitchen_full', applies: true, confidence: 2, qty: null, note: 'Kitchen needs full reno' },
       { key: 'cosmetic', applies: true, confidence: 3, qty: null, note: null },
