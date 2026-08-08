@@ -156,6 +156,20 @@
 
 ---
 
+## 13. Feedback / Bug Reports
+
+**What it does:** In-app bug/feature/UX/perf reporting. A floating 🐛 button (bottom-right, present on every tab) opens a drawer capturing a screenshot (via `html2canvas`), the last 50 console log entries, the comment, and page context (URL/viewport/user agent). Submissions POST to `/api/feedback` (multipart, `feedback` Postgres table) and appear in the `#feedback` tab for browsing.
+
+**Nuances:**
+- Screenshot storage is `BYTEA` in Postgres, capped at 2 MB per report — no S3, deliberately, given single-user low volume. Revisit if bloat becomes a concern (scheduled prune).
+- Console log capture is a module-level singleton ring buffer (`frontend/src/lib/consoleCapture.ts`) — monkey-patches `console.log/warn/error/info` plus `window.onerror`/`unhandledrejection`. Args are serialized defensively (string/Error/JSON-stringify, 500-char cap, `[unserializable]` fallback for circular refs) so it never crashes on a weird `console.log` call.
+- `type`/`status` are plain `VARCHAR`, not a Postgres ENUM (unlike `listings.status`) — validated at the route layer against `FEEDBACK_TYPES`/`FEEDBACK_STATUSES` so adding a new status later doesn't need an `ALTER TYPE` migration.
+- The floating button sits `140px` above the bottom edge on mobile (not just the 56px bottom-nav) — it also has to clear Inbox's pinned Look closer/Skip/Later action strip, which sits directly above the nav on that one tab.
+- **Claude triage workflow:** Daniel opens `#feedback`, clicks a report, copies either the report URL (`#feedback?id=<uuid>` — reopens the same detail modal via deep-link) or the raw backend URL. Claude fetches `curl -u daniel:PASS http://46.62.152.9/api/feedback/{id}` (+ `/screenshot` for the image) to reproduce and fix, then `PATCH`es `status` to `fixed`.
+- `python-multipart` was added to `backend/requirements.txt` — the first route in the app to accept `multipart/form-data` (FastAPI's `Form()`/`File()` require it).
+
+---
+
 ## Feature Matrix
 
 | Area | State | Owner risk |
