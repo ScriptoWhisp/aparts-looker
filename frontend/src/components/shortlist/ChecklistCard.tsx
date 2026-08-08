@@ -1,58 +1,42 @@
 /**
- * ChecklistCard — fully interactive, always-full checklist (Wave 10 rewrite).
+ * ChecklistCard — full checklist registry, section-based collapsible UI (Wave A).
  *
- * Wave 7C rendered only the ~2-5 keys the AI happened to fill in from the listing
- * text, leaving 8-11 of the 13 registry keys invisible — and item marks were pure
- * local UI state (AskAtViewing's checkboxes), never persisted. Daniel's reported
- * bug ("чеклист опять сломан, я не могу отметить и написать коммент... я могу
- * видеть пункты которые стоят как 'true', все остальные не видно") is both of
- * those problems at once.
+ * Wave 10 rendered a flat 13-key AI-fillable subset. Wave A expands the
+ * registry to ~96 items across 4 sections Daniel actually uses when
+ * evaluating a Tallinn apartment:
+ *   - Оценка по критериям (evaluation, 13 items — AI can autofill several)
+ *   - Вопросы продавцу (ask_seller, 16 items — questions to ask the seller/agent)
+ *   - Документы к запросу (request_docs, 20 items — docs to request + e-kinnistusraamat)
+ *   - На месте (onsite, 47 items across 5 physical-inspection sub-groups)
  *
- * This rewrite:
- * - Always renders every key in CHECKLIST_ALL_KEYS, grouped by CHECKLIST_KEY_META.
- * - Merges three sources into one state per item:
- *     final_state = user_marks[key]?.state ?? ai_state_for(key)
- *   where ai_state_for() mirrors the Wave 7C buildGroupsFromFills logic (a filled
- *   AI string means "known" -> ok; an empty/absent key means "unknown").
- * - Each item is a state chip (click to cycle ok -> flag -> unknown -> skip ->
- *   back to the AI default) + label + optional AI-filled context + a note field —
- *   both PATCH persisted to entry.checklist.user_marks via
- *   PATCH /api/entry/{id}/checklist-item.
- * - AskAtViewing.tsx is retired: with every item visible and taggable here,
- *   a separate "unknowns" view added nothing a merged 'unknown' state chip
- *   doesn't already show.
+ * The registry itself is fetched once from GET /api/checklist-registry
+ * (useChecklistRegistry, lib/queries.ts, 1h staleTime) — this component never
+ * hardcodes the item list. Per-item state still merges three sources exactly
+ * as Wave 10 did:
+ *   final_state = user_marks[key]?.state ?? ai_state_for(key)
+ * with a frontend-side legacy-key fallback (lookupWithLegacyFallback) so a
+ * listing whose checklist.user_marks / ai_checklist_fills still carries a
+ * pre-Wave-A key (s09/s14/s16) renders correctly even before it has been
+ * re-marked (which is when the backend's lazy migration actually fires).
  *
- * NOTE on key coverage: CHECKLIST_KEY_META (frontend/src/lib/checklistMeta.ts)
- * mirrors backend/ai_evaluator.py::AI_FILLABLE_CHECKLIST_KEYS exactly — 13 keys,
- * not "40+". No other key registry exists anywhere in this repo (grepped
- * backend/*.py and frontend/src for any larger manual-checklist source). This is
- * a documented mismatch against the original spec's assumption, not an invented
- * expansion — see docs/design/react-rewrite-progress.md Wave 10 notes.
+ * Mobile-first: state chips and note-toggle buttons are >=44px touch targets;
+ * the note textarea uses text-base (16px) so iOS does not zoom on focus.
  */
 
-import { useState, useRef, useMemo } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ChevronDown, ChevronRight } from 'lucide-react'
-import type { Entry, ChecklistItemState, ChecklistUserMark } from '../../types/api'
-import { CHECKLIST_ALL_KEYS, CHECKLIST_KEY_META, isKnownStateShorthand } from '../../lib/checklistMeta'
+import type {
+  ChecklistRegistryResponse,
+  ChecklistItemState,
+  ChecklistUserMark,
+  Entry,
+} from '../../types/api'
+import { useChecklistRegistry } from '../../lib/queries'
+import { buildReverseLegacyMap, isKnownStateShorthand, lookupWithLegacyFallback } from '../../lib/checklistMeta'
 import { patchChecklistItem, type ChecklistItemPatch } from '../../lib/api'
 import { QUERY_KEYS } from '../../lib/queries'
-
-// ── Constants ──────────────────────────────────────────────────────────────
-
-const GROUP_META: Record<string, { label: string; label_et: string }> = {
-  building_fund: { label: 'Building fund', label_et: 'Remondifond' },
-  risk:          { label: 'Risk',          label_et: 'Riskid' },
-  finance:       { label: 'Finance',       label_et: 'Rahandus' },
-  quality:       { label: 'Quality',       label_et: 'Kvaliteet' },
-  location:      { label: 'Location',      label_et: 'Asukoht' },
-}
-
-const GROUP_ORDER = ['building_fund', 'risk', 'finance', 'quality', 'location']
-
-// Manual-mark cycle: ok -> flag -> unknown -> skip -> back to AI default (null override).
-const CYCLE: (ChecklistItemState | null)[] = ['ok', 'flag', 'unknown', 'skip', null]
 
 // ── State → color / glyph ──────────────────────────────────────────────────
 
@@ -76,116 +60,120 @@ function stateGlyph(state: ChecklistItemState): string {
   }
 }
 
-// ── Merged item model ────────────────────────────────────────────────────
+// 4-state cycle: unknown -> ok -> flag -> skip -> unknown.
+const CYCLE: ChecklistItemState[] = ['unknown', 'ok', 'flag', 'skip']
 
-interface MergedItem {
-  key: string
-  label: string
-  state: ChecklistItemState   // final = user override ?? AI-derived
-  hasOverride: boolean        // true if user_marks[key].state is explicitly set
-  aiNote: string | null       // AI-filled context text, if the AI found an answer
-  userNote: string | null     // user's own persisted note
-  hasAnyMark: boolean         // true if user_marks has ANY entry (state and/or note) for this key
-}
-
-interface MergedGroup {
-  key: string
-  label: string
-  label_et: string
-  items: MergedItem[]
-}
-
-function worstState(items: MergedItem[]): ChecklistItemState {
-  if (items.some((i) => i.state === 'flag'))    return 'flag'
-  if (items.some((i) => i.state === 'unknown')) return 'unknown'
-  if (items.some((i) => i.state === 'ok'))      return 'ok'
-  return 'skip'
-}
-
-/** AI-derived state + context note for a single key from ai_checklist_fills.
- *
- * Real production shape: key -> "filled text" (present only when the AI found an
- * explicit answer). A legacy object shape (key -> {state, note}) is also honored
- * for backward compat with manual/legacy fixtures and any pre-Wave-10 data.
- */
-function aiStateFor(
-  key: string,
-  fills: Record<string, unknown> | null | undefined,
-): { state: ChecklistItemState; note: string | null } {
-  const v = fills?.[key]
-  if (v == null) return { state: 'unknown', note: null }
-
-  if (typeof v === 'object') {
-    const obj = v as { state?: string; note?: string }
-    return { state: (obj.state as ChecklistItemState) ?? 'unknown', note: obj.note ?? null }
-  }
-
-  const text = String(v).trim()
-  if (text === '') return { state: 'unknown', note: null }
-  if (isKnownStateShorthand(text)) return { state: text as ChecklistItemState, note: null }
-  // A real AI-filled answer — presence means "known", the text is shown as context.
-  return { state: 'ok', note: text }
-}
-
-function buildMergedGroups(entry: Entry): MergedGroup[] {
-  const fills = entry.ai_checklist_fills
-  const userMarks = entry.checklist?.user_marks ?? {}
-
-  const byGroup = new Map<string, MergedItem[]>()
-  for (const key of CHECKLIST_ALL_KEYS) {
-    const meta = CHECKLIST_KEY_META[key]
-    if (!meta) continue
-    const { state: aiState, note: aiNote } = aiStateFor(key, fills)
-    const mark: ChecklistUserMark | undefined = userMarks[key]
-    const hasOverride = mark?.state != null
-    const finalState = (mark?.state ?? aiState) as ChecklistItemState
-
-    const item: MergedItem = {
-      key,
-      label: meta.label,
-      state: finalState,
-      hasOverride,
-      aiNote,
-      userNote: mark?.note ?? null,
-      hasAnyMark: mark != null,
-    }
-    const arr = byGroup.get(meta.group) ?? []
-    arr.push(item)
-    byGroup.set(meta.group, arr)
-  }
-
-  return GROUP_ORDER
-    .map((g) => ({
-      key: g,
-      label: GROUP_META[g]?.label ?? g,
-      label_et: GROUP_META[g]?.label_et ?? '',
-      items: byGroup.get(g) ?? [],
-    }))
-    .filter((g) => g.items.length > 0)
-}
-
-/** Next state in the manual cycle: ok -> flag -> unknown -> skip -> AI default (null). */
-function nextState(item: MergedItem): ChecklistItemState | null {
-  const current = item.hasOverride ? item.state : null
+function nextState(current: ChecklistItemState): ChecklistItemState {
   const idx = CYCLE.indexOf(current)
   return CYCLE[(idx + 1) % CYCLE.length]
 }
 
-// ── Signal strip ─────────────────────────────────────────────────────────
+// ── Filter ───────────────────────────────────────────────────────────────
 
-function SignalStrip({ items }: { items: MergedItem[] }) {
-  return (
-    <div className="flex gap-[3px] flex-wrap">
-      {items.map((item) => (
-        <div
-          key={item.key}
-          title={item.label}
-          className="w-[7px] h-[7px] rounded-[2px] flex-none"
-          style={{ background: stateColor(item.state) }}
-        />
-      ))}
-    </div>
-  )
+type FilterKey = 'all' | 'todo' | 'ok' | 'flagged'
+
+const FILTERS: { key: FilterKey; label: string }[] = [
+  { key: 'all',     label: 'All' },
+  { key: 'todo',    label: 'To do' },
+  { key: 'ok',      label: 'OK' },
+  { key: 'flagged', label: 'Flagged' },
+]
+
+function matchesFilter(state: ChecklistItemState, filter: FilterKey): boolean {
+  if (filter === 'all') return true
+  if (filter === 'todo') return state === 'unknown'
+  if (filter === 'ok') return state === 'ok'
+  return state === 'flag'
+}
+
+// ── Merged item model ────────────────────────────────────────────────────
+
+interface MergedItem {
+  key: string
+  label_ru: string
+  hint: string | null
+  state: ChecklistItemState   // final = user override ?? AI-derived
+  hasOverride: boolean
+  aiNote: string | null
+  userNote: string | null
+  hasAnyMark: boolean
+}
+
+interface MergedGroup {
+  id: string
+  label_ru: string
+  items: MergedItem[]
+}
+
+interface MergedSection {
+  id: string
+  label_ru: string
+  subgrouped: boolean
+  groups: MergedGroup[]
+}
+
+/** AI-derived state + context note for a single key's raw fill value.
+ *
+ * Real production shape: key -> "filled text" (present only when the AI found
+ * an explicit answer). A legacy object shape (key -> {state, note}) is also
+ * honored for backward compat with manual/legacy fixtures.
+ */
+function aiStateFor(raw: unknown): { state: ChecklistItemState; note: string | null } {
+  if (raw == null) return { state: 'unknown', note: null }
+
+  if (typeof raw === 'object') {
+    const obj = raw as { state?: string; note?: string }
+    return { state: (obj.state as ChecklistItemState) ?? 'unknown', note: obj.note ?? null }
+  }
+
+  const text = String(raw).trim()
+  if (text === '') return { state: 'unknown', note: null }
+  if (isKnownStateShorthand(text)) return { state: text as ChecklistItemState, note: null }
+  return { state: 'ok', note: text }
+}
+
+function buildMergedSections(
+  entry: Entry,
+  registry: ChecklistRegistryResponse,
+): MergedSection[] {
+  const fills = (entry.ai_checklist_fills ?? {}) as Record<string, unknown>
+  const userMarks = (entry.checklist?.user_marks ?? {}) as Record<string, ChecklistUserMark>
+  const reverseLegacy = buildReverseLegacyMap(registry)
+
+  return registry.sections.map((section) => ({
+    id: section.id,
+    label_ru: section.label_ru,
+    subgrouped: section.subgrouped,
+    groups: section.groups.map((group) => ({
+      id: group.id,
+      label_ru: group.label_ru,
+      items: group.items.map((def): MergedItem => {
+        const rawFill = lookupWithLegacyFallback(def.key, fills, reverseLegacy)
+        const { state: aiState, note: aiNote } = aiStateFor(rawFill)
+        const mark = lookupWithLegacyFallback(def.key, userMarks, reverseLegacy)
+        const hasOverride = mark?.state != null
+        const finalState = (mark?.state ?? aiState) as ChecklistItemState
+        return {
+          key: def.key,
+          label_ru: def.label_ru,
+          hint: def.hint,
+          state: finalState,
+          hasOverride,
+          aiNote,
+          userNote: mark?.note ?? null,
+          hasAnyMark: mark != null,
+        }
+      }),
+    })),
+  }))
+}
+
+function flattenSectionItems(section: MergedSection): MergedItem[] {
+  return section.groups.flatMap((g) => g.items)
+}
+
+function markedCount(items: MergedItem[]): number {
+  return items.filter((i) => i.state === 'ok' || i.state === 'flag').length
 }
 
 // ── State chip ───────────────────────────────────────────────────────────
@@ -204,11 +192,11 @@ function StateChip({
     <button
       type="button"
       onClick={onClick}
-      title="Click to change your mark"
-      aria-label={`Checklist item state: ${state}. Click to change.`}
+      title="Tap to change your mark"
+      aria-label={`Checklist item state: ${state}. Tap to change.`}
       data-testid={`checklist-chip-${itemKey}`}
       data-state={state}
-      className="flex-none w-7 h-7 min-w-[28px] min-h-[28px] rounded-md border flex items-center justify-center font-mono text-[13px] transition-colors duration-fast hover:brightness-125 active:scale-95"
+      className="flex-none w-11 h-11 min-w-[44px] min-h-[44px] rounded-md border flex items-center justify-center font-mono text-[15px] transition-colors duration-fast hover:brightness-125 active:scale-95"
       style={{ color, borderColor: `${color}55`, background: `${color}14` }}
     >
       {stateGlyph(state)}
@@ -238,10 +226,13 @@ function ItemRow({ item, onCycleState, onSaveNote }: ItemRowProps) {
   }
 
   return (
-    <div className="flex items-start gap-2 py-1.5 px-3">
+    <div className="flex items-start gap-2 py-2 px-3">
       <StateChip state={item.state} itemKey={item.key} onClick={() => onCycleState(item)} />
       <div className="flex-1 min-w-0">
-        <p className="text-[13px] text-text-2 leading-snug">{item.label}</p>
+        <p className="text-[13px] text-text-2 leading-snug">{item.label_ru}</p>
+        {item.hint && !item.aiNote && (
+          <p className="text-[11px] text-muted mt-0.5">{item.hint}</p>
+        )}
         {item.aiNote && (
           <p className="text-[11px] text-muted mt-0.5">{item.aiNote}</p>
         )}
@@ -250,7 +241,7 @@ function ItemRow({ item, onCycleState, onSaveNote }: ItemRowProps) {
             type="button"
             onClick={() => setNoteOpen(true)}
             data-testid={`checklist-note-toggle-${item.key}`}
-            className="text-[11px] text-accent hover:text-accent-lt mt-1 transition-colors"
+            className="min-h-[44px] flex items-center text-[11px] text-accent hover:text-accent-lt transition-colors -ml-0.5 px-0.5"
           >
             + note
           </button>
@@ -262,7 +253,7 @@ function ItemRow({ item, onCycleState, onSaveNote }: ItemRowProps) {
             rows={2}
             data-testid={`checklist-note-textarea-${item.key}`}
             className={[
-              'mt-1 w-full text-[12px] bg-surface/50 border border-border rounded px-2 py-1.5',
+              'mt-1 w-full text-base bg-surface/50 border border-border rounded px-2 py-1.5',
               'text-text-2 resize-none focus:outline-none focus:border-accent/60 transition-colors',
             ].join(' ')}
           />
@@ -272,54 +263,74 @@ function ItemRow({ item, onCycleState, onSaveNote }: ItemRowProps) {
   )
 }
 
-// ── Group header ─────────────────────────────────────────────────────────
+// ── Section header ───────────────────────────────────────────────────────
 
-interface GroupHeaderProps {
-  group: MergedGroup
+interface SectionHeaderProps {
+  section: MergedSection
+  visibleCount: number
   isOpen: boolean
   onToggle: () => void
 }
 
-function GroupHeader({ group, isOpen, onToggle }: GroupHeaderProps) {
-  const worst = worstState(group.items)
-  const borderColor = stateColor(worst)
-  const flags   = group.items.filter((i) => i.state === 'flag').length
-  const unknown = group.items.filter((i) => i.state === 'unknown').length
-  const ok      = group.items.filter((i) => i.state === 'ok').length
-
-  const countText = [
-    flags   > 0 ? `${flags} flag`    : '',
-    unknown > 0 ? `${unknown} unknown` : '',
-    ok      > 0 ? `${ok} ok`          : '',
-  ].filter(Boolean).join(' · ')
+function SectionHeader({ section, visibleCount, isOpen, onToggle }: SectionHeaderProps) {
+  const items = flattenSectionItems(section)
+  const marked = markedCount(items)
+  const flagged = items.filter((i) => i.state === 'flag').length
+  const borderColor = flagged > 0 ? stateColor('flag') : 'transparent'
 
   return (
     <button
       type="button"
       onClick={onToggle}
       aria-expanded={isOpen}
-      data-testid={`checklist-group-header-${group.key}`}
+      data-testid={`checklist-section-header-${section.id}`}
       className={[
-        'w-full flex items-start gap-3 py-2 pl-3 pr-3 text-left',
+        'w-full min-h-[44px] flex items-center gap-2 py-2.5 pl-3 pr-3 text-left',
         'border-l-2 hover:bg-surface/40 transition-colors duration-fast',
       ].join(' ')}
       style={{ borderLeftColor: borderColor }}
     >
-      <div className="flex flex-col min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
-          {isOpen ? (
-            <ChevronDown size={12} className="text-muted flex-none mt-[1px]" />
-          ) : (
-            <ChevronRight size={12} className="text-muted flex-none mt-[1px]" />
-          )}
-          <span className="text-[13px] font-medium text-text">{group.label}</span>
-          <span className="text-[11px] text-muted">{group.label_et}</span>
-        </div>
-        <div className="mt-1.5 ml-[18px]">
-          <SignalStrip items={group.items} />
-        </div>
-      </div>
-      <span className="text-[11px] text-muted flex-none self-center">{countText}</span>
+      {isOpen ? (
+        <ChevronDown size={14} className="text-muted flex-none" />
+      ) : (
+        <ChevronRight size={14} className="text-muted flex-none" />
+      )}
+      <span className="text-[14px] font-medium text-text flex-1 min-w-0">
+        {section.label_ru}
+      </span>
+      <span className="text-[11px] text-muted flex-none font-mono">
+        {marked}/{items.length}
+        {visibleCount !== items.length ? ` · ${visibleCount} shown` : ''}
+      </span>
+    </button>
+  )
+}
+
+// ── Sub-group header (onsite only — smaller/italic, no counter) ────────────
+
+function SubGroupHeader({
+  group,
+  isOpen,
+  onToggle,
+}: {
+  group: MergedGroup
+  isOpen: boolean
+  onToggle: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={isOpen}
+      data-testid={`checklist-group-header-${group.id}`}
+      className="w-full min-h-[40px] flex items-center gap-1.5 py-1.5 pl-6 pr-3 text-left hover:bg-surface/30 transition-colors duration-fast"
+    >
+      {isOpen ? (
+        <ChevronDown size={11} className="text-muted flex-none" />
+      ) : (
+        <ChevronRight size={11} className="text-muted flex-none" />
+      )}
+      <span className="text-[12px] italic text-muted">{group.label_ru}</span>
     </button>
   )
 }
@@ -332,9 +343,9 @@ interface ChecklistCardProps {
 
 export function ChecklistCard({ entry }: ChecklistCardProps) {
   const qc = useQueryClient()
+  const { data: registry, isLoading: registryLoading } = useChecklistRegistry()
 
-  // Optimistic local overrides — cleared on error revert. Not cleared on success;
-  // the next appData refetch will carry the same value, so no flicker.
+  // Optimistic local overrides — cleared on error revert.
   const [localOverrides, setLocalOverrides] = useState<Record<string, Partial<ChecklistUserMark>>>({})
 
   const effectiveEntry: Entry = useMemo(() => {
@@ -347,19 +358,35 @@ export function ChecklistCard({ entry }: ChecklistCardProps) {
     return { ...entry, checklist: { ...(entry.checklist ?? {}), user_marks: mergedMarks } }
   }, [entry, localOverrides])
 
-  const groups = useMemo(() => buildMergedGroups(effectiveEntry), [effectiveEntry])
+  const sections = useMemo(
+    () => (registry ? buildMergedSections(effectiveEntry, registry) : []),
+    [effectiveEntry, registry],
+  )
 
-  // Open by default iff group has a flag OR any user_mark (indicates user attention).
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
-    const init: Record<string, boolean> = {}
-    for (const g of groups) {
-      init[g.key] = g.items.some((i) => i.state === 'flag' || i.hasAnyMark)
-    }
-    return init
-  })
+  const [filter, setFilter] = useState<FilterKey>('all')
 
-  function toggleGroup(key: string) {
-    setOpenGroups((prev) => ({ ...prev, [key]: !prev[key] }))
+  // Default openness is DERIVED (not baked into initial state) because the
+  // registry — and therefore `sections` — only becomes available after the
+  // first async fetch resolves; a useState initializer would run before that
+  // and freeze every section/group as closed. A section/sub-group defaults
+  // open iff it has a flagged item or any user mark (draws attention without
+  // a click); `openSections`/`openGroups` only record explicit user toggles
+  // that override that default.
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({})
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
+
+  function defaultSectionOpen(section: MergedSection): boolean {
+    return flattenSectionItems(section).some((i) => i.state === 'flag' || i.hasAnyMark)
+  }
+  function defaultGroupOpen(group: MergedGroup): boolean {
+    return group.items.some((i) => i.state === 'flag' || i.hasAnyMark)
+  }
+
+  function toggleSection(id: string, fallback: boolean) {
+    setOpenSections((prev) => ({ ...prev, [id]: !(prev[id] ?? fallback) }))
+  }
+  function toggleGroup(key: string, fallback: boolean) {
+    setOpenGroups((prev) => ({ ...prev, [key]: !(prev[key] ?? fallback) }))
   }
 
   const [errorNotice, setErrorNotice] = useState<string | null>(null)
@@ -378,7 +405,7 @@ export function ChecklistCard({ entry }: ChecklistCardProps) {
   })
 
   function handleCycleState(item: MergedItem) {
-    const next = nextState(item)
+    const next = nextState(item.state)
     setLocalOverrides((prev) => ({ ...prev, [item.key]: { ...prev[item.key], state: next } }))
     mutation.mutate(
       { key: item.key, state: next },
@@ -409,10 +436,20 @@ export function ChecklistCard({ entry }: ChecklistCardProps) {
     )
   }
 
-  const totalItems   = groups.reduce((s, g) => s + g.items.length, 0)
-  const unknownCount = groups.reduce((s, g) => s + g.items.filter((i) => i.state === 'unknown').length, 0)
-  const flagCount    = groups.reduce((s, g) => s + g.items.filter((i) => i.state === 'flag').length, 0)
-  const okCount      = groups.reduce((s, g) => s + g.items.filter((i) => i.state === 'ok').length, 0)
+  const allItems = useMemo(() => sections.flatMap(flattenSectionItems), [sections])
+  const totalItems = allItems.length
+  const totalMarked = markedCount(allItems)
+
+  if (registryLoading || !registry) {
+    return (
+      <div className="bg-sunken rounded-lg overflow-hidden flex flex-col max-h-[70vh] md:h-full md:max-h-none">
+        <div className="px-3 py-2.5 border-b border-border flex-none">
+          <span className="text-[13px] font-medium text-text">Checklist</span>
+        </div>
+        <div className="px-3 py-4 text-[12px] text-muted">Loading checklist…</div>
+      </div>
+    )
+  }
 
   return (
     <div className="bg-sunken rounded-lg overflow-hidden flex flex-col max-h-[70vh] md:h-full md:max-h-none">
@@ -420,10 +457,29 @@ export function ChecklistCard({ entry }: ChecklistCardProps) {
       <div className="flex items-center justify-between px-3 py-2.5 border-b border-border flex-none">
         <span className="text-[13px] font-medium text-text">Checklist</span>
         <span className="text-[11px] text-muted font-mono">
-          {flagCount > 0 && <span className="text-score-bad">{flagCount} flag </span>}
-          {unknownCount > 0 && <span>{unknownCount} unknown </span>}
-          {okCount > 0 && <span className="text-status-short">{okCount} ok</span>}
+          {totalMarked}/{totalItems} marked
         </span>
+      </div>
+
+      {/* Filter chips */}
+      <div className="flex gap-1.5 px-3 py-2 border-b border-border/50 flex-none overflow-x-auto">
+        {FILTERS.map((f) => (
+          <button
+            key={f.key}
+            type="button"
+            onClick={() => setFilter(f.key)}
+            data-testid={`checklist-filter-${f.key}`}
+            aria-pressed={filter === f.key}
+            className={[
+              'min-h-[32px] px-3 rounded-full text-[12px] flex-none transition-colors duration-fast',
+              filter === f.key
+                ? 'bg-accent/20 text-accent border border-accent/40'
+                : 'bg-surface/40 text-muted border border-border hover:text-text-2',
+            ].join(' ')}
+          >
+            {f.label}
+          </button>
+        ))}
       </div>
 
       {errorNotice && (
@@ -432,48 +488,99 @@ export function ChecklistCard({ entry }: ChecklistCardProps) {
         </div>
       )}
 
-      {/* Groups */}
+      {/* Sections */}
       <div className="flex-1 overflow-y-auto min-h-0">
-        {groups.map((group) => (
-          <div key={group.key} className="border-b border-border/50 last:border-b-0">
-            <GroupHeader
-              group={group}
-              isOpen={openGroups[group.key] ?? false}
-              onToggle={() => toggleGroup(group.key)}
-            />
-            <AnimatePresence initial={false}>
-              {(openGroups[group.key]) && (
-                <motion.div
-                  key="body"
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.16, ease: 'easeInOut' }}
-                  className="overflow-hidden"
-                >
-                  <div className="pb-1">
-                    {group.items.map((item) => (
-                      <ItemRow
-                        key={item.key}
-                        item={item}
-                        onCycleState={handleCycleState}
-                        onSaveNote={handleSaveNote}
-                      />
-                    ))}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        ))}
+        {sections.map((section) => {
+          const items = flattenSectionItems(section)
+          const visibleItems = items.filter((i) => matchesFilter(i.state, filter))
+          if (filter !== 'all' && visibleItems.length === 0) return null
+
+          const defaultOpen = defaultSectionOpen(section)
+          const forceOpen = filter !== 'all' && visibleItems.length > 0
+          const isOpen = forceOpen || (openSections[section.id] ?? defaultOpen)
+
+          return (
+            <div key={section.id} className="border-b border-border/50 last:border-b-0">
+              <SectionHeader
+                section={section}
+                visibleCount={visibleItems.length}
+                isOpen={isOpen}
+                onToggle={() => toggleSection(section.id, defaultOpen)}
+              />
+              <AnimatePresence initial={false}>
+                {isOpen && (
+                  <motion.div
+                    key="body"
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.16, ease: 'easeInOut' }}
+                    className="overflow-hidden"
+                  >
+                    <div className="pb-1">
+                      {section.subgrouped
+                        ? section.groups.map((group) => {
+                            const groupVisible = group.items.filter((i) =>
+                              matchesFilter(i.state, filter),
+                            )
+                            if (filter !== 'all' && groupVisible.length === 0) return null
+                            const groupKey = `${section.id}:${group.id}`
+                            const groupDefaultOpen = defaultGroupOpen(group)
+                            const groupForceOpen = filter !== 'all' && groupVisible.length > 0
+                            const groupOpen = groupForceOpen || (openGroups[groupKey] ?? groupDefaultOpen)
+                            return (
+                              <div key={group.id}>
+                                <SubGroupHeader
+                                  group={group}
+                                  isOpen={groupOpen}
+                                  onToggle={() => toggleGroup(groupKey, groupDefaultOpen)}
+                                />
+                                <AnimatePresence initial={false}>
+                                  {groupOpen && (
+                                    <motion.div
+                                      key="group-body"
+                                      initial={{ height: 0, opacity: 0 }}
+                                      animate={{ height: 'auto', opacity: 1 }}
+                                      exit={{ height: 0, opacity: 0 }}
+                                      transition={{ duration: 0.14, ease: 'easeInOut' }}
+                                      className="overflow-hidden"
+                                    >
+                                      {groupVisible.map((item) => (
+                                        <ItemRow
+                                          key={item.key}
+                                          item={item}
+                                          onCycleState={handleCycleState}
+                                          onSaveNote={handleSaveNote}
+                                        />
+                                      ))}
+                                    </motion.div>
+                                  )}
+                                </AnimatePresence>
+                              </div>
+                            )
+                          })
+                        : visibleItems.map((item) => (
+                            <ItemRow
+                              key={item.key}
+                              item={item}
+                              onCycleState={handleCycleState}
+                              onSaveNote={handleSaveNote}
+                            />
+                          ))}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )
+        })}
       </div>
 
       {/* Bottom meta */}
       {totalItems > 0 && (
         <div className="px-3 py-2 border-t border-border/50 flex-none">
           <p className="text-[11px] text-muted">
-            {totalItems} items
-            {unknownCount > 0 && ` · ${unknownCount} unmarked`}
+            {totalItems} items · {totalMarked} marked
           </p>
         </div>
       )}
