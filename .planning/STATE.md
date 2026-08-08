@@ -105,10 +105,20 @@ None yet.
 
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
-| *(none)* | | | |
+| e2e (pre-existing, unrelated) | `qa-shortlist.spec.ts` Negotiation card gating copy mismatch — see quick/260808-vae-deferred-items.md | Open | 2026-08-08 |
+| e2e (pre-existing, unrelated) | `mobile-snapshots.spec.ts` — 4 mobile layout assertion failures (map visibility, sidebar, back button) | Open | 2026-08-08 |
+| e2e (pre-existing, unrelated) | `feedback.spec.ts` submit-feedback toast flow | Open | 2026-08-08 |
+| e2e (pre-existing, unrelated) | `qa-inbox.spec.ts` mobile Later-queue-reorder flow | Open | 2026-08-08 |
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260808-vae | Expand interactive checklist to full ~100-item registry (Wave A of 3) | 2026-08-08 | f832792 | [260808-vae-expand-interactive-checklist-to-full-100](./quick/260808-vae-expand-interactive-checklist-to-full-100/) |
 
 ## Session Continuity
 
 Last session: 2026-08-01T10:48:23.403Z
 Stopped at: Completed 07-02-PLAN.md
 Resume file: None
+Last activity: 2026-08-08 — Completed quick task 260808-vae: Expand interactive checklist to full ~100-item registry (Wave A of 3)
