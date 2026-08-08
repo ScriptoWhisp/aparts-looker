@@ -30,6 +30,7 @@ import { useSettings } from '../lib/queries'
 import { saveSettings } from '../lib/api'
 import { QUERY_KEYS } from '../lib/queries'
 import { useMediaQuery } from '../hooks/useMediaQuery'
+import { useAppStore } from '../lib/state'
 import type { SettingsField } from '../types/api'
 
 // ── Category definitions ───────────────────────────────────────────────────
@@ -374,6 +375,7 @@ export function Settings() {
   const hasChanges = Object.keys(localValues).length > 0
   const activeCategory = CATEGORIES.find((c) => c.id === activeCat) ?? CATEGORIES[0]
   const isMobile = useMediaQuery('(max-width: 767px)')
+  const setTab = useAppStore((s) => s.setTab)
 
   if (isLoading) {
     return (
@@ -397,6 +399,17 @@ export function Settings() {
       ].join(' ')}
     >
       {saving ? 'Saving…' : 'Save'}
+    </button>
+  )
+
+  // ── Feedback tab link — mobile's primary entry point into #feedback ──────
+  const feedbackLink = (
+    <button
+      type="button"
+      onClick={() => setTab('feedback')}
+      className="text-[12px] font-sans text-text-3 hover:text-accent-lt transition-colors duration-fast cursor-pointer underline underline-offset-2"
+    >
+      Feedback / bug reports →
     </button>
   )
 
@@ -436,6 +449,7 @@ export function Settings() {
               <p className="font-sans text-[12px] text-muted mt-0.5">
                 {activeCategory.subtitle}
               </p>
+              <div className="mt-1.5">{feedbackLink}</div>
             </div>
             {saveButton}
           </div>
@@ -490,6 +504,7 @@ export function Settings() {
             <p className="font-sans text-[13px] text-muted mt-0.5">
               {activeCategory.subtitle}
             </p>
+            <div className="mt-1.5">{feedbackLink}</div>
           </div>
           {saveButton}
         </div>

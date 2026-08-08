@@ -11,7 +11,7 @@
 
 import { create } from 'zustand'
 
-export type TabId = 'overview' | 'inbox' | 'shortlist' | 'settings'
+export type TabId = 'overview' | 'inbox' | 'shortlist' | 'settings' | 'feedback'
 
 // ── Inbox session state ────────────────────────────────────────────────────
 // Persists while the tab is open; resets on page refresh.
@@ -80,6 +80,7 @@ const HASH_COMPAT: Record<string, TabId> = {
   '#inbox':     'inbox',
   '#shortlist': 'shortlist',
   '#settings':  'settings',
+  '#feedback':  'feedback',
   // Legacy hashes from vanilla waves 1-5
   '#pending':   'inbox',
   '#detail':    'shortlist',
@@ -88,7 +89,18 @@ const HASH_COMPAT: Record<string, TabId> = {
 }
 
 function tabFromHash(hash: string): TabId {
-  return HASH_COMPAT[hash] ?? 'overview'
+  // Deep-link hashes carry a query string (#feedback?id=<uuid>) — strip it
+  // before the lookup; the query is read separately by the Feedback route.
+  const base = hash.split('?')[0]
+  return HASH_COMPAT[base] ?? 'overview'
+}
+
+/** Extract ?id=<uuid> from a hash-based deep link, e.g. "#feedback?id=abc" → "abc". */
+export function feedbackIdFromHash(hash: string): string | null {
+  const qIndex = hash.indexOf('?')
+  if (qIndex === -1) return null
+  const params = new URLSearchParams(hash.slice(qIndex + 1))
+  return params.get('id')
 }
 
 function hashForTab(tab: TabId): string {

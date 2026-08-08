@@ -8,7 +8,7 @@
  */
 
 import { useAppStore, type TabId } from '../../lib/state'
-import { useAppData, useRefreshAll, selectPendingCount } from '../../lib/queries'
+import { useAppData, useRefreshAll, useFeedback, selectPendingCount } from '../../lib/queries'
 import { fmtRelative } from '../../lib/format'
 import { triggerCheck } from '../../lib/api'
 import { useState } from 'react'
@@ -27,8 +27,10 @@ export function Header() {
   const refreshAll = useRefreshAll()
   const [checking, setChecking] = useState(false)
   const isMobile = useMediaQuery('(max-width: 767px)')
+  const { data: feedbackData } = useFeedback({ status: 'open' })
 
   const pendingCount = selectPendingCount(data)
+  const openFeedbackCount = feedbackData?.count ?? 0
   const lastCheck = data?.last_check ?? null
 
   async function handleRefresh() {
@@ -88,8 +90,22 @@ export function Header() {
       {/* Spacer on mobile so right side stays pushed right */}
       {isMobile && <div className="flex-1" />}
 
-      {/* Right side: scrape meta + refresh */}
+      {/* Right side: scrape meta + feedback link + refresh */}
       <div className="flex items-center gap-4 ml-auto flex-shrink-0">
+        {!isMobile && (
+          <button
+            onClick={() => setTab('feedback')}
+            className={[
+              'btn bg-transparent border border-border-strong rounded-md',
+              'px-2.5 py-[5px] text-[12px] font-sans cursor-pointer',
+              'transition-[background,color] duration-fast ease-spec',
+              'hover:bg-white/[0.07]',
+              activeTab === 'feedback' ? 'text-accent-lt border-accent/40' : 'text-text-3 hover:text-text',
+            ].join(' ')}
+          >
+            Feedback{openFeedbackCount > 0 ? ` (${openFeedbackCount})` : ''}
+          </button>
+        )}
         <span className="font-mono text-[11px] text-faint whitespace-nowrap hidden sm:block">
           {fmtRelative(lastCheck)}
         </span>

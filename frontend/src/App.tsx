@@ -17,6 +17,7 @@ import { Overview } from './routes/Overview'
 import { Inbox } from './routes/Inbox'
 import { Shortlist } from './routes/Shortlist'
 import { Settings } from './routes/Settings'
+import { Feedback } from './routes/Feedback'
 import { useAppStore, type TabId } from './lib/state'
 
 const ROUTES: Record<TabId, { label: string; Component: () => JSX.Element }> = {
@@ -24,6 +25,7 @@ const ROUTES: Record<TabId, { label: string; Component: () => JSX.Element }> = {
   inbox:     { label: 'Inbox',     Component: Inbox },
   shortlist: { label: 'Shortlist', Component: Shortlist },
   settings:  { label: 'Settings',  Component: Settings },
+  feedback:  { label: 'Feedback',  Component: Feedback },
 }
 
 export function App() {
