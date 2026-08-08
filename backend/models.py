@@ -23,13 +23,15 @@ JSONB reassignment convention (critical — do not break):
 see RESEARCH § Pitfall 3 for details. All defaults are set to match production
 semantics for the migration script.
 """
+import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, Float, Integer, String
+from sqlalchemy import Boolean, DateTime, Float, Integer, LargeBinary, String, Text
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db import Base
@@ -170,6 +172,59 @@ class Listing(Base):
         DateTime(timezone=True),
         server_default=func.now(),
         default=None,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        default=None,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Feedback — in-app bug/feature/ux/perf reports (floating button + Feedback tab).
+# ---------------------------------------------------------------------------
+
+FEEDBACK_TYPES: frozenset[str] = frozenset({"bug", "feature", "ux", "perf"})
+FEEDBACK_STATUSES: frozenset[str] = frozenset({"open", "in_progress", "fixed", "wontfix"})
+
+
+class Feedback(Base):
+    """ORM model for a single in-app feedback/bug report.
+
+    `id` is generated Python-side (uuid.uuid4) via default_factory so every
+    ORM-constructed instance always carries a value (sidesteps the
+    default=None + server_default ambiguity used for created_at/updated_at
+    on Listing). The migration also sets server_default=gen_random_uuid() so
+    direct SQL inserts (outside the ORM) still get a value for free.
+
+    `type` / `status` are plain VARCHAR (not a Postgres ENUM like
+    listing_status) — validated at the application layer in routes_feedback.py
+    against FEEDBACK_TYPES / FEEDBACK_STATUSES so new statuses don't require
+    an ALTER TYPE migration.
+    """
+
+    __tablename__ = "feedback"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default_factory=uuid.uuid4,
+    )
+    type: Mapped[str] = mapped_column(String(16), default="bug")
+    comment: Mapped[str] = mapped_column(Text, default="")
+    url: Mapped[str] = mapped_column(Text, default="")
+    viewport: Mapped[Optional[str]] = mapped_column(String(32), default=None)
+    user_agent: Mapped[Optional[str]] = mapped_column(Text, default=None)
+    # Last 50 console.* entries: [{ts, level, args: [str, ...]}, ...]
+    console_logs: Mapped[list] = mapped_column(JSONB, default_factory=list)
+    screenshot: Mapped[Optional[bytes]] = mapped_column(LargeBinary, default=None)
+    screenshot_mime: Mapped[Optional[str]] = mapped_column(String(64), default=None)
+    status: Mapped[str] = mapped_column(String(16), default="open", index=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        default=None,
+        index=True,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
