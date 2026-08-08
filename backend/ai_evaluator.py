@@ -17,6 +17,7 @@ from typing import Optional
 
 import requests
 
+import checklist_registry
 import config
 from config import ANTHROPIC_API_KEY, BUYER_PROFILE
 from kv_listing_parser import Listing
@@ -33,11 +34,10 @@ VALID_RENO_KEYS = frozenset({
     "rewire", "heating", "cosmetic",
 })
 
-AI_FILLABLE_CHECKLIST_KEYS = frozenset({
-    "s09_01", "s09_02",
-    "s14_01", "s14_02", "s14_03", "s14_04", "s14_05", "s14_09", "s14_10",
-    "s16_01", "s16_02", "s16_03", "s16_04",
-})
+# Wave A: sourced dynamically from checklist_registry.py (~96-item registry)
+# instead of a hardcoded 13-key set. Any item with ai_fillable=True there is
+# eligible — see checklist_registry.CHECKLIST_REGISTRY.
+AI_FILLABLE_CHECKLIST_KEYS = checklist_registry.get_ai_fillable_keys()
 
 
 def _validate_renovation_items(raw) -> list:
@@ -98,6 +98,23 @@ def _whitelist_checklist_fills(raw: dict) -> dict:
             out[k] = v.strip()
     return out
 
+
+def _build_checklist_fills_schema_block() -> str:
+    """Render the checklist_fills JSON-schema lines for every ai_fillable
+    registry item, in registry order. Replaces the old hardcoded 13-line block
+    so the prompt always matches checklist_registry.py without manual sync."""
+    lines = []
+    for item in checklist_registry.get_ai_fillable_items():
+        hint = f" — {item.hint}" if item.hint else ""
+        lines.append(
+            f'    "{item.key}": "<RUSSIAN — {item.label_ru}{hint}; empty string '
+            f'if the listing text does not explicitly say>",'
+        )
+    return "\n".join(lines)
+
+
+_CHECKLIST_FILLS_SCHEMA_BLOCK = _build_checklist_fills_schema_block()
+
 SYSTEM_PROMPT = f"""You help Daniel evaluate apartment listings in Tallinn (kv.ee)
 against his current search criteria. His profile and criteria:
 
@@ -155,20 +172,8 @@ Return STRICTLY valid JSON (no markdown, no ``` fences), with this exact shape:
     // Auto-fill values for specific manual checklist items when the listing text
     // EXPLICITLY provides the answer. Return an empty string for items where the
     // listing does NOT clearly say. Do NOT infer, guess, or invent facts.
-    // Keys must be from this exact allow-list:
-    "s14_01": "<RUSSIAN — location convenience summary; can include district, commute to Bolt HQ, transit>",
-    "s14_02": "<RUSSIAN — 'X XXX € · Y YYY €/м²' from listing data>",
-    "s14_03": "<RUSSIAN — 'год постройки XXXX, материал ..., энергокласс ...' — leave energy blank if not stated>",
-    "s14_04": "<RUSSIAN — heating type if stated in listing (central/gas/electric/individual/etc.), else empty>",
-    "s14_05": "<RUSSIAN — 'балкон: X м², кладовка: есть/нет, паркоместо: включено/€X' — from listing only>",
-    "s14_09": "<RUSSIAN — street noise info IF description mentions it, else empty>",
-    "s14_10": "<RUSSIAN — sun/orientation info IF description mentions it, else empty>",
-    "s16_01": "<RUSSIAN — distance to public transit IF description mentions it, else empty>",
-    "s16_02": "<RUSSIAN — nearby shops/pharmacies IF description mentions it, else empty>",
-    "s16_03": "<RUSSIAN — road/tram noise IF description mentions it, else empty>",
-    "s16_04": "<RUSSIAN — nearby construction/plans IF description mentions it, else empty>",
-    "s09_01": "<RUSSIAN — year of plumbing/electrical replacement IF description mentions it, else empty>",
-    "s09_02": "<RUSSIAN — facade insulation / windows year IF description mentions it, else empty>"
+    // Keys must be from this exact allow-list (from checklist_registry.py):
+{_CHECKLIST_FILLS_SCHEMA_BLOCK}
   }},
   "should_draft_email": <bool — true if score >= 65 and no high-severity blockers>,
   "draft_subject": "<RUSSIAN — email subject if should_draft_email=true, else empty string>",

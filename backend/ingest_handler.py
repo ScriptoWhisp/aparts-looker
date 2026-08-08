@@ -20,6 +20,7 @@ from typing import Optional
 
 import requests
 
+import checklist_registry
 import config
 import data_store
 import maa_amet_baseline
@@ -33,16 +34,16 @@ log = logging.getLogger("ingest_handler")
 LISTING_FIELD_NAMES = frozenset(f.name for f in dc_fields(Listing))
 
 # Checklist whitelist constants (EVAL-02, D-06, D-07, RESEARCH Pitfall 3).
-# Canonical 7 text-assessable criterion keys and their allowed values.
-EXPECTED_CHECKLIST_KEYS: frozenset = frozenset({
-    "price_per_sqm",
-    "rooms_area",
-    "parking",
-    "renovation_potential",
-    "floor",
-    "year_material",
-    "mandatory_extras",
-})
+# Wave A: sourced dynamically from checklist_registry.py's ai_fillable set
+# instead of a hardcoded 7-key frozenset — kept in sync automatically.
+# NOTE: _whitelist_checklist()/this constant back a pass/fail/unknown re-eval
+# path (_handle_price_drop -> evaluation.get("checklist", {})) that is
+# currently unreachable in production — evaluate_listing() only ever returns
+# "checklist_fills" (see _whitelist_checklist_fills in ai_evaluator.py), never
+# a "checklist" key. Left wired (not deleted) since a test exercises it
+# directly with a mocked evaluate_listing; sourcing it from the same registry
+# avoids yet another hardcoded key list drifting out of sync.
+EXPECTED_CHECKLIST_KEYS: frozenset = checklist_registry.get_ai_fillable_keys()
 ALLOWED_CHECKLIST_VALUES: frozenset = frozenset({"pass", "fail", "unknown"})
 
 
