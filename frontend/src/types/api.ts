@@ -170,3 +170,42 @@ export interface SettingsData {
   fields: SettingsField[]
   groups: string[]
 }
+
+// ── Feedback / bug reports ─────────────────────────────────────────────────
+
+export type FeedbackType = 'bug' | 'feature' | 'ux' | 'perf'
+export type FeedbackStatus = 'open' | 'in_progress' | 'fixed' | 'wontfix'
+
+export interface ConsoleLogEntry {
+  ts: string
+  level: string
+  args: string[]
+}
+
+// ── /api/feedback list item + detail response ──────────────────────────────
+// The list endpoint truncates `comment` to 200 chars server-side; GET /{id}
+// returns the full comment. Same shape either way — callers should not rely
+// on `comment` length from the list endpoint for anything but a preview.
+export interface Feedback {
+  id: string
+  type: FeedbackType
+  comment: string
+  url: string
+  viewport: string | null
+  user_agent: string | null
+  console_logs: ConsoleLogEntry[]
+  has_screenshot: boolean
+  status: FeedbackStatus
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface FeedbackListResponse {
+  feedback: Feedback[]
+  count: number
+}
+
+export interface FeedbackCreateResponse {
+  id: string
+  created_at: string | null
+}

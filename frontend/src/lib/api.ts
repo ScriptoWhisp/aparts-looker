@@ -5,13 +5,32 @@
  * error state rather than try/catch here.
  */
 
-import type { AppData, SettingsData } from '../types/api'
+import type {
+  AppData,
+  Feedback,
+  FeedbackCreateResponse,
+  FeedbackListResponse,
+  FeedbackStatus,
+  FeedbackType,
+  SettingsData,
+} from '../types/api'
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     ...options,
   })
+  if (!res.ok) {
+    const text = await res.text().catch(() => `HTTP ${res.status}`)
+    throw new Error(`API ${path} failed [${res.status}]: ${text}`)
+  }
+  return res.json() as Promise<T>
+}
+
+/** Like apiFetch but never sets Content-Type — required for multipart/form-data
+ * (FormData) requests where the browser must set the boundary itself. */
+async function apiFetchForm<T>(path: string, body: FormData, method = 'POST'): Promise<T> {
+  const res = await fetch(path, { method, body })
   if (!res.ok) {
     const text = await res.text().catch(() => `HTTP ${res.status}`)
     throw new Error(`API ${path} failed [${res.status}]: ${text}`)
@@ -127,4 +146,65 @@ export function saveSettings(values: Record<string, unknown>): Promise<{ applied
 
 export function triggerCheck(): Promise<{ ok: boolean; message?: string }> {
   return apiFetch<{ ok: boolean; message?: string }>('/api/check-now', { method: 'POST' })
+}
+
+// ── Feedback ──────────────────────────────────────────────────────────────
+
+export interface SubmitFeedbackPayload {
+  type: FeedbackType
+  comment: string
+  url: string
+  viewport: string
+  userAgent: string
+  consoleLogs: unknown[]
+  screenshot: Blob | null
+}
+
+export function submitFeedback(payload: SubmitFeedbackPayload): Promise<FeedbackCreateResponse> {
+  const form = new FormData()
+  form.set('type', payload.type)
+  form.set('comment', payload.comment)
+  form.set('url', payload.url)
+  form.set('viewport', payload.viewport)
+  form.set('user_agent', payload.userAgent)
+  form.set('console_logs', JSON.stringify(payload.consoleLogs))
+  if (payload.screenshot) {
+    form.set('screenshot', payload.screenshot, 'screenshot.png')
+  }
+  return apiFetchForm<FeedbackCreateResponse>('/api/feedback', form)
+}
+
+export interface FeedbackFilters {
+  status?: FeedbackStatus | 'all'
+  type?: FeedbackType | 'all'
+}
+
+export function fetchFeedback(filters?: FeedbackFilters): Promise<FeedbackListResponse> {
+  const params = new URLSearchParams()
+  if (filters?.status && filters.status !== 'all') params.set('status', filters.status)
+  if (filters?.type && filters.type !== 'all') params.set('type', filters.type)
+  const qs = params.toString()
+  return apiFetch<FeedbackListResponse>(`/api/feedback${qs ? `?${qs}` : ''}`)
+}
+
+export function fetchFeedbackOne(id: string): Promise<Feedback> {
+  return apiFetch<Feedback>(`/api/feedback/${id}`)
+}
+
+export function patchFeedback(
+  id: string,
+  patch: { status?: FeedbackStatus; comment?: string },
+): Promise<Feedback> {
+  return apiFetch<Feedback>(`/api/feedback/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  })
+}
+
+export function deleteFeedback(id: string): Promise<{ ok: boolean }> {
+  return apiFetch<{ ok: boolean }>(`/api/feedback/${id}`, { method: 'DELETE' })
+}
+
+export function feedbackScreenshotUrl(id: string): string {
+  return `/api/feedback/${id}/screenshot`
 }

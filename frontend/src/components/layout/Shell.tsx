@@ -12,6 +12,7 @@
 
 import { Header } from './Header'
 import { MobileBottomNav } from './MobileBottomNav'
+import { FeedbackButton } from '../feedback/FeedbackButton'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 import type { ReactNode } from 'react'
 
@@ -29,6 +30,7 @@ export function Shell({ children }: ShellProps) {
         {children}
       </main>
       {isMobile && <MobileBottomNav />}
+      <FeedbackButton />
     </div>
   )
 }
