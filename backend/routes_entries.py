@@ -97,6 +97,29 @@ async def regenerate_brief(listing_id: str) -> dict:
     return {"ok": True, "message": "Brief regenerating in background"}
 
 
+@router.post("/api/entry/{listing_id}/regenerate-description")
+async def regenerate_description(listing_id: str) -> dict:
+    """Trigger on-demand regeneration of the description RU translation + bullets.
+
+    No body required. Verifies the listing exists, then spawns a daemon thread
+    to call ingest_handler.regenerate_description_translation (Wave C — mirrors
+    the regenerate-brief endpoint pattern). Returns 200 immediately
+    (fire-and-forget). Returns 404 if the listing does not exist.
+    """
+    with db.SessionLocal() as db_:
+        row = db_.get(Listing, listing_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="Listing not found")
+    # Lazy import so tests can monkeypatch main.threading (avoids circular import at load time)
+    import main as _main  # noqa: PLC0415
+    _main.threading.Thread(
+        target=ingest_handler.regenerate_description_translation,
+        args=(listing_id,),
+        daemon=True,
+    ).start()
+    return {"ok": True, "message": "Description translation regenerating in background"}
+
+
 @router.post("/api/entry/{listing_id}/refresh-ku")
 async def refresh_ku(listing_id: str) -> dict:
     """Trigger on-demand KÜ re-fetch for an existing properties[] entry.

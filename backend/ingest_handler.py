@@ -26,7 +26,9 @@ import data_store
 import maa_amet_baseline
 import telegram_client
 from ai_evaluator import evaluate_listing
+from db import SessionLocal
 from kv_listing_parser import Listing, extract_object_id
+from models import Listing as ListingRow
 
 log = logging.getLogger("ingest_handler")
 
@@ -227,6 +229,78 @@ def _build_context_prefix(listing: Listing, data: dict) -> str:
     except Exception:
         log.exception("_build_context_prefix failed — proceeding without context")
         return ""
+
+
+def regenerate_description_translation(listing_id: str) -> None:
+    """Daemon-thread target: re-run evaluate_listing() to refresh description_ru
+    and description_bullets for an existing listing (Wave C).
+
+    Reuses the full evaluate_listing() flow (it needs the raw description plus
+    the same listing facts / calibration context as a normal evaluation to
+    produce a grounded translation), but persists ONLY the translation fields
+    via data_store.save_ai_translation — Wave C is scoped to description
+    translation, so score/verdict/checklist/brief owned by other cards are
+    deliberately left untouched by this endpoint.
+
+    Session-scope discipline (RESEARCH § Pitfall 2): snapshot row fields ->
+    close session -> Anthropic HTTP call OUTSIDE any session -> save via
+    data_store helper (which scopes its own session). Never raises.
+    """
+    try:
+        with SessionLocal() as db_:
+            row = db_.get(ListingRow, listing_id)
+            if row is None:
+                log.warning("regenerate_description_translation: listing %s not found", listing_id)
+                return
+            listing_dc = Listing(
+                id=row.id,
+                url=row.url or "",
+                title=row.title or "",
+                district=row.district or "",
+                price_eur=row.price_eur,
+                price_per_sqm=row.price_per_sqm,
+                rooms=row.rooms,
+                area_sqm=row.area_sqm,
+                year_built=row.year_built,
+                condition=row.condition or "",
+                material=row.material or "",
+                energy_class=row.energy_class or "",
+                floor=row.floor,
+                floor_total=row.floor_total,
+                parking=row.parking or "unknown",
+                needs_renovation=bool(row.needs_renovation),
+                broker_name=row.broker_name or "",
+                contact_email=row.contact_email,
+                description=row.description or "",
+                image_url=row.image_url or "",
+                image_count=row.image_count or 0,
+                raw_ok=row.raw_ok,
+                lat=row.lat,
+                lng=row.lng,
+            )
+            commute_minutes = row.commute_minutes
+            cost_of_ownership = row.cost_of_ownership or None
+        # Session closed here — connection returned to pool before HTTP calls below.
+
+        app_data = data_store.load_app_data()
+        context_prefix = _build_context_prefix(listing_dc, app_data)
+
+        evaluation = evaluate_listing(
+            listing_dc,
+            context_prefix,
+            commute_minutes=commute_minutes,
+            district=listing_dc.district,
+            cost_of_ownership=cost_of_ownership,
+        )
+
+        data_store.save_ai_translation(
+            listing_id,
+            evaluation.get("description_ru", ""),
+            evaluation.get("description_bullets", []),
+        )
+        log.info("regenerate_description_translation: refreshed translation for %s", listing_id)
+    except Exception:
+        log.exception("regenerate_description_translation failed for %s", listing_id)
 
 
 def _record_and_check_price_drop(app_data: dict, listing: Listing, today_str: str) -> None:
@@ -549,6 +623,8 @@ def process_ingest_batch(listing_dicts: list[dict]) -> dict:
                 "strengths": evaluation.get("strengths", []),
                 "concerns": evaluation.get("concerns", []),  # legacy, kept for old-frontend fallback
                 "ai_checklist_fills": evaluation.get("checklist_fills", {}),
+                "description_ru": evaluation.get("description_ru", ""),
+                "description_bullets": evaluation.get("description_bullets", []),
                 "cost_of_ownership": coo,
                 "draft_subject": (
                     evaluation.get("draft_subject") or f"Inquiry about {listing.title}"

@@ -188,6 +188,8 @@ def _row_to_property_dict(row: Listing) -> dict:
         # Legacy notes alias (notes column holds the _pending_to_property summary)
         "notes": row.notes or row.description or "",
         "description": row.description or "",
+        "description_ru": row.description_ru,
+        "description_bullets": list(row.description_bullets) if row.description_bullets else None,
         "rooms": row.rooms,
         "district": row.district,
         "address": row.address,
@@ -253,6 +255,8 @@ def _row_to_pending_dict(row: Listing) -> dict:
         "district": row.district,
         "address": row.address,
         "description": row.description or "",
+        "description_ru": row.description_ru,
+        "description_bullets": list(row.description_bullets) if row.description_bullets else None,
         "notes": row.notes or "",
         "broker_name": row.broker_name,
         "contact_email": row.contact_email,
@@ -966,6 +970,34 @@ def save_negotiation_brief(listing_id: str, brief: dict) -> bool:
         return True
     except SQLAlchemyError:
         log.exception("save_negotiation_brief failed for %s", listing_id)
+        try:
+            db_.rollback()
+        except Exception:
+            pass
+        return False
+    finally:
+        db_.close()
+
+
+def save_ai_translation(listing_id: str, description_ru: str, bullets: list) -> bool:
+    """Persist the AI-produced Russian description translation + key-facts bullets.
+
+    Wave C — piggybacked on the same evaluate_listing() call, written by both
+    the ingest path and the regenerate-description endpoint. JSONB reassignment
+    convention (Pitfall 1): description_bullets is always fully reassigned,
+    never mutated in place. Thread-safe. Never-raise.
+    """
+    db_ = SessionLocal()
+    try:
+        row = db_.get(Listing, listing_id)
+        if row is None:
+            return False
+        row.description_ru = description_ru or ""
+        row.description_bullets = list(bullets or [])  # JSONB reassignment (Pitfall 1)
+        db_.commit()
+        return True
+    except SQLAlchemyError:
+        log.exception("save_ai_translation failed for %s", listing_id)
         try:
             db_.rollback()
         except Exception:
