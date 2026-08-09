@@ -24,9 +24,11 @@ _SETTINGS_FILE = os.path.join(os.path.dirname(config.APP_DATA_FILE), "settings.j
 # Schema: user_key -> (config_attribute, python_type, group, label, hint, min, max)
 _SCHEMA = {
     # ---- Cost of ownership ----
-    "cost_down_pct":       ("COST_DOWN_PCT",       float, "cost", "Down payment %",       "Typical 15-25%",           0, 100),
-    "cost_interest_pct":   ("COST_INTEREST_PCT",   float, "cost", "Interest rate %",      "Annual (Euribor + margin)", 0, 20),
-    "cost_term_years":     ("COST_TERM_YEARS",     int,   "cost", "Loan term (years)",    "Typical 20-30",             1, 50),
+    # NOTE: down_pct / interest_pct / term_years used to live here. They moved
+    # to `user_finance_settings` (Финансы tab) which owns mortgage parameters
+    # as a single source of truth. `cost_calculator.py` reads from that row
+    # now; env vars only apply if no row exists yet. Do NOT re-add here or
+    # the UI shows two contradictory copies of the same field.
     "cost_ku_rate_old":    ("COST_KU_RATE_OLD",    float, "cost", "KÜ €/m² (pre-1990)",   "Older buildings, higher fee", 0, 10),
     "cost_ku_rate_new":    ("COST_KU_RATE_NEW",    float, "cost", "KÜ €/m² (1990+)",      "Newer buildings, lower fee",  0, 10),
     "cost_heating_rate":   ("COST_HEATING_RATE",   float, "cost", "Heating €/m² (year avg)","Central district heating",   0, 5),

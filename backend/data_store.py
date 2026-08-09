@@ -59,7 +59,7 @@ from typing import Optional
 import checklist_registry
 import config
 from db import SessionLocal
-from models import Listing, SHORTLIST_VIEWED, SHORTLIST_TO_VIEW, SHORTLIST_DROPPED
+from models import Listing, SHORTLIST_VIEWED, SHORTLIST_TO_VIEW, SHORTLIST_DROPPED, UserFinanceSettings
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import attributes as _sa_attributes
 
@@ -922,6 +922,32 @@ def set_checklist_user_mark(
         return False
     finally:
         db_.close()
+
+
+def get_user_finance_settings() -> dict | None:
+    """Read user_finance_settings row as a plain dict, or None if not set.
+
+    Used by cost_calculator to share mortgage params (down_pct, term_years,
+    interest_pct) with the Финансы calculator — single source of truth.
+    Never raises — returns None on any error.
+    """
+    try:
+        with SessionLocal() as db_:
+            row = db_.get(UserFinanceSettings, 1)
+            if row is None:
+                return None
+            return {
+                "monthly_income_eur": row.monthly_income_eur,
+                "total_savings_eur": row.total_savings_eur,
+                "down_payment_pct": row.down_payment_pct,
+                "loan_term_years": row.loan_term_years,
+                "current_euribor_pct": row.current_euribor_pct,
+                "euribor_stress_pct": row.euribor_stress_pct,
+                "rate_scenarios_pct": list(row.rate_scenarios_pct or []),
+            }
+    except Exception:
+        log.exception("get_user_finance_settings failed")
+        return None
 
 
 def save_negotiation_brief(listing_id: str, brief: dict) -> bool:

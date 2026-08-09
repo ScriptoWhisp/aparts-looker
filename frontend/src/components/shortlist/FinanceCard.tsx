@@ -246,11 +246,14 @@ export function FinanceCard({ entry }: FinanceCardProps) {
           </p>
         )}
 
-        {/* Одноразовые */}
+        {/* Одноразовые — collapsed by default: verdict + totals are the
+            at-a-glance info; details behind a tap. Prevents FinanceCard from
+            dominating the right column and hiding NegotiationCard below. */}
         {calc.one_time && (
           <Section
             title="Одноразовые"
             totalLabel={fmtEur(calc.one_time.total)}
+            defaultOpen={false}
             testId="one-time"
           >
             <div className="flex flex-col">
@@ -295,11 +298,12 @@ export function FinanceCard({ entry }: FinanceCardProps) {
           </Section>
         )}
 
-        {/* Ежемесячно */}
+        {/* Ежемесячно — collapsed by default (same reason as Одноразовые) */}
         {calc.monthly_worst_case && (
           <Section
             title="Ежемесячно"
             totalLabel={fmtEur(calc.monthly_worst_case.total)}
+            defaultOpen={false}
             testId="monthly"
           >
             <div className="flex flex-col">

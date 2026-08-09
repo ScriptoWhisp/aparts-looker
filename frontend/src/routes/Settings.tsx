@@ -58,7 +58,7 @@ const CATEGORIES: CategoryDef[] = [
   {
     id: 'cost',
     label: 'Cost model',
-    subtitle: 'Mortgage parameters, KÜ rates, renovation rates',
+    subtitle: 'KÜ rates, heating, renovation rates (ипотека — в Финансах)',
     groups: ['cost', 'reno'],
   },
   {
