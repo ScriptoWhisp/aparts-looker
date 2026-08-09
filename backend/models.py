@@ -104,6 +104,13 @@ class Listing(Base):
     image_url: Mapped[str] = mapped_column(String(1024), default="")
     image_count: Mapped[int] = mapped_column(Integer, default=0)
     description: Mapped[str] = mapped_column(String(16384), default="")
+    # Wave C: Russian translation of `description`, produced by the same
+    # evaluate_listing() Claude call (no second API round-trip). Nullable —
+    # stays null until the AI evaluation pipeline (re)generates it.
+    description_ru: Mapped[Optional[str]] = mapped_column(Text, default=None)
+    # Wave C: 5-10 short AI-extracted key-facts bullets (Russian), JSONB array
+    # of strings. Reassign the whole list on write (Pitfall 1 — never .append()).
+    description_bullets: Mapped[Optional[list]] = mapped_column(JSONB, default=None)
 
     # ---- Geo + commute (Phase 5) ----
     lat: Mapped[Optional[float]] = mapped_column(Float, default=None)
