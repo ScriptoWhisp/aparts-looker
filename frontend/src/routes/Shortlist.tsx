@@ -80,26 +80,24 @@ function MainPane({ entry, settings, onBack }: MainPaneProps) {
       {/* After-viewing bar */}
       <AfterViewingBar entry={entry} />
 
-      {/* Main content: checklist (left, now the single interactive surface — full
-          13-item registry, click-to-mark, per-item notes) + negotiation (right).
-          Wave 10: AskAtViewing removed — every item (including every 'unknown')
-          is already visible and taggable in the checklist itself, so a separate
-          "unknowns" view added nothing. Right column narrows from 340px to 280px
-          now that it holds a single card.
-          Mobile: plain flex-col (natural content-height stacking) — the grid's
-          `flex-1 min-h-0` sizing (meant to fill the remaining fixed desktop
-          viewport height) has no defined height to resolve against once the
-          page itself scrolls on mobile, which collapsed the row to ~0px and
-          made its content effectively unclickable despite being "visible".
-          Desktop (md+): original grid-cols fixed-viewport layout. */}
-      <div className="flex flex-col md:grid md:grid-cols-[1fr_280px] gap-3 p-4 pt-3 md:flex-1 md:min-h-0">
+      {/* Main content: checklist (left) + finance/negotiation (right).
+          The whole MainPane scrolls as one page (outer overflow-y-auto). The
+          grid sizes to its content, NOT to remaining viewport — previous
+          fixed-viewport `md:flex-1 md:min-h-0` combined with inner
+          overflow-y-auto on both columns produced a two-independent-scrollbars
+          setup that trapped Negotiation below FinanceCard on desktop with no
+          way to reach it via natural page scroll.
+          Checklist gets a bounded max-height so its 96-item list still scrolls
+          internally rather than dominating the page. */}
+      <div className="flex flex-col md:grid md:grid-cols-[1fr_280px] gap-3 p-4 pt-3">
         {/* Left: Checklist — keyed by entry.id so per-listing open/override/note
-            state doesn't leak across listing switches (MainPane/ChecklistCard
-            itself isn't otherwise remounted when selectedEntry changes). */}
+            state doesn't leak across listing switches. */}
         <ChecklistCard key={entry.id} entry={entry} />
 
-        {/* Right: Finance (affordability calculator, Wave B) + Negotiation */}
-        <div className="flex flex-col gap-3 min-h-0 overflow-y-auto">
+        {/* Right: Finance (Wave B) + Negotiation — flows naturally, no inner
+            scroll trap; if total right-column height exceeds viewport, the
+            outer MainPane scroll picks it up. */}
+        <div className="flex flex-col gap-3">
           <FinanceCard key={entry.id} entry={entry} />
           <NegotiationCard entry={entry} />
         </div>

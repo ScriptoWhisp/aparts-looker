@@ -442,7 +442,7 @@ export function ChecklistCard({ entry }: ChecklistCardProps) {
 
   if (registryLoading || !registry) {
     return (
-      <div className="bg-sunken rounded-lg overflow-hidden flex flex-col max-h-[70vh] md:h-full md:max-h-none">
+      <div className="bg-sunken rounded-lg overflow-hidden flex flex-col max-h-[70vh] md:max-h-[calc(100vh-260px)]">
         <div className="px-3 py-2.5 border-b border-border flex-none">
           <span className="text-[13px] font-medium text-text">Checklist</span>
         </div>
@@ -452,7 +452,7 @@ export function ChecklistCard({ entry }: ChecklistCardProps) {
   }
 
   return (
-    <div className="bg-sunken rounded-lg overflow-hidden flex flex-col max-h-[70vh] md:h-full md:max-h-none">
+    <div className="bg-sunken rounded-lg overflow-hidden flex flex-col max-h-[70vh] md:max-h-[calc(100vh-260px)]">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2.5 border-b border-border flex-none">
         <span className="text-[13px] font-medium text-text">Checklist</span>
