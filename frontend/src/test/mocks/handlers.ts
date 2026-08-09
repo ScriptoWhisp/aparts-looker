@@ -72,6 +72,10 @@ export const handlers = [
     return HttpResponse.json({ ok: true })
   }),
 
+  http.post('/api/entry/:id/regenerate-description', () => {
+    return HttpResponse.json({ ok: true })
+  }),
+
   http.post('/api/entry/:id/refresh-ku', () => {
     return HttpResponse.json({ ok: true })
   }),

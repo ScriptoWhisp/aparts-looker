@@ -400,6 +400,64 @@ test('Dropped entry — Undo drop button fires decision=thinking', async ({ page
   })
 })
 
+// ── Description translation card (Wave C) ───────────────────────────────────
+
+test('DescriptionCard — visible with bullets, translation expanded, original collapsed', async ({ page }) => {
+  await goSelectEntry(page, approvedEntry)
+
+  await test.step('card visible near top of shortlist detail', async () => {
+    await expect(page.getByTestId('description-card')).toBeVisible({ timeout: 5_000 })
+  })
+
+  await test.step('bullets render', async () => {
+    const bullets = page.getByTestId('description-bullets')
+    await expect(bullets).toBeVisible()
+    for (const bullet of approvedEntry.description_bullets ?? []) {
+      await expect(bullets.locator(`text=${bullet}`)).toBeVisible()
+    }
+  })
+
+  await test.step('translation (RU) is expanded by default', async () => {
+    await expect(page.getByTestId('description-translation-toggle')).toHaveAttribute('aria-expanded', 'true')
+    await expect(page.getByTestId('description-translation-body')).toBeVisible()
+    await expect(page.locator(`text=${approvedEntry.description_ru}`)).toBeVisible()
+  })
+
+  await test.step('original (ET) is collapsed by default, expands on click', async () => {
+    await expect(page.getByTestId('description-original-toggle')).toHaveAttribute('aria-expanded', 'false')
+    await page.getByTestId('description-original-toggle').click()
+    await expect(page.getByTestId('description-original-body')).toBeVisible({ timeout: 3_000 })
+    await expect(page.locator(`text=${approvedEntry.description}`)).toBeVisible()
+  })
+})
+
+test('DescriptionCard — regenerate button is clickable and fires the endpoint', async ({ page }) => {
+  let called = false
+  await page.route('**/api/entry/*/regenerate-description', async (route) => {
+    called = true
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true }) })
+  })
+
+  await goSelectEntry(page, approvedEntry)
+  await page.getByTestId('description-regenerate').click()
+  await page.waitForFunction(() => true)
+  expect(called).toBe(true)
+})
+
+test('DescriptionCard — empty state when description is missing', async ({ page }) => {
+  const entry = makeEntry({
+    id: 'qa-description-empty',
+    status: 'approved',
+    title: 'No description entry',
+    description: null,
+    description_ru: null,
+    description_bullets: null,
+  })
+  await goSelectEntry(page, entry)
+  await expect(page.getByTestId('description-empty')).toBeVisible({ timeout: 5_000 })
+  await expect(page.locator('text=Описание пустое — kv.ee не отдал текст')).toBeVisible()
+})
+
 // ── Mobile: sidebar/main pane exclusivity round-trip ────────────────────────
 
 test('mobile — Back button returns from main pane to sidebar', async ({ page, isMobile }) => {

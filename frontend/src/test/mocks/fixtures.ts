@@ -34,6 +34,9 @@ function makeEntry(overrides: Partial<Entry> & { id: string }): Entry {
     district: 'Kesklinn',
     address: 'Viru 1, Tallinn',
     image_url: null,
+    description: null,
+    description_ru: null,
+    description_bullets: null,
     verdict: 'Good location, reasonable price.',
     rejection_reason: null,
     scheduled_at: null,
@@ -103,6 +106,14 @@ export const approvedEntry = makeEntry({
   district: 'Kadriorg',
   approved_at: '2026-07-30T09:00:00Z',
   shortlisted_at: '2026-07-30T09:00:00Z',
+  description: 'Müüa 3-toaline korter Kadriorus, renoveeritud 2020. aastal.',
+  description_ru: 'Продаётся 3-комнатная квартира в Кадриорге, ремонт 2020 года.',
+  description_bullets: [
+    'Ремонт 2020 года — полная замена коммуникаций',
+    'Паркинг включён',
+    'Энергокласс C',
+    '5 минут до моря',
+  ],
   // Wave 10: real production shape. entry.checklist.groups is never written by
   // the backend (grepped backend/*.py — only ai_checklist_fills + the new
   // checklist.user_marks sub-key exist). 2 AI-filled keys (-> state=ok), 1
