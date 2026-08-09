@@ -107,6 +107,15 @@ export function regenerateBrief(id: string): Promise<{ ok: boolean; message?: st
   )
 }
 
+// ── Description translation (Wave C) ──────────────────────────────────────
+
+export function regenerateDescription(id: string): Promise<{ ok: boolean; message?: string }> {
+  return apiFetch<{ ok: boolean; message?: string }>(
+    `/api/entry/${id}/regenerate-description`,
+    { method: 'POST' },
+  )
+}
+
 // ── KÜ refresh ────────────────────────────────────────────────────────────
 
 export function refreshKu(id: string): Promise<{ ok: boolean; message?: string }> {

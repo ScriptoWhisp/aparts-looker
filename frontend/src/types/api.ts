@@ -151,6 +151,12 @@ export interface Entry {
   district: string | null
   address: string | null
   image_url: string | null
+  // Wave C: raw kv.ee description + AI-produced Russian translation/bullets
+  // (piggybacked onto the same evaluate_listing() call). Null until the AI
+  // pipeline (re)generates them.
+  description: string | null
+  description_ru: string | null
+  description_bullets: string[] | null
   verdict: string | null
   rejection_reason: string | null
   scheduled_at: string | null
