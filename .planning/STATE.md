@@ -109,16 +109,19 @@ None yet.
 | e2e (pre-existing, unrelated) | `mobile-snapshots.spec.ts` — 4 mobile layout assertion failures (map visibility, sidebar, back button) | Open | 2026-08-08 |
 | e2e (pre-existing, unrelated) | `feedback.spec.ts` submit-feedback toast flow | Open | 2026-08-08 |
 | e2e (pre-existing, unrelated) | `qa-inbox.spec.ts` mobile Later-queue-reorder flow | Open | 2026-08-08 |
+| vitest+e2e (pre-existing, unrelated) | `FinanceCard.test.tsx` + `qa-finance.spec.ts` — "Ежемесячно" section is `defaultOpen={false}` since c13b0f8 but 3 tests click `finance-add-utilities`/`finance-add-remondifond` without expanding the section first | Open | 2026-08-09 |
+| e2e (pre-existing, unrelated) | `qa-shortlist.spec.ts` "checklist=null" test — `GET /api/entry/{id}/finance-calculation` 404s against the real backend for listings that exist only via mocked `/api/data` (not seeded in the DB) — data-seeding gap from Wave B | Open | 2026-08-09 |
 
 ### Quick Tasks Completed
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260808-vae | Expand interactive checklist to full ~100-item registry (Wave A of 3) | 2026-08-08 | f832792 | [260808-vae-expand-interactive-checklist-to-full-100](./quick/260808-vae-expand-interactive-checklist-to-full-100/) |
+| 260809-i1z | Description translation + bulleted summary card (Wave C of 3) | 2026-08-09 | e01ac9a | [260809-i1z-add-description-translation-bulleted-sum](./quick/260809-i1z-add-description-translation-bulleted-sum/) |
 
 ## Session Continuity
 
-Last session: 2026-08-01T10:48:23.403Z
-Stopped at: Completed 07-02-PLAN.md
+Last session: 2026-08-09T00:00:00.000Z
+Stopped at: Completed quick task 260809-i1z (description translation)
 Resume file: None
-Last activity: 2026-08-08 — Completed quick task 260808-vae: Expand interactive checklist to full ~100-item registry (Wave A of 3)
+Last activity: 2026-08-09 — Completed quick task 260809-i1z: Description translation + bulleted summary card (Wave C of 3)
