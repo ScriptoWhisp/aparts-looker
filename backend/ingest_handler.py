@@ -23,10 +23,10 @@ import requests
 import checklist_registry
 import config
 import data_store
+import db
 import maa_amet_baseline
 import telegram_client
 from ai_evaluator import evaluate_listing
-from db import SessionLocal
 from kv_listing_parser import Listing, extract_object_id
 from models import Listing as ListingRow
 
@@ -247,7 +247,7 @@ def regenerate_description_translation(listing_id: str) -> None:
     data_store helper (which scopes its own session). Never raises.
     """
     try:
-        with SessionLocal() as db_:
+        with db.SessionLocal() as db_:
             row = db_.get(ListingRow, listing_id)
             if row is None:
                 log.warning("regenerate_description_translation: listing %s not found", listing_id)
