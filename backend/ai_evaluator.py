@@ -88,6 +88,52 @@ def _validate_renovation_items(raw) -> list:
     return out
 
 
+DESCRIPTION_RU_MAX_CHARS = 8000
+DESCRIPTION_BULLETS_MAX_ITEMS = 15
+DESCRIPTION_BULLET_MAX_CHARS = 200
+
+
+def _validate_description_ru(raw) -> str:
+    """Coerce the AI's description_ru field to a safe string.
+
+    Never raises — non-string input becomes "", over-long strings are
+    truncated to DESCRIPTION_RU_MAX_CHARS. Empty string is a valid answer
+    (missing/marketing-only description).
+    """
+    if not isinstance(raw, str):
+        if raw is not None:
+            log.warning("description_ru is not a string: %r — treating as empty", type(raw).__name__)
+        return ""
+    return raw[:DESCRIPTION_RU_MAX_CHARS]
+
+
+def _validate_description_bullets(raw) -> list:
+    """Validate and sanitise the AI-produced description_bullets array.
+
+    - Drops any non-string item.
+    - Truncates each bullet to DESCRIPTION_BULLET_MAX_CHARS.
+    - Caps the list at DESCRIPTION_BULLETS_MAX_ITEMS.
+    - Returns [] on any structural failure — never crashes evaluate flow.
+    """
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        log.warning("description_bullets is not a list: %r — treating as empty", type(raw).__name__)
+        return []
+    out = []
+    for item in raw:
+        if not isinstance(item, str):
+            log.warning("description_bullets: dropped non-string item %r", item)
+            continue
+        item = item.strip()
+        if not item:
+            continue
+        out.append(item[:DESCRIPTION_BULLET_MAX_CHARS])
+        if len(out) >= DESCRIPTION_BULLETS_MAX_ITEMS:
+            break
+    return out
+
+
 def _whitelist_checklist_fills(raw: dict) -> dict:
     """Keep only allow-listed keys with non-empty string values."""
     if not isinstance(raw, dict):
@@ -196,6 +242,11 @@ Return STRICTLY valid JSON (no markdown, no ``` fences), with this exact shape:
     // CRITICAL: NEVER invent a euro figure. Only classify applies/qty.
     //           Client-side code multiplies qty × rate from user settings.
     // key MUST be exactly one of the 7 keys listed above — no variations.
+  ],
+  "description_ru": "<полный дословный перевод исходного описания объявления на русский — см. правило 11>",
+  "description_bullets": [
+    "<короткий (до 90 символов) пункт о ключевом факте 1>"
+    // 5-10 items — see rule 12
   ]
 }}
 
@@ -242,6 +293,21 @@ HARD RULES — non-negotiable:
     - If year_built < 1980 and electrical is not mentioned, set rewire applies=null confidence=1.
     - NEVER write a euro amount in any note field.
     - Return an empty array [] if you genuinely cannot form any opinion on any item.
+
+11. description_ru: translate the raw listing description into Russian in full — do not
+    summarise or skip sentences. Preserve every fact and number precisely; do NOT invent
+    details or interpret beyond what the text says. Keep untranslatable Estonian
+    real-estate terms as-is with a short Russian gloss in parentheses the first time they
+    appear (e.g. "korrus (этаж)", "tuba (комната)", "KÜ (товарищество собственников)",
+    "panipaik (кладовка)", "hindamisakt (оценочный акт)"). If the description is missing
+    or is only marketing filler with no substantive content, return description_ru="".
+
+12. description_bullets: extract 5-10 bullet points of the most decision-relevant key
+    facts from the description, in Russian. Each bullet must be ≤ 90 characters. Prefer
+    concrete facts (year, area, material, состояние ремонта, что включено в цену) over
+    generic marketing language — apply the same banned-phrase rule as verdict/reasons
+    (rule 2). If the description is very short (< 100 chars), return fewer bullets. If
+    the description is missing or only marketing filler, return description_bullets=[].
 """
 
 
@@ -416,6 +482,10 @@ in the price_value reason.
         log.warning(
             "AI returned renovation_items but all items were invalid/dropped for %s", listing.id
         )
+    # Wave C: validate description_ru / description_bullets — never-raise, missing
+    # keys fall back to "" / [] (piggybacked on this same API call, no 2nd round-trip).
+    result["description_ru"] = _validate_description_ru(result.get("description_ru"))
+    result["description_bullets"] = _validate_description_bullets(result.get("description_bullets"))
     return result
 
 
@@ -433,4 +503,6 @@ def _fallback_result(verdict: str) -> dict:
         "should_draft_email": False,
         "draft_subject": "",
         "draft_body": "",
+        "description_ru": "",
+        "description_bullets": [],
     }
