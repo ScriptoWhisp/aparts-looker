@@ -442,7 +442,7 @@ export function ChecklistCard({ entry }: ChecklistCardProps) {
 
   if (registryLoading || !registry) {
     return (
-      <div className="bg-sunken rounded-lg overflow-hidden flex flex-col max-h-[70vh] md:max-h-[calc(100vh-260px)]">
+      <div className="bg-sunken rounded-lg overflow-hidden flex flex-col">
         <div className="px-3 py-2.5 border-b border-border flex-none">
           <span className="text-[13px] font-medium text-text">Checklist</span>
         </div>
@@ -452,7 +452,7 @@ export function ChecklistCard({ entry }: ChecklistCardProps) {
   }
 
   return (
-    <div className="bg-sunken rounded-lg overflow-hidden flex flex-col max-h-[70vh] md:max-h-[calc(100vh-260px)]">
+    <div className="bg-sunken rounded-lg overflow-hidden flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2.5 border-b border-border flex-none">
         <span className="text-[13px] font-medium text-text">Checklist</span>
@@ -488,8 +488,8 @@ export function ChecklistCard({ entry }: ChecklistCardProps) {
         </div>
       )}
 
-      {/* Sections */}
-      <div className="flex-1 overflow-y-auto min-h-0">
+      {/* Sections — no inner scroll, flows with page */}
+      <div>
         {sections.map((section) => {
           const items = flattenSectionItems(section)
           const visibleItems = items.filter((i) => matchesFilter(i.state, filter))
