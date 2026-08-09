@@ -26,6 +26,7 @@ import { AfterViewingBar } from '../components/shortlist/AfterViewingBar'
 import { ChecklistCard } from '../components/shortlist/ChecklistCard'
 import { NegotiationCard } from '../components/shortlist/NegotiationCard'
 import { FinanceCard } from '../components/shortlist/FinanceCard'
+import { DescriptionCard } from '../components/shortlist/DescriptionCard'
 import { CompareOverlay } from '../components/shortlist/CompareOverlay'
 
 // ── Empty / no-selection states ────────────────────────────────────────────
@@ -79,6 +80,13 @@ function MainPane({ entry, settings, onBack }: MainPaneProps) {
 
       {/* After-viewing bar */}
       <AfterViewingBar entry={entry} />
+
+      {/* Description translation + bulleted summary (Wave C) — full-width,
+          before the checklist grid so it's visible early in the vertical
+          stack on both mobile and desktop. */}
+      <div className="px-4 pt-3">
+        <DescriptionCard key={entry.id} entry={entry} />
+      </div>
 
       {/* Main content: checklist (left) + finance/negotiation (right).
           The whole MainPane scrolls as one page (outer overflow-y-auto). The
