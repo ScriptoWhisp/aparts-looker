@@ -115,6 +115,8 @@ describe('FinanceCard — inline inputs', () => {
     )
 
     renderWithProviders(<FinanceCard entry={approvedEntry} />)
+    // Ежемесячно section is collapsed by default (compact mode) — expand first
+    fireEvent.click(await screen.findByTestId('finance-section-toggle-monthly'))
     const addBtn = await screen.findByTestId('finance-add-utilities')
     fireEvent.click(addBtn)
 
@@ -147,6 +149,7 @@ describe('FinanceCard — inline inputs', () => {
     )
 
     renderWithProviders(<FinanceCard entry={approvedEntry} />)
+    fireEvent.click(await screen.findByTestId('finance-section-toggle-monthly'))
     fireEvent.click(await screen.findByTestId('finance-add-remondifond'))
     const input = screen.getByTestId('finance-input-remondifond')
     fireEvent.change(input, { target: { value: '' } })

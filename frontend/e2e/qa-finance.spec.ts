@@ -118,6 +118,8 @@ test('shortlist — filling utilities via inline input clears the missing-data c
 
   await expect(page.getByTestId('finance-missing-callout')).toBeVisible({ timeout: 10_000 })
 
+  // Ежемесячно section is collapsed by default (compact mode) — expand first
+  await page.getByTestId('finance-section-toggle-monthly').click()
   await page.getByTestId('finance-add-utilities').click()
   const input = page.getByTestId('finance-input-utilities')
   await input.fill('150')
